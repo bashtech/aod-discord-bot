@@ -1584,12 +1584,12 @@ var lastDate = null;
 function forumSyncTimerCallback()
 {
 	let dateObj = new Date();
-	let currentDate = `${dateObj.getUTCFullYear()}/${dateObj.getUTCMonth()+1}/${dateObj.getUTCDate()}`;
+	let currentDate = `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()}`;
 	const guild = client.guilds.get(config.guildId);
 	let doAdd = true;
 	let doRemove = false;
 	
-	console.log('Forum sync timer called');
+	console.log(`Forum sync timer called; currentDate=${currentDate} lastDate=${lastDate}`);
 	
 	if (lastDate !== null && lastDate !== currentDate)
 		doRemove = true;
@@ -1597,7 +1597,7 @@ function forumSyncTimerCallback()
 	doForumSync(null, guild, PERM_NONE, doAdd, doRemove);
 	//if we're doing the daily sync, also prune idle non-AOD
 	if (doRemove)
-		guild.prune(14, 'Forum sync timer')
+		guild.pruneMembers(14, 'Forum sync timer')
 			.catch(console.error);
 }
 
