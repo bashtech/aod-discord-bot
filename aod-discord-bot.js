@@ -856,7 +856,7 @@ function getForumUsersForGroups(groups)
 }
 
 //do forum sync with discord roles
-function doForumSync(message, guild, perm, doAdd, doRemove)
+function doForumSync(message, guild, perm, doAdd, doRemove, doDaily)
 {
 	var checkOnly = !(doAdd || doRemove);
 	const guestRole = guild.roles.find(r=>{return r.name == config.guestRole;});
@@ -909,18 +909,35 @@ function doForumSync(message, guild, perm, doAdd, doRemove)
 										toRemove.push(m.user.tag);
 									if (doRemove)
 									{
-										m.removeRole(role, reason);
-										if (m.highestRole.comparePositionTo(guestRole) <= 0)
+										m.removeRole(role, reason);									
+										if (role.name === config.memberRole)
+										{
+											//we're removing them from AOD, clear the name set from the forums
 											m.setNickname('', reason);
+											//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
+											if (m.roles.get(guestRole.id))
+												m.removeRole(guestRole)
+													.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
+										}
 									}
 								}
-								else if (nickNameChanges[m.user.tag] === undefined && m.displayName !== forumUser.name)
+								else
 								{
-									nickNameChanges[m.user.tag] = true;
-									if (doAdd || checkOnly)
-										toUpdate.push(`${m.user.tag} (${forumUser.name})`);
-									if (doAdd)
-										m.setNickname(forumUser.name, reason);
+									if (nickNameChanges[m.user.tag] === undefined && m.displayName !== forumUser.name)
+									{
+										nickNameChanges[m.user.tag] = true;
+										if (doAdd || checkOnly)
+											toUpdate.push(`${m.user.tag} (${forumUser.name})`);
+										if (doAdd)
+											m.setNickname(forumUser.name, reason);
+									}
+									//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
+									if (doRemove && role.name === config.memberRole)
+									{
+										if (m.roles.get(guestRole.id))
+											m.removeRole(guestRole)
+												.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
+									}
 								}
 							});
 							
@@ -965,7 +982,7 @@ function doForumSync(message, guild, perm, doAdd, doRemove)
 									
 								if (noAccount.length)
 									embed.fields.push({
-										name: 'Members to add with no account',
+										name: 'Members to add with no discord user',
 										value: noAccount.join(', ')
 									});
 									
@@ -986,7 +1003,7 @@ function doForumSync(message, guild, perm, doAdd, doRemove)
 							}
 							else
 							{
-								if (doRemove && noAccount.length)
+								if (doDaily === true && noAccount.length)
 								{
 									if (sgtsChannel)
 									{
@@ -1313,7 +1330,7 @@ commands = {
 		callback: commandRemGuest
 	},
 	voice: {
-		minPermission: PERM_MEMBER,
+		minPermission: PERM_RECRUITER,
 		args: "[<category>] [<guest|mod|staff|admin>] <name>",
 		helpText: ["Creates a temporary voice channel visible to Members+ by default.",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
@@ -1323,7 +1340,7 @@ commands = {
 		callback: commandAddChannel
 	},
 	text: {
-		minPermission: PERM_MEMBER,
+		minPermission: PERM_STAFF,
 		args: "<category> [<guest|mod|staff|admin>] <name>",
 		helpText: ["Creates a text channel visible to Members+ by default.",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
@@ -1490,19 +1507,19 @@ client.on("message", message=>{
 });
 
 //voiceStateUpdate event handler -- triggered when a user joins or leaves a channel or their status in the channel changes
-client.on('voiceStateUpdate', (oldData, newData)=>{
+client.on('voiceStateUpdate', (oldMember, newMember)=>{
 	//if the user left the channel, check if we should delete it
-	if (oldData.voiceChannelID != newData.voiceChannelID)
+	if (oldMember.voiceChannelID != newMember.voiceChannelID)
 	{
-		if (oldData.voiceChannel)
+		if (oldMember.voiceChannel)
 		{
 			const guild = client.guilds.get(config.guildId);
-			const oldCategory = guild.channels.get(oldData.voiceChannel.parentID);
+			const oldCategory = guild.channels.get(oldMember.voiceChannel.parentID);
 			if (oldCategory && oldCategory.name === config.tempChannelCategory)
 			{
-				if (oldData.voiceChannel.members.size === 0)
+				if (oldMember.voiceChannel.members.size === 0)
 				{
-					oldData.voiceChannel.delete();
+					oldMember.voiceChannel.delete();
 				}
 			}
 		}
@@ -1523,18 +1540,20 @@ function getForumGroupsForMember(member)
 				reject(err)
 			else
 			{
-				if (rows.length === 0)
+				if (rows === undefined || rows.length === 0)
 				{
 					resolve();
 				}
 				if (rows.length > 1) //danger will robinson! name conflict in database
 				{
-					member.send("Hello AOD member! There is a confilict with your discord name. Please verify your profile and contact the leadership for help.");
+					member.send("Hello AOD member! There is a conflict with your discord name. Please verify your profile and contact the leadership for help.");
 					reject(`Member name conflict: ${rows.length} members have the discord tag ${member.user.tag}`);
 				}
 				
+				let row = rows.shift();
+				if (row === undefined) //unclear how this is possible... we must have something in rows to get here....
+					resolve();
 				let forumGroups = [];
-				let row = rows[0];
 				if (row.usergroupid !== undefined)
 					forumGroups.push(row.usergroupid);
 				if (row.membergroupids !== undefined)
@@ -1543,7 +1562,7 @@ function getForumGroupsForMember(member)
 			}
 		});
 	});
-	return promise
+	return promise;
 }
 
 //guildMemberAdd event handler -- triggered when a user joins the guild
@@ -1578,6 +1597,19 @@ client.on('guildMemberAdd', (member)=>{
 		.catch(console.error);
 });
 
+/*
+client.on('guildMemberUpdate', (oldMember, newMember)=>{
+	if (newMember.nickname !== undefined && newMember.nickname.startsWith(config.memberPrefix)
+	{
+		const guild = client.guilds.get(config.guildId);
+		const memberRole = guild.roles.find(r=>{return r.name == config.memberRole;});
+		if (!newMember.roles.get(memberRole.id))
+		{
+			newMember.setNickname('');
+		}
+	}
+});
+*/
 
 var forumSyncTimer = null;
 var lastDate = null;
@@ -1587,16 +1619,16 @@ function forumSyncTimerCallback()
 	let currentDate = `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()}`;
 	const guild = client.guilds.get(config.guildId);
 	let doAdd = true;
-	let doRemove = false;
+	let doRemove = true;
+	let doDaily = false;
 	
 	console.log(`Forum sync timer called; currentDate=${currentDate} lastDate=${lastDate}`);
 	
 	if (lastDate !== null && lastDate !== currentDate)
-		doRemove = true;
+		doDaily = true;
 	lastDate = currentDate;
-	doForumSync(null, guild, PERM_NONE, doAdd, doRemove);
-	//if we're doing the daily sync, also prune idle non-AOD
-	if (doRemove)
+	doForumSync(null, guild, PERM_NONE, doAdd, doRemove. doDaily);
+	if (doDaily)
 		guild.pruneMembers(14, 'Forum sync timer')
 			.catch(console.error);
 }
