@@ -187,19 +187,30 @@ function addRoleToPermissions(guild, role, permissions)
 //build a list of permissions for admin
 function getPermissionsForAdmin(guild)
 {
-	//NOTE: USE_VAD controls voice activated detection
+	const muteRole = guild.roles.find(r=>{return r.name == config.muteRole;});
+	const pttRole = guild.roles.find(r=>{return r.name == config.pttRole;});
 	let permissions = [{id:guild.id,deny:['VIEW_CHANNEL','CONNECT']}]; //default no one can view
+	permissions.push({
+		type: 'role',
+		id: muteRole.id,
+		deny: ['SEND_MESSAGES','SEND_TTS_MESSAGES','SPEAK']
+	});
+	permissions.push({
+		type: 'role',
+		id: pttRole.id,
+		deny: ['USE_VAD']
+	});
+	
 	// add admin
 	config.adminRoles.forEach(n=>{
 		const role = guild.roles.find(r=>{return r.name == n;});
 		if (role)
 		{
-			let newPerm = {
+			permissions.push({
 				type: 'role',
 				id: role.id,
 				allow: ['VIEW_CHANNEL','CONNECT']
-			};
-			permissions.push(newPerm);
+			});
 		}
 	});
 	return permissions;
@@ -213,12 +224,11 @@ function getPermissionsForStaff(guild)
 		const role = guild.roles.find(r=>{return r.name == n;});
 		if (role)
 		{
-			let newPerm = {
+			permissions.push({
 				type: 'role',
 				id: role.id,
 				allow: ['VIEW_CHANNEL','CONNECT']
-			};
-			permissions.push(newPerm);
+			});
 		}
 	});
 	return permissions;
@@ -232,12 +242,11 @@ function getPermissionsForModerators(guild)
 		const role = guild.roles.find(r=>{return r.name == n;});
 		if (role)
 		{
-			let newPerm = {
+			permissions.push({
 				type: 'role',
 				id: role.id,
 				allow: ['VIEW_CHANNEL','CONNECT']
-			};
-			permissions.push(newPerm);
+			});
 		}
 	});
 	return permissions;
@@ -695,10 +704,10 @@ function getWebhooksForGuild(guild)
 	var promise = new Promise(function(resolve, reject)	{
 		request(getOptions, function(error, response, body) {
 			if (error)
-				reject(error);
+				return reject(error);
 			if (body.code)
-				reject(body);
-			resolve(body);	
+				return reject(body);
+			return resolve(body);	
 		});
 	});
 	return promise;
@@ -725,6 +734,39 @@ function commandShowWebhooks(message, cmd, args, guild, perm, permName, isDM)
 		})
 		.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 }*/
+
+function commandMute(message, cmd, args, guild, perm, permName, isDM)
+{
+	if (isDM)
+		return message.reply("Must be executed in a text channel");
+	
+	let member = message.mentions.members.first();
+	if(!member)
+		return message.reply("Please mention a valid member of this server");
+	var [memberPerm, memberPermName] = getPermissionLevelForMember(member);
+	if (perm <= memberPerm)
+		return message.reply(`You cannot mute ${member.user.tag}.`);
+	
+	return addRemoveRole(message, guild, message.mentions.members.first(), cmd==='mute', config.muteRole);
+}
+
+function commandPTT(message, cmd, args, guild, perm, permName, isDM)
+{
+	if (isDM)
+		return message.reply("Must be executed in a text channel");
+	
+	let member = message.mentions.members.first();
+	if(!member)
+		return message.reply("Please mention a valid member of this server");
+	
+	/*
+	var [memberPerm, memberPermName] = getPermissionLevelForMember(member);
+	if (perm <= memberPerm)
+		return message.reply(`You cannot mute ${member.user.tag}.`);
+	*/
+	
+	return addRemoveRole(message, guild, message.mentions.members.first(), cmd==='setptt', config.pttRole);
+}
 
 //kick command processing
 function commandKick(message, cmd, args, guild, perm, permName, isDM)
@@ -811,7 +853,7 @@ function getForumGroups()
 		let query = `SELECT usergroupid AS id,title AS name FROM ${config.mysql.prefix}usergroup WHERE title LIKE "AOD%" OR title LIKE "%Officers"`
 		db.query(query, function(err, rows, fields) {
 			if (err)
-				reject(err)
+				return reject(err)
 			else
 			{
 				let groupsByID = {};
@@ -819,7 +861,7 @@ function getForumGroups()
 				{
 					groupsByID[rows[i].id] = rows[i].name;
 				}
-				resolve(groupsByID);
+				return resolve(groupsByID);
 			}
 		});
 	});
@@ -840,7 +882,7 @@ function getForumUsersForGroups(groups)
 			`AND f.field19 IS NOT NULL AND f.field19 <> ''`;
 		db.query(query, function(err, rows, fields) {
 			if (err)
-				reject(err)
+				return reject(err)
 			else
 			{
 				let usersByUserNameDiscriminator = {};
@@ -848,7 +890,7 @@ function getForumUsersForGroups(groups)
 				{
 					usersByUserNameDiscriminator[rows[i].field19] = {name:rows[i].username,id:rows[i].userid};
 				}
-				resolve(usersByUserNameDiscriminator);
+				return resolve(usersByUserNameDiscriminator);
 			}
 		});
 	});
@@ -1293,6 +1335,30 @@ commands = {
 		helpText: "Clan Tracker Integration",
 		callback: commandTracker
 	},
+	mute: {
+		minPermission: PERM_MOD,
+		args: "@mention",
+		helpText: "Adds the Muted role to the user.",
+		callback: commandMute
+	},
+	unmute: {
+		minPermission: PERM_MOD,
+		args: "@mention",
+		helpText: "Removes the Muted role from the user.",
+		callback: commandMute
+	},
+	setptt: {
+		minPermission: PERM_MOD,
+		args: "@mention",
+		helpText: "Adds the Force Push-to-Talk role to the user.",
+		callback: commandPTT
+	},
+	clearptt: {
+		minPermission: PERM_MOD,
+		args: "@mention",
+		helpText: "Removes the Force Push-to-Talk role from the user.",
+		callback: commandPTT
+	},
 	kick: {
 		minPermission: PERM_RECRUITER,
 		args: "@mention [<reason>]",
@@ -1542,23 +1608,21 @@ function getForumGroupsForMember(member)
 			{
 				if (rows === undefined || rows.length === 0)
 				{
-					resolve();
+					return resolve();
 				}
 				if (rows.length > 1) //danger will robinson! name conflict in database
 				{
 					member.send("Hello AOD member! There is a conflict with your discord name. Please verify your profile and contact the leadership for help.");
-					reject(`Member name conflict: ${rows.length} members have the discord tag ${member.user.tag}`);
+					return reject(`Member name conflict: ${rows.length} members have the discord tag ${member.user.tag}`);
 				}
 				
 				let row = rows.shift();
-				if (row === undefined) //unclear how this is possible... we must have something in rows to get here....
-					resolve();
 				let forumGroups = [];
 				if (row.usergroupid !== undefined)
 					forumGroups.push(row.usergroupid);
 				if (row.membergroupids !== undefined)
 					forumGroups = forumGroups.concat(row.membergroupids.split(','));
-				resolve({name: row.username, groups: forumGroups});
+				return resolve({name: row.username, groups: forumGroups});
 			}
 		});
 	});
