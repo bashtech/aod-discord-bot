@@ -185,11 +185,16 @@ function addRoleToPermissions(guild, role, permissions)
 	return permissions;
 }
 //build a list of permissions for admin
-function getPermissionsForAdmin(guild)
+function getPermissionsForAdmin(guild, defaultPerms)
 {
 	const muteRole = guild.roles.find(r=>{return r.name == config.muteRole;});
 	const pttRole = guild.roles.find(r=>{return r.name == config.pttRole;});
-	let permissions = [{id:guild.id,deny:['VIEW_CHANNEL','CONNECT']}]; //default no one can view
+	let permissions = [];
+	if (defaultPerms)
+		permissions.push(defaultPerms);
+	else
+		premissions.push({id:guild.id,deny:['VIEW_CHANNEL','CONNECT']}); //default no one can view
+	
 	permissions.push({
 		type: 'role',
 		id: muteRole.id,
@@ -216,9 +221,9 @@ function getPermissionsForAdmin(guild)
 	return permissions;
 }
 //build a list of permissions for staff+
-function getPermissionsForStaff(guild)
+function getPermissionsForStaff(guild, defaultPerms)
 {
-	let permissions = getPermissionsForAdmin(guild);
+	let permissions = getPermissionsForAdmin(guild, defaultPerms);
 	// add staff
 	config.staffRoles.forEach(n=>{
 		const role = guild.roles.find(r=>{return r.name == n;});
@@ -234,9 +239,9 @@ function getPermissionsForStaff(guild)
 	return permissions;
 }
 //build a list of permissions for mod+
-function getPermissionsForModerators(guild)
+function getPermissionsForModerators(guild, defaultPerms)
 {
-	let permissions = getPermissionsForStaff(guild);
+	let permissions = getPermissionsForStaff(guild, defaultPerms);
 	// add moderators
 	config.modRoles.forEach(n=>{
 		const role = guild.roles.find(r=>{return r.name == n;});
@@ -252,16 +257,16 @@ function getPermissionsForModerators(guild)
 	return permissions;
 }
 //build a list of permissions for member+
-function getPermissionsForMembers(guild)
+function getPermissionsForMembers(guild, defaultPerms)
 {
-	let permissions = getPermissionsForModerators(guild);
+	let permissions = getPermissionsForModerators(guild, defaultPerms);
 	const memberRole = guild.roles.find(r=>{return r.name == config.memberRole;});
 	return addRoleToPermissions(guild, memberRole, permissions);
 }
 //build a list of permissions for guest+
-function getPermissionsForEveryone(guild)
+function getPermissionsForEveryone(guild, defaultPerms)
 {
-	let permissions = getPermissionsForMembers(guild);
+	let permissions = getPermissionsForMembers(guild, defaultPerms);
 	const guestRole = guild.roles.find(r=>{return r.name == config.guestRole;});
 	return addRoleToPermissions(guild, guestRole, permissions);
 }
@@ -448,35 +453,41 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 		return message.reply("Invalid parameters");
 	
 	//get permissions based on type
+	var defaultPermissions;
+	if (cmd === 'ptt')
+		defaultPermissions = {id:guild.id,deny:['VIEW_CHANNEL','CONNECT','USE_VAD']}
+	else
+		defaultPermissions = {id:guild.id,deny:['VIEW_CHANNEL','CONNECT']}
+	
 	var permissions;
 	switch (args[0])
 	{
 		case 'guest':
 			if (perm < PERM_MOD)
 				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForEveryone(guild);
+			permissions = getPermissionsForEveryone(guild, defaultPermissions);
 			args.shift();
 			break;
 		case 'mod':
 		if (perm < PERM_MOD)
 				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForModerators(guild);
+			permissions = getPermissionsForModerators(guild, defaultPermissions);
 			args.shift();
 			break;
 		case 'staff':
 			if (perm < PERM_STAFF)
 				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForStaff(guild);
+			permissions = getPermissionsForStaff(guild, defaultPermissions);
 			args.shift();
 			break;
 		case 'admin':
 			if (perm < PERM_ADMIN)
 				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForAdmin(guild);
+			permissions = getPermissionsForAdmin(guild, defaultPermissions);
 			args.shift();
 			break;
 		default:
-			permissions = getPermissionsForMembers(guild);
+			permissions = getPermissionsForMembers(guild, defaultPermissions);
 			break;
 	}
 	
@@ -484,6 +495,11 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 	let channelName = args.join(' ').toLowerCase().replace(/\s/g, '-');
 	if (channelName === undefined || channelName == '')
 		return message.reply("A name must be provided");
+	if (cmd === 'ptt')
+	{
+		channelName += '-ptt';
+		cmd = 'voice';
+	}
 	var existingChannel = guild.channels.find(c=>{return c.name == channelName;});
 	if (existingChannel)
 		return message.reply("Channel already exists");
@@ -1147,7 +1163,7 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 					}), 10);
 					if (forumGroupId !== undefined && forumGroupId !== NaN)
 					{
-						//don't use the version from our closure to prevent asyncronous stuff from causing problems
+						//don't use the version from our closure to prevent asynchronous stuff from causing problems
 						let map = forumIntegrationConfig[role.name];
 						if (map === undefined)
 						{
@@ -1405,6 +1421,12 @@ commands = {
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
 		callback: commandAddChannel
 	},
+	ptt: {
+		minPermission: PERM_RECRUITER,
+		args: "[<category>] [<guest|mod|staff|admin>] <name>",
+		helpText: ["Same a 'voice', however, the channel will force PTT"],
+		callback: commandAddChannel
+	},
 	text: {
 		minPermission: PERM_STAFF,
 		args: "<category> [<guest|mod|staff|admin>] <name>",
@@ -1646,7 +1668,7 @@ client.on('guildMemberAdd', (member)=>{
 					Object.keys(rolesByGroup[group]).forEach(roleName=>{
 						let role = rolesByGroup[group][roleName];
 						
-						if (role)
+						if (role && !member.roles.get(role.id))
 						{
 							member.addRole(role, 'First time join')
 								.catch(console.error);
@@ -1655,7 +1677,8 @@ client.on('guildMemberAdd', (member)=>{
 					});
 				}
 			}
-			member.setNickname(data.name, 'First time join');
+			if (member.displayName !== data.name)
+				member.setNickname(data.name, 'First time join');
 			member.send(`Hello ${data.name}! The following roles have been automatically granted: ${rolesAdded.join(', ')}. Use '!help' to see available commands.`);
 		})
 		.catch(console.error);
