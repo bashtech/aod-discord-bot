@@ -193,7 +193,7 @@ function getPermissionsForAdmin(guild, defaultPerms)
 	if (defaultPerms)
 		permissions.push(defaultPerms);
 	else
-		premissions.push({id:guild.id,deny:['VIEW_CHANNEL','CONNECT']}); //default no one can view
+		permissions.push({id:guild.id,deny:['VIEW_CHANNEL','CONNECT']}); //default no one can view
 	
 	permissions.push({
 		type: 'role',
@@ -543,6 +543,25 @@ function commandRemChannel(message, cmd, args, guild, perm, permName, isDM)
 	if (existingChannel && existingChannel.type !== 'category')
 		existingChannel.delete(`Requested by ${getNameFromMessage(message)}`)
 			.then(()=>{message.reply(`Channel ${channelName} removed`);});
+	else
+		return message.reply("Channel not found");
+}
+
+//move channel command processing
+function commandMoveChannel(message, cmd, args, guild, perm, permName, isDM)
+{
+	//check for existing channel
+	let channelName = args.join(' ');
+	if (channelName === undefined || channelName == '')
+		return message.reply("A name must be provided");
+		
+	if (config.protectedChannels.includes(channelName))
+		return message.reply(`${channelName} is a protected channel.`);
+	
+	var existingChannel = guild.channels.find(c=>{return c.name == channelName;});
+	if (existingChannel)
+		existingChannel.setPosition(cmd === 'up'?-1:1, true)
+			.then(()=>{message.reply(`Channel ${channelName} moved`);});
 	else
 		return message.reply("Channel not found");
 }
@@ -1097,7 +1116,7 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 					let embed = { 
 						title: 'Configured Group Maps',
 						fields: []
-					}
+					};
 					
 					Object.keys(forumIntegrationConfig).forEach(roleName=>{
 						var groupMap = forumIntegrationConfig[roleName];
@@ -1112,6 +1131,18 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 				.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 			break;
 		}
+		case 'showroles':
+		{
+			let embed = { 
+				title: '',
+				fields: [{
+					name: 'Discord Officer Roles',
+					value: guild.roles.array().filter(r=>r.name.endsWith(config.discordOfficerSuffix)).map(r=>r.name).sort().join("\n")
+				}]
+			};
+			sendReplyToMessageAuthor(message, {'embed': embed});
+			break;
+		}
 		case 'showforumgroups':
 		{
 			getForumGroups()
@@ -1120,9 +1151,9 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 						title: '',
 						fields: [{
 							name: 'AOD Forum Groups',
-							value: Object.keys(forumGroups).map(k => `${forumGroups[k]} (${k})`).join("\n")
+							value: Object.keys(forumGroups).map(k => `${forumGroups[k]} (${k})`).sort().join("\n")
 						}]
-					}
+					};
 					sendReplyToMessageAuthor(message, {'embed': embed});
 				})
 				.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
@@ -1142,9 +1173,9 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 			let roleName = args.shift();
 			let groupName = args.shift();
 			
-			if (!roleName.endsWith('Officer'))
+			if (!roleName.endsWith(config.discordOfficerSuffix))
 				return message.reply('Only Officer Roles may be mapped');
-			if (!groupName.endsWith('Officers'))
+			if (!groupName.endsWith(config.forumOfficerSuffix))
 				return message.reply('Only Officer Groups may be mapped');
 			
 			const role = guild.roles.find(r=>{return r.name == roleName;});
@@ -1443,6 +1474,18 @@ commands = {
 		helpText: "Removes a channel.",
 		callback: commandRemChannel
 	},
+	up: {
+		minPermission: PERM_STAFF,
+		args: "<name>",
+		helpText: "Moves a channel up.",
+		callback: commandMoveChannel
+	},
+	down: {
+		minPermission: PERM_STAFF,
+		args: "<name>",
+		helpText: "Moves a channel down.",
+		callback: commandMoveChannel
+	},
 	adddivision: {
 		minPermission: PERM_STAFF,
 		args: "<name>",
@@ -1465,13 +1508,14 @@ commands = {
 		minPermission: PERM_ADMIN,
 		args: "<cmd> [<options>]",
 		helpText: ["Forum sync integration commands:",
-			"*showmap*: Shows the current syncronization map",
+			"*showmap*: Shows the current synchronization map",
+			"*showroles*: Shows the discord roles eligible for integration",
 			"*showforumgroups*: Shows the forum groups eligible for integration",
 			"*check*: Checks for exceptions between forum groups and mapped discord roles",
 			"*update*: Adds members to discord roles based on forum groups",
 			"*sync*: Adds and removes members from discord roles based on forum groups",
-			"*add <role> <group>*: Maps the forum <group> to the discord <role>",
-			"*rem <role> <group>*: Removes the forum group from the map for the discord <role>"
+			"*add \"<role>\" \"<group>\"*: Maps the forum <group> to the discord <role>",
+			"*rem \"<role>\" \"<group>\"*: Removes the forum group from the map for the discord <role>"
 		],
 		callback: commandForumSync
 	},
