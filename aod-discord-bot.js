@@ -603,6 +603,7 @@ function commandAddDivision(message, cmd, args, guild, perm, permName, isDM)
 		return message.reply("A name must be provided");
 	let roleName = divisionName + " Officer";
 	let simpleName = divisionName.toLowerCase().replace(/\s/g, '-');
+	let divisionMembersChannel = simpleName + '-members';
 	let divisionOfficersChannel = simpleName + '-officers';
 	let divisionPublicChannel = simpleName + '-public';
 	
@@ -626,7 +627,7 @@ function commandAddDivision(message, cmd, args, guild, perm, permName, isDM)
 					
 					//add members channel
 					let permissions = getPermissionsForMembers(guild);
-					guild.createChannel(simpleName, 'text', permissions, `Requested by ${getNameFromMessage(message)}`)
+					guild.createChannel(divisionMembersChannel, 'text', permissions, `Requested by ${getNameFromMessage(message)}`)
 						.then(c=>{
 							//move channel to category
 							c.setParent(cat)
@@ -681,7 +682,7 @@ function commandRemDivision(message, cmd, args, guild, perm, permName, isDM)
 	if (divisionName === undefined || divisionName == '')
 		return message.reply("A name must be provided");
 	let roleName = divisionName + " Officer";
-	let simpleName = divisionName.toLowerCase().replace(/\s/g, '-');
+	//let simpleName = divisionName.toLowerCase().replace(/\s/g, '-');
 	//let divisionOfficersChannel = simpleName + '-officers';
 	//let divisionPublicChannel = simpleName + '-public';
 	
@@ -1162,9 +1163,9 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 		case 'check':
 			doForumSync(message, guild, perm, false, false);
 			break;
-		case 'update':
+		/*case 'update':
 			doForumSync(message, guild, perm, true, false);
-			break;
+			break;*/
 		case 'sync':
 			doForumSync(message, guild, perm, true, true);
 			break;
@@ -1512,7 +1513,6 @@ commands = {
 			"*showroles*: Shows the discord roles eligible for integration",
 			"*showforumgroups*: Shows the forum groups eligible for integration",
 			"*check*: Checks for exceptions between forum groups and mapped discord roles",
-			"*update*: Adds members to discord roles based on forum groups",
 			"*sync*: Adds and removes members from discord roles based on forum groups",
 			"*add \"<role>\" \"<group>\"*: Maps the forum <group> to the discord <role>",
 			"*rem \"<role>\" \"<group>\"*: Removes the forum group from the map for the discord <role>"
@@ -1753,7 +1753,7 @@ function forumSyncTimerCallback()
 	let doRemove = true;
 	let doDaily = false;
 	
-	console.log(`Forum sync timer called; currentDate=${currentDate} lastDate=${lastDate}`);
+	//console.log(`Forum sync timer called; currentDate=${currentDate} lastDate=${lastDate}`);
 	
 	if (lastDate !== null && lastDate !== currentDate)
 		doDaily = true;
