@@ -934,9 +934,8 @@ function getForumUsersForGroups(groups)
 }
 
 //do forum sync with discord roles
-function doForumSync(message, guild, perm, doAdd, doRemove, doDaily)
+function doForumSync(message, guild, perm, checkOnly, doDaily)
 {
-	var checkOnly = !(doAdd || doRemove);
 	const guestRole = guild.roles.find(r=>{return r.name == config.guestRole;});
 	const sgtsChannel = guild.channels.find(c=>{return c.name==='aod-sergeants'});
 	const reason = (message ? `Requested by ${getNameFromMessage(message)}` : 'Periodic Sync');
@@ -983,9 +982,8 @@ function doForumSync(message, guild, perm, doAdd, doRemove, doDaily)
 								let forumUser = usersByUsernameDiscriminator[m.user.tag];
 								if (forumUser === undefined)
 								{
-									if (doRemove || checkOnly)
-										toRemove.push(m.user.tag);
-									if (doRemove)
+									toRemove.push(m.user.tag);
+									if (!checkOnly)
 									{
 										m.removeRole(role, reason);									
 										if (role.name === config.memberRole)
@@ -1004,13 +1002,12 @@ function doForumSync(message, guild, perm, doAdd, doRemove, doDaily)
 									if (nickNameChanges[m.user.tag] === undefined && m.displayName !== forumUser.name)
 									{
 										nickNameChanges[m.user.tag] = true;
-										if (doAdd || checkOnly)
-											toUpdate.push(`${m.user.tag} (${forumUser.name})`);
-										if (doAdd)
+										toUpdate.push(`${m.user.tag} (${forumUser.name})`);
+										if (!checkOnly)
 											m.setNickname(forumUser.name, reason);
 									}
 									//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
-									if (doRemove && role.name === config.memberRole)
+									if (!checkOnly && role.name === config.memberRole)
 									{
 										if (m.roles.get(guestRole.id))
 											m.removeRole(guestRole)
@@ -1032,16 +1029,14 @@ function doForumSync(message, guild, perm, doAdd, doRemove, doDaily)
 									let guildMember = guild.members.find(m=>{return m.user.tag===u});
 									if (guildMember)
 									{
-										if (doAdd || checkOnly)
-											toAdd.push(`${u} (${forumUser.name})`);
-										if (doAdd)
+										toAdd.push(`${u} (${forumUser.name})`);
+										if (!checkOnly)
 											guildMember.addRole(role, reason);
 										if (nickNameChanges[guildMember.user.tag] === undefined && guildMember.displayName !== forumUser.name)
 										{
 											nickNameChanges[guildMember.user.tag] = true;
-											if (doAdd || checkOnly)
-												toUpdate.push(`${guildMember.user.tag} (${forumUser.name})`);
-											if (doAdd)
+											toUpdate.push(`${guildMember.user.tag} (${forumUser.name})`);
+											if (!checkOnly)
 												guildMember.setNickname(forumUser.name, reason);
 										}
 									}
@@ -1161,13 +1156,10 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 			break;
 		}
 		case 'check':
-			doForumSync(message, guild, perm, false, false);
+			doForumSync(message, guild, perm, true);
 			break;
-		/*case 'update':
-			doForumSync(message, guild, perm, true, false);
-			break;*/
 		case 'sync':
-			doForumSync(message, guild, perm, true, true);
+			doForumSync(message, guild, perm, false);
 			break;
 		case 'add':
 		{
@@ -1749,8 +1741,6 @@ function forumSyncTimerCallback()
 	let dateObj = new Date();
 	let currentDate = `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()}`;
 	const guild = client.guilds.get(config.guildId);
-	let doAdd = true;
-	let doRemove = true;
 	let doDaily = false;
 	
 	//console.log(`Forum sync timer called; currentDate=${currentDate} lastDate=${lastDate}`);
@@ -1758,7 +1748,7 @@ function forumSyncTimerCallback()
 	if (lastDate !== null && lastDate !== currentDate)
 		doDaily = true;
 	lastDate = currentDate;
-	doForumSync(null, guild, PERM_NONE, doAdd, doRemove. doDaily);
+	doForumSync(null, guild, PERM_NONE, true, doDaily);
 	if (doDaily)
 		guild.pruneMembers(14, 'Forum sync timer')
 			.catch(console.error);
