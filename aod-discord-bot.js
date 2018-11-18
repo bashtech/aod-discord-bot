@@ -933,9 +933,17 @@ function getForumUsersForGroups(groups)
 	return promise
 }
 
+function truncateStr(str, maxLen)
+{
+	if (str.length <= maxLen)
+		return str;
+	return str.substr(0, maxLen-5) + ' ...';
+}
+
 //do forum sync with discord roles
 function doForumSync(message, guild, perm, checkOnly, doDaily)
 {
+	var hrStart = process.hrtime();
 	const guestRole = guild.roles.find(r=>{return r.name == config.guestRole;});
 	const sgtsChannel = guild.channels.find(c=>{return c.name==='aod-sergeants'});
 	const reason = (message ? `Requested by ${getNameFromMessage(message)}` : 'Periodic Sync');
@@ -985,7 +993,8 @@ function doForumSync(message, guild, perm, checkOnly, doDaily)
 									toRemove.push(m.user.tag);
 									if (!checkOnly)
 									{
-										m.removeRole(role, reason);									
+										m.removeRole(role, reason)
+											.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 										if (role.name === config.memberRole)
 										{
 											//we're removing them from AOD, clear the name set from the forums
@@ -1031,7 +1040,8 @@ function doForumSync(message, guild, perm, checkOnly, doDaily)
 									{
 										toAdd.push(`${u} (${forumUser.name})`);
 										if (!checkOnly)
-											guildMember.addRole(role, reason);
+											guildMember.addRole(role, reason)
+												.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 										if (nickNameChanges[guildMember.user.tag] === undefined && guildMember.displayName !== forumUser.name)
 										{
 											nickNameChanges[guildMember.user.tag] = true;
@@ -1049,28 +1059,33 @@ function doForumSync(message, guild, perm, checkOnly, doDaily)
 							{
 								if (toAdd.length)
 									embed.fields.push({
-										name: 'Members to add',
-										value: toAdd.join(', ')
+										name: `Members to add (${toAdd.length})`,
+										value: truncateStr(toAdd.join(', '), 1024)
 									});
 									
 								if (noAccount.length)
 									embed.fields.push({
-										name: 'Members to add with no discord user',
-										value: noAccount.join(', ')
+										name: `Members to add with no discord user (${noAccount.length})`,
+										value: truncateStr(noAccount.join(', '), 1024)
 									});
 									
 								if (toRemove.length)
 									embed.fields.push({
-										name: 'Members to remove',
+										name: `Members to remove (${toRemove.length})`,
 										value: toRemove.join(', ')
 									});
 									
 								if (toUpdate.length)
 									embed.fields.push({
-										name: 'Members to rename',
-										value: toUpdate.join(', ')
+										name: `Members to rename (${toUpdate.length})`,
+										value: truncateStr(toUpdate.join(', '), 1024)
 									});
-									
+								
+								var hrEnd = process.hrtime(hrStart);
+								embed.footer = {
+									text: `> Processing Time: ${hrEnd[0] + (hrEnd[1]/1000000000)}s`
+								};
+								
 								if (toRemove.length || toAdd.length || noAccount.length || toUpdate.length)
 									sendReplyToMessageAuthor(message, {'embed': embed});
 							}
@@ -1081,8 +1096,8 @@ function doForumSync(message, guild, perm, checkOnly, doDaily)
 									if (sgtsChannel)
 									{
 										embed.fields.push({
-											name: 'Members to add with no account',
-											value: noAccount.join(', ')
+											name: `Members to add with no account (${noAccount.length})`,
+											value: truncateStr(noAccount.join(', '), 1024)
 										});
 										sgtsChannel.send({'embed': embed});
 									}
@@ -1748,7 +1763,7 @@ function forumSyncTimerCallback()
 	if (lastDate !== null && lastDate !== currentDate)
 		doDaily = true;
 	lastDate = currentDate;
-	doForumSync(null, guild, PERM_NONE, true, doDaily);
+	doForumSync(null, guild, PERM_NONE, false, doDaily);
 	if (doDaily)
 		guild.pruneMembers(14, 'Forum sync timer')
 			.catch(console.error);
