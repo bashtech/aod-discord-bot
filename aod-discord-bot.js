@@ -33,6 +33,9 @@ const PERM_NONE = 0;
 //global undefined for readable code
 var undefined;
 
+//other globals
+var lastTimeSync;
+
 //initialize client
 const client = new Discord.Client({
 	sync: true
@@ -1341,6 +1344,33 @@ function commandReload(message, cmd, args, guild, perm, permName, isDM)
 	message.reply('Configuration reloaded');
 }
 
+//status command processing
+function commandStatus(message, cmd, args, guild, perm, permName, isDM)
+{
+	let uptimeSeconds = Math.round(client.uptime/1000);
+	let uptimeMinutes = Math.floor(uptimeSeconds/60);
+	uptimeSeconds -= (uptimeMinutes*60);
+	let uptimeHours = Math.floor(uptimeMinutes/60);
+	uptimeMinutes -= (uptimeHours*60);
+	let uptimeDays = Math.floor(uptimeHours/24);
+	uptimeHours -= (uptimeDays*24);
+	
+	let lastTimeSyncDiff = new Date(new Date() - lastTimeSync);
+	
+	let embed = {
+		title: 'Bot Status',
+		fields: [
+			{name: 'UpTime', value: `${uptimeDays} days, ${uptimeHours} hours, ${uptimeMinutes} minutes, ${uptimeSeconds} seconds`},
+			{name: 'Server Status', value: `${guild.name} has ${guild.members.size} members and ${guild.channels.size} channels`},
+			{name: 'Server Region', value: `${guild.region}`},
+			{name: 'Last Time Sync', value: `${lastTimeSyncDiff.getMinutes()} minutes, ${lastTimeSyncDiff.getSeconds()} seconds ago`},
+			{name: 'Average WebSocket Hearbeat Time', value: `${client.ping}ms for ${client.pings.length} pings`},
+		]
+	};
+	
+	message.reply({embed: embed});
+}
+
 //quit command processing
 function commandQuit(message, cmd, args, guild, perm, permName, isDM)
 {
@@ -1569,6 +1599,12 @@ commands = {
 		helpText: "Reload the configuration",
 		callback: commandReload
 	},
+	status: {
+		minPermission: PERM_ADMIN,
+		args: "",
+		helpText: "Bot Status",
+		callback: commandStatus
+	},
 	quit: {
 		minPermission: PERM_OWNER,
 		args: "",
@@ -1772,8 +1808,8 @@ var forumSyncTimer = null;
 var lastDate = null;
 function forumSyncTimerCallback()
 {
-	let dateObj = new Date();
-	let currentDate = `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()}`;
+	lastTimeSync = new Date();
+	let currentDate = `${lastTimeSync.getFullYear()}/${lastTimeSync.getMonth()+1}/${lastTimeSync.getDate()}`;
 	const guild = client.guilds.get(config.guildId);
 	let doDaily = false;
 	
@@ -1807,7 +1843,7 @@ client.on("ready", () => {
 	}
 	
 	forumSyncTimerCallback(); //prime the date and do initial adds
-	forumSyncTimer = client.setInterval(forumSyncTimerCallback, 15/*minutes*/ * 60/*sec/min*/ * 1000/*msec/sec*/);
+	forumSyncTimer = client.setInterval(forumSyncTimerCallback, config.timeSyncIntervalMS);
 });
 
 //common client error handler
