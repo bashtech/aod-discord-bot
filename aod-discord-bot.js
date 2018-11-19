@@ -174,99 +174,76 @@ function getPermissionLevelForMember(member)
 }
 
 //add view to the permissions list of a role in the server
-function addRoleToPermissions(guild, role, permissions)
+function addRoleToPermissions(guild, role, permissions, allow, deny)
 {
-	let newPerm = {
-		type: 'role',
-		id: role.id,
-		allow: ['VIEW_CHANNEL','CONNECT']
-	};
-	permissions.push(newPerm);
-	return permissions;
-}
-//build a list of permissions for admin
-function getPermissionsForAdmin(guild, defaultPerms)
-{
-	const muteRole = guild.roles.find(r=>{return r.name == config.muteRole;});
-	const pttRole = guild.roles.find(r=>{return r.name == config.pttRole;});
-	let permissions = [];
-	if (defaultPerms)
-		permissions.push(defaultPerms);
-	else
-		permissions.push({id:guild.id,deny:['VIEW_CHANNEL','CONNECT']}); //default no one can view
+	if (!role)
+		return permissions;
 	
 	permissions.push({
 		type: 'role',
-		id: muteRole.id,
-		deny: ['SEND_MESSAGES','SEND_TTS_MESSAGES','SPEAK']
+		id: role.id,
+		allow: (Array.isArray(allow) ? allow : ['VIEW_CHANNEL','CONNECT']),
+		deny: (Array.isArray(deny) ? deny : []),
 	});
-	permissions.push({
-		type: 'role',
-		id: pttRole.id,
-		deny: ['USE_VAD']
-	});
+
+	return permissions;
+}
+//build a list of permissions for admin
+function getPermissionsForAdmin(guild, defaultAllow, defaultDeny)
+{
+	let permissions = [{
+		id: guild.id,
+		allow: (Array.isArray(defaultAllow) ? defaultAllow : []),
+		deny: (Array.isArray(defaultDeny) ? defaultDeny : ['VIEW_CHANNEL','CONNECT'])
+	}];
+	
+	const muteRole = guild.roles.find(r=>{return r.name == config.muteRole;});
+	permissions = addRoleToPermissions(guild, muteRole, permissions, [], ['SEND_MESSAGES','SEND_TTS_MESSAGES','SPEAK']);
+	const pttRole = guild.roles.find(r=>{return r.name == config.pttRole;});
+	permissions = addRoleToPermissions(guild, pttRole, permissions, [], ['USE_VAD']);
 	
 	// add admin
 	config.adminRoles.forEach(n=>{
 		const role = guild.roles.find(r=>{return r.name == n;});
 		if (role)
-		{
-			permissions.push({
-				type: 'role',
-				id: role.id,
-				allow: ['VIEW_CHANNEL','CONNECT']
-			});
-		}
+			permissions = addRoleToPermissions(guild, role, permissions);
 	});
 	return permissions;
 }
 //build a list of permissions for staff+
-function getPermissionsForStaff(guild, defaultPerms)
+function getPermissionsForStaff(guild, defaultAllow, defaultDeny)
 {
-	let permissions = getPermissionsForAdmin(guild, defaultPerms);
+	let permissions = getPermissionsForAdmin(guild, defaultAllow, defaultDeny);
 	// add staff
 	config.staffRoles.forEach(n=>{
 		const role = guild.roles.find(r=>{return r.name == n;});
-		if (role)
-		{
-			permissions.push({
-				type: 'role',
-				id: role.id,
-				allow: ['VIEW_CHANNEL','CONNECT']
-			});
-		}
+			permissions = addRoleToPermissions(guild, role, permissions);
 	});
 	return permissions;
 }
 //build a list of permissions for mod+
-function getPermissionsForModerators(guild, defaultPerms)
+function getPermissionsForModerators(guild, defaultAllow, defaultDeny)
 {
-	let permissions = getPermissionsForStaff(guild, defaultPerms);
+	let permissions = getPermissionsForStaff(guild, defaultAllow, defaultDeny);
 	// add moderators
 	config.modRoles.forEach(n=>{
 		const role = guild.roles.find(r=>{return r.name == n;});
 		if (role)
-		{
-			permissions.push({
-				type: 'role',
-				id: role.id,
-				allow: ['VIEW_CHANNEL','CONNECT']
-			});
-		}
+			permissions = addRoleToPermissions(guild, role, permissions);
 	});
 	return permissions;
 }
 //build a list of permissions for member+
-function getPermissionsForMembers(guild, defaultPerms)
+function getPermissionsForMembers(guild, defaultAllow, defaultDeny)
 {
-	let permissions = getPermissionsForModerators(guild, defaultPerms);
+	let permissions = getPermissionsForModerators(guild, defaultAllow, defaultDeny);
 	const memberRole = guild.roles.find(r=>{return r.name == config.memberRole;});
 	return addRoleToPermissions(guild, memberRole, permissions);
 }
 //build a list of permissions for guest+
-function getPermissionsForEveryone(guild, defaultPerms)
+function getPermissionsForEveryone(guild, defaultAllow, defaultDeny)
 {
-	let permissions = getPermissionsForMembers(guild, defaultPerms);
+	let permissions = getPermissionsForMembers(guild, defaultAllow, defaultDeny);
 	const guestRole = guild.roles.find(r=>{return r.name == config.guestRole;});
 	return addRoleToPermissions(guild, guestRole, permissions);
 }
@@ -424,6 +401,7 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 {
 	var temp = true;
 	var channelCategory;
+	var divisionRole;
 	
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
@@ -438,6 +416,10 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 			return message.reply("Category is full");
 		args.shift();
 		temp = false;
+		
+		//check if this category has an associated officer role
+		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
+		divisionRole = guild.roles.find(r=>{return r.name == roleName;});
 	}
 	else
 	{
@@ -453,11 +435,11 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 		return message.reply("Invalid parameters");
 	
 	//get permissions based on type
-	var defaultPermissions;
+	var defaultDeny;
 	if (cmd === 'ptt')
-		defaultPermissions = {id:guild.id,deny:['VIEW_CHANNEL','CONNECT','USE_VAD']}
+		defaultDeny = ['VIEW_CHANNEL','CONNECT','USE_VAD'];
 	else
-		defaultPermissions = {id:guild.id,deny:['VIEW_CHANNEL','CONNECT']}
+		defaultDeny = ['VIEW_CHANNEL','CONNECT'];
 	
 	var permissions;
 	switch (args[0])
@@ -465,32 +447,38 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 		case 'guest':
 			if (perm < PERM_MOD)
 				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForEveryone(guild, defaultPermissions);
+			permissions = getPermissionsForEveryone(guild, [], defaultDeny);
+			//add role permissions if necessary
+			if (divisionRole)
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
 			args.shift();
 			break;
 		case 'mod':
-		if (perm < PERM_MOD)
+			if (perm < PERM_MOD)
 				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForModerators(guild, defaultPermissions);
+			permissions = getPermissionsForModerators(guild, [], defaultDeny);
 			args.shift();
 			break;
 		case 'staff':
 			if (perm < PERM_STAFF)
 				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForStaff(guild, defaultPermissions);
+			permissions = getPermissionsForStaff(guild, [], defaultDeny);
 			args.shift();
 			break;
 		case 'admin':
 			if (perm < PERM_ADMIN)
 				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForAdmin(guild, defaultPermissions);
+			permissions = getPermissionsForAdmin(guild, [], defaultDeny);
 			args.shift();
 			break;
 		default:
-			permissions = getPermissionsForMembers(guild, defaultPermissions);
+			permissions = getPermissionsForMembers(guild, [], defaultDeny);
+			//add role permissions if necessary
+			if (divisionRole)
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
 			break;
 	}
-	
+
 	//check for existing channel
 	let channelName = args.join(' ').toLowerCase().replace(/\s/g, '-');
 	if (channelName === undefined || channelName == '')
@@ -560,7 +548,7 @@ function commandMoveChannel(message, cmd, args, guild, perm, permName, isDM)
 	
 	var existingChannel = guild.channels.find(c=>{return c.name == channelName;});
 	if (existingChannel)
-		existingChannel.setPosition(cmd === 'up'?-1:1, true)
+		existingChannel.setPosition(cmd === 'up'?-2:2, true)
 			.then(()=>{message.reply(`Channel ${channelName} moved`);});
 	else
 		return message.reply("Channel not found");
@@ -626,7 +614,7 @@ function commandAddDivision(message, cmd, args, guild, perm, permName, isDM)
 						.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 					
 					//add members channel
-					let permissions = getPermissionsForMembers(guild);
+					let permissions = addRoleToPermissions(guild, r, getPermissionsForMembers(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
 					guild.createChannel(divisionMembersChannel, 'text', permissions, `Requested by ${getNameFromMessage(message)}`)
 						.then(c=>{
 							//move channel to category
@@ -636,8 +624,7 @@ function commandAddDivision(message, cmd, args, guild, perm, permName, isDM)
 						.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 						
 					//add officers channel
-					permissions = getPermissionsForModerators(guild);
-					permissions = addRoleToPermissions(guild, r, permissions);
+					permissions = addRoleToPermissions(guild, r, getPermissionsForModerators(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
 					guild.createChannel(divisionOfficersChannel, 'text', permissions, `Requested by ${getNameFromMessage(message)}`)
 						.then(c=>{
 							//move channel to category
@@ -659,7 +646,7 @@ function commandAddDivision(message, cmd, args, guild, perm, permName, isDM)
 						.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 						
 					//add public channel
-					permissions = getPermissionsForEveryone(guild);							
+					permissions = addRoleToPermissions(guild, r, getPermissionsForEveryone(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);					
 					guild.createChannel(divisionPublicChannel, 'text', permissions, `Requested by ${getNameFromMessage(message)}`)
 						.then(c=>{
 							//move channel to category
@@ -1362,6 +1349,32 @@ function commandQuit(message, cmd, args, guild, perm, permName, isDM)
 	process.exit();
 }
 
+/*function commandDoUpdate(message, cmd, args, guild, perm, permName, isDM)
+{
+	guild.channels.forEach(c=>{
+		if (c.type === 'category')
+		{
+			//check if this category has an associated officer role
+			let roleName = c.name + ' ' + config.discordOfficerSuffix;
+			divisionRole = guild.roles.find(r=>{return r.name == roleName;});
+			if (divisionRole)
+			{
+				let action = "";
+				c.children.forEach(divisionChannel=>{
+					//['','','']);
+					action += `add ${divisionRole.name} to ${divisionChannel.name}\n`;
+					divisionChannel.overwritePermissions(divisionRole, {
+						VIEW_CHANNEL: true,
+						CONNECT: true,
+						MANAGE_MESSAGES: true
+					});
+				});
+				message.reply(action);
+			}
+		}
+	});
+}*/
+
 //command definitions
 commands = {
 	/*
@@ -1513,7 +1526,7 @@ commands = {
 		callback: commandPurge
 	},
 	forumsync: {
-		minPermission: PERM_ADMIN,
+		minPermission: PERM_MOD,
 		args: "<cmd> [<options>]",
 		helpText: ["Forum sync integration commands:",
 			"*showmap*: Shows the current synchronization map",
@@ -1561,7 +1574,13 @@ commands = {
 		args: "",
 		helpText: "Terminate the bot",
 		callback: commandQuit
-	}
+	},
+	/*update: {
+		minPermission: PERM_OWNER,
+		args: "",
+		helpText: "Temporary command to do bulk updates",
+		callback: commandDoUpdate
+	},*/
 }
 
 //process commands
