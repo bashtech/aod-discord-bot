@@ -36,6 +36,25 @@ var undefined;
 //other globals
 var lastForumSync;
 
+//initialize client
+const client = new Discord.Client({
+	sync: true
+});
+
+//guildCreate handler -- triggers when the bot joins a server for the first time
+client.on("guildCreate", guild => {
+	console.log(`New guild joined: ${guild.name} (id: ${guild.id}). This guild has ${guild.memberCount} members!`);
+});
+
+//guildCreate handler -- triggers when the bot leaves a server
+client.on("guildDelete", guild => {
+	console.log(`I have been removed from: ${guild.name} (id: ${guild.id})`);
+});
+
+/*************************************
+	Utility Functions
+ *************************************/
+
 Object.defineProperty(global, '__stack', {
 	get: function() {
 		var orig = Error.prepareStackTrace;
@@ -62,24 +81,12 @@ Object.defineProperty(global, '__caller_function', {
     }
 });
 
-//initialize client
-const client = new Discord.Client({
-	sync: true
-});
-
-//guildCreate handler -- triggers when the bot joins a server for the first time
-client.on("guildCreate", guild => {
-	console.log(`New guild joined: ${guild.name} (id: ${guild.id}). This guild has ${guild.memberCount} members!`);
-});
-
-//guildCreate handler -- triggers when the bot leaves a server
-client.on("guildDelete", guild => {
-	console.log(`I have been removed from: ${guild.name} (id: ${guild.id})`);
-});
-
-/*************************************
-	Utility Functions
- *************************************/
+function asyncWrapper(promise)
+{
+	return promise
+		.then(data => [null, data])
+		.catch(error => [error, null]);
+}
 
 var rolesByForumGroup = null;
 function getRolesByForumGroup(guild, doUpdate)
@@ -149,7 +156,7 @@ function getNameFromMessage(message)
 	if (message)
 	{
 		if (message.member)
-			return message.member.user.tag;
+			return `${message.member.displayName} (${message.member.user.tag})`;
 		if (message.author)
 			return message.author.username;
 	}
@@ -324,6 +331,15 @@ function notifyRequestError(error, message, showError)
 		message.member.send('An error occurred while processing your request: ' + message.content + "\n" + error.toString())
 			.catch(console.error);
 	}
+}
+function asyncNotifyRequestError(promise, message, showError)
+{
+	return promise
+		.then(data => [null, data])
+		.catch(error => {
+			notifyRequestError(error, message, showError);
+			return [error, null];
+		});
 }
 
 //send a reply as DM to the author of a message (if available) and return a promise
@@ -659,7 +675,7 @@ async function commandAddDivision(message, cmd, args, guild, perm, permName, isD
 	let divisionName = args.join(' ');
 	if (divisionName === undefined || divisionName == '')
 		return message.reply("A name must be provided");
-	let roleName = divisionName + " Officer";
+	let roleName = divisionName + ' ' + config.discordOfficerSuffix;
 	let simpleName = divisionName.toLowerCase().replace(/\s/g, '-');
 	let divisionMembersChannel = simpleName + '-members';
 	let divisionOfficersChannel = simpleName + '-officers';
@@ -710,7 +726,7 @@ async function commandRemDivision(message, cmd, args, guild, perm, permName, isD
 	let divisionName = args.join(' ');
 	if (divisionName === undefined || divisionName == '')
 		return message.reply("A name must be provided");
-	let roleName = divisionName + " Officer";
+	let roleName = divisionName + ' ' + config.discordOfficerSuffix;
 	
 	const divisionCategory = guild.channels.find(c=>{return (c.name == divisionName && c.type === 'category');});
 	if (divisionCategory)
@@ -1158,8 +1174,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 						});
 					
 					if (toRemove.length || toAdd.length || noAccount.length || toUpdate.length)
-						sendReplyToMessageAuthor(message, {'embed': embed})
-							.catch(()=>{});
+						sendReplyToMessageAuthor(message, {'embed': embed}).catch(()=>{});
 				}
 				else
 				{
@@ -1171,8 +1186,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 								name: `Members to add with no account (${noAccount.length})`,
 								value: truncateStr(noAccount.join(', '), 1024)
 							});
-							sgtsChannel.send({'embed': embed})
-								.catch(()=>{});
+							sgtsChannel.send({'embed': embed}).catch(()=>{});
 						}
 					}
 				}
@@ -1180,9 +1194,11 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 		}
 	}
 	
-	var hrEnd = process.hrtime(hrStart);
-	sendReplyToMessageAuthor(message, `Forum Sync Processing Time: ${hrEnd[0] + (hrEnd[1]/1000000000)}s`)
-		.catch(()=>{});
+	let hrEnd = process.hrtime(hrStart);
+	let msg = `Forum Sync Processing Time: ${hrEnd[0] + (hrEnd[1]/1000000000)}s`;	
+	if (message)
+		sendReplyToMessageAuthor(message, msg).catch(()=>{});
+	console.log(msg);
 }
 
 //forum sync command processing
@@ -1318,9 +1334,9 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 			let roleName = args.shift();
 			let groupName = args.shift();
 			
-			if (!roleName.endsWith('Officer'))
+			if (!roleName.endsWith(config.discordOfficerSuffix))
 				return message.reply('Only Officer Roles may be mapped');
-			if (!groupName.endsWith('Officers'))
+			if (!groupName.endsWith(config.forumOfficerSuffix))
 				return message.reply('Only Officer Groups may be mapped');
 			
 			const role = guild.roles.find(r=>{return r.name == roleName;});
@@ -1836,9 +1852,9 @@ function getForumGroupsForMember(member)
 }
 
 //guildMemberAdd event handler -- triggered when a user joins the guild
-client.on('guildMemberAdd', (member)=>{
+client.on('guildMemberAdd', member => {
 	getForumGroupsForMember(member)
-		.then(data=>{
+		.then(async function (data) {
 			if (data === undefined || data.groups.length === 0)
 				return;
 			
@@ -1858,11 +1874,20 @@ client.on('guildMemberAdd', (member)=>{
 				}
 			}
 			if (rolesToAdd.length)
-				member.addRoles(rolesToAdd, 'First time join')
-					.catch(console.error);
+			{
+				try {
+					await member.addRoles(rolesToAdd, 'First time join');
+				} catch (error) {
+					return;
+				}
+			}
 			
 			if (member.displayName !== data.name)
-				member.setNickname(data.name, 'First time join');
+			{
+				try {
+					await member.setNickname(data.name, 'First time join');
+				} catch (error) {}
+			}
 			
 			member.send(`Hello ${data.name}! The following roles have been automatically granted: ${rolesToAdd.map(r=>r.name).join(', ')}. Use '!help' to see available commands.`);
 		})
