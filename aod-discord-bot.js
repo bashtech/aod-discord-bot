@@ -11,6 +11,9 @@ const Discord = require('discord.js');
 //include request
 var request = require('request');
 
+const Entities = require('html-entities').AllHtmlEntities;
+const entities = new Entities();
+
 //include config
 var config = require('./aod-discord-bot.config.json');
 
@@ -19,6 +22,9 @@ const fs = require('fs');
 
 //include AOD group config
 var forumIntegrationConfig = require(config.forumGroupConfig);
+
+//include saved timers
+var savedTimers = require(config.savedTimers);
 
 //permission levels
 const PERM_OWNER = 10
@@ -41,15 +47,6 @@ const client = new Discord.Client({
 	sync: true
 });
 
-//guildCreate handler -- triggers when the bot joins a server for the first time
-client.on("guildCreate", guild => {
-	console.log(`New guild joined: ${guild.name} (id: ${guild.id}). This guild has ${guild.memberCount} members!`);
-});
-
-//guildCreate handler -- triggers when the bot leaves a server
-client.on("guildDelete", guild => {
-	console.log(`I have been removed from: ${guild.name} (id: ${guild.id})`);
-});
 
 /*************************************
 	Utility Functions
@@ -130,21 +127,21 @@ function connectToDB()
 	if (mysqlConnection !== null && mysqlConnection.state !== 'disconnected')
 		return mysqlConnection;
 	mysqlConnection = mysql.createConnection(config.mysql);
-	mysqlConnection.connect(e=>{
-		if (e)
-			console.error(e);
+	mysqlConnection.connect(error => {
+		if (error)
+			notifyRequestError(error, null, false);
 	});
 	mysqlConnection
-		.on('close',e=>{
-			if (e)
+		.on('close', error => {
+			if (error)
 			{
-				console.error(e);
+				notifyRequestError(error, null, false);
 				connectToDB();
 			}
 		})
-		.on('error',e=>{
-			console.error(e);
-			if(e.code === 'PROTOCOL_CONNECTION_LOST')
+		.on('error',error => {
+			notifyRequestError(error, null, false);
+			if(error.code === 'PROTOCOL_CONNECTION_LOST')
 				connectToDB();
 		});
 	return mysqlConnection;
@@ -177,11 +174,11 @@ function addRemoveRole(message, guild, member, add, roleName)
 	if (add)
 		member.addRole(role, `Requested by ${getNameFromMessage(message)}`)
 						.then(message.reply("Added " + role.name + " to " + member.user.tag))
-						.catch(console.error);
+						.catch(error => {notifyRequestError(error, null, false);});
 	else
 		member.removeRole(role, `Requested by ${getNameFromMessage(message)}`)
 						.then(message.reply("Removed " + role.name + " from " + member.user.tag))
-						.catch(console.error);
+						.catch(error => {notifyRequestError(error, null, false);});
 }
 
 //map roles to permissions based on config
@@ -284,6 +281,113 @@ function getPermissionsForEveryone(guild, defaultAllow, defaultDeny)
 	return addRoleToPermissions(guild, guestRole, permissions);
 }
 
+/*************************************
+	Saved Timers
+ *************************************/
+
+var startNextSavedTimer;
+var nextSavedTimer = null;
+var nextSavedTimerEpoch = null;
+
+function savedTimerExpired()
+{
+	nextSavedTimer = null;
+	nextSavedTimerEpoch = null;
+	
+	if (!savedTimers)
+		return;
+	
+	const guild = client.guilds.get(config.guildId);
+	let doSave = false;
+	
+	while (savedTimers.length > 0)
+	{
+		let currEpoch = (new Date).getTime();
+		let firstTimer = savedTimers[0];
+		
+		if (currEpoch < firstTimer.epoch)
+			break;
+		savedTimers.shift();
+		doSave = true;
+		
+		switch (firstTimer.type)
+		{
+			case 'test':
+			{
+				const member = guild.members.get(firstTimer.data.memberID);
+				if (member)
+					member.send('Your test timer has expired');
+				break;
+			}
+			default:
+			{
+				console.error(`Unknown timer type: ${firstTimer.type}`);
+			}
+		}
+	}
+	
+	startNextSavedTimer();
+	if (doSave)
+		fs.writeFileSync(config.savedTimers, JSON.stringify(savedTimers), 'utf8');
+}
+
+startNextSavedTimer = function ()
+{
+	if (!savedTimers || savedTimers.length === 0)
+		return;
+	let firstTimer = savedTimers[0];
+	
+	if (nextSavedTimer === null || nextSavedTimerEpoch > firstTimer.epoch)
+	{
+		if (nextSavedTimer !== null)
+		{
+			clearTimeout(nextSavedTimer);
+			nextSavedTimer = null;
+		}
+		let currEpoch = (new Date).getTime();
+		let delta = firstTimer.epoch - currEpoch;
+		if (delta <= 0)
+		{
+			savedTimerExpired();
+		}
+		else
+		{
+			nextSavedTimer = client.setTimeout(savedTimerExpired, delta);
+			nextSavedTimerEpoch = firstTimer.epoch;
+		}
+	}
+}
+
+function addTimer(epoch, type, data)
+{
+	if (savedTimers)
+	{
+		let i = 0;
+		while (i < savedTimers.length)
+		{
+			var timer = savedTimers[i];
+			if (epoch < timer.epoch)
+				break;
+			i++;
+		}
+		savedTimers.splice(i, 0, {
+			epoch: epoch,
+			type: type,
+			data: data
+		});
+	}
+	else
+	{
+		savedTimers = [];
+		savedTmers.push({
+			epoch: epoch,
+			type: type,
+			data: data
+		});
+	}
+	startNextSavedTimer();
+	fs.writeFileSync(config.savedTimers, JSON.stringify(savedTimers), 'utf8');
+}
 
 /*************************************
 	Command Processing Functions
@@ -959,6 +1063,22 @@ function getForumGroups()
 	return promise;
 }
 
+var unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
+function convertForumDiscordName(discordName)
+{
+	discordName = discordName.replace(unicodeRegEx, function () {
+		//arguments[0] = full unicode
+		//arguments[1] = decimal
+		//arguments[2] = index of match
+		let code = parseInt(arguments[1]);
+		if (code > 0xffff)
+			return String.fromCodePoint(code);
+		else 
+			return String.fromCharCode(code);
+	});
+	return entities.decode(discordName);
+}
+
 //get forum users from forum groups
 function getForumUsersForGroups(groups)
 {
@@ -979,7 +1099,8 @@ function getForumUsersForGroups(groups)
 				let usersByUserNameDiscriminator = {};
 				for (var i in rows)
 				{
-					usersByUserNameDiscriminator[rows[i].field19] = {name:rows[i].username,id:rows[i].userid};
+					let forumDiscordName = convertForumDiscordName(rows[i].field19);
+					usersByUserNameDiscriminator[forumDiscordName] = {name:rows[i].username,id:rows[i].userid};
 				}
 				return resolve(usersByUserNameDiscriminator);
 			}
@@ -1002,6 +1123,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 	const guestRole = guild.roles.find(r=>{return r.name == config.guestRole;});
 	const sgtsChannel = guild.channels.find(c=>{return c.name==='aod-sergeants'});
 	const reason = (message ? `Requested by ${getNameFromMessage(message)}` : 'Periodic Sync');
+	let adds = 0, removes = 0, renames = 0, misses = 0;
 	
 	let nickNameChanges = {};
 	let forumGroups;
@@ -1053,6 +1175,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 					let forumUser = usersByUsernameDiscriminator[m.user.tag];
 					if (forumUser === undefined)
 					{
+						removes++;
 						toRemove.push(m.user.tag);
 						if (!checkOnly)
 						{
@@ -1076,6 +1199,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 					{
 						if (nickNameChanges[m.user.tag] === undefined && m.displayName !== forumUser.name)
 						{
+							renames++;
 							nickNameChanges[m.user.tag] = true;
 							toUpdate.push(`${m.user.tag} (${forumUser.name})`);
 							if (!checkOnly)
@@ -1117,6 +1241,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 							let guildMember = guild.members.find(m=>{return m.user.tag===u});
 							if (guildMember)
 							{
+								adds++;
 								toAdd.push(`${u} (${forumUser.name})`);
 								if (!checkOnly)
 								{
@@ -1129,6 +1254,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 								}
 								if (nickNameChanges[guildMember.user.tag] === undefined && guildMember.displayName !== forumUser.name)
 								{
+									renames++;
 									nickNameChanges[guildMember.user.tag] = true;
 									toUpdate.push(`${guildMember.user.tag} (${forumUser.name})`);
 									if (!checkOnly)
@@ -1142,7 +1268,10 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 								}
 							}
 							else
+							{
+								misses++;
 								noAccount.push(`${u} (${forumUser.name})`);
+							}
 						}
 					}
 				}
@@ -1195,7 +1324,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 	}
 	
 	let hrEnd = process.hrtime(hrStart);
-	let msg = `Forum Sync Processing Time: ${hrEnd[0] + (hrEnd[1]/1000000000)}s`;	
+	let msg = `Forum Sync Processing Time: ${hrEnd[0] + (Math.round(hrEnd[1]/1000000)/1000)}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account`;	
 	if (message)
 		sendReplyToMessageAuthor(message, msg).catch(()=>{});
 	console.log(msg);
@@ -1417,8 +1546,8 @@ function commandRelay(message, cmd, args, guild, perm, permName, isDM)
 		return;
 	
 	sendMessageToChannel(channel, content)
-		.then(()=>{message.delete();})
-		.catch(()=>{message.delete();});
+		.finally(()=>{message.delete();})
+		.catch(error=>{notifyRequestError(error,null,PERM_NONE);});
 }
 
 //ban command processing
@@ -1479,19 +1608,20 @@ function commandQuit(message, cmd, args, guild, perm, permName, isDM)
 	process.exit();
 }
 
-/*function commandDoUpdate(message, cmd, args, guild, perm, permName, isDM)
+function commandTest(message, cmd, args, guild, perm, permName, isDM)
 {
-	guild.channels.forEach(c=>{
-		if (c.type === 'category')
-		{
-			let msg = `${c.name} ${c.type} ${c.position} ${c.calculatedPosition}\n`;
-			c.children.forEach(child=>{
-				msg += `\t${child.name} ${child.type} ${child.position} ${child.calculatedPosition}\n`;
-			});
-			message.reply(msg);
-		}
-	});
-}*/
+	if (isDM)
+		return;
+	if (args.length === 0)
+		return message.reply("Seconds must be provided");
+	
+	let seconds = parseInt(args.shift());
+	if (seconds === NaN)
+		return message.reply("Seconds must be provided");
+	
+	let currEpoch = (new Date).getTime();
+	addTimer(currEpoch + (seconds*1000), 'test', {memberID: message.member.id});
+}
 
 //command definitions
 commands = {
@@ -1705,12 +1835,12 @@ commands = {
 		helpText: "Terminate the bot",
 		callback: commandQuit
 	},
-	/*update: {
+	test: {
 		minPermission: PERM_OWNER,
 		args: "",
-		helpText: "Temporary command to do bulk updates",
-		callback: commandDoUpdate
-	},*/
+		helpText: "Temporary command",
+		callback: commandTest
+	},
 }
 
 //process commands
@@ -1788,6 +1918,8 @@ client.on("message", message=>{
 	
 	//process arguments and command
 	const args = getParams(message.content.slice(config.prefix.length).trim());
+	if (args.length === 0)
+		return;
 	const command = args.shift().toLowerCase();
 	try {
 		return processCommand(message, command, args, guild, perm, permName, isDM);
@@ -1814,6 +1946,13 @@ client.on('voiceStateUpdate', (oldMember, newMember)=>{
 	}
 });
 
+function convertDiscordTag(discordTag) 
+{
+	return discordTag.replace(/[^ -~]/gu, function (c) {
+		return `\$#${c.codePointAt()};`;
+	});
+}
+
 //get forum group for guild member
 function getForumGroupsForMember(member)
 {
@@ -1822,7 +1961,7 @@ function getForumGroupsForMember(member)
 		let query = 
 			`SELECT u.userid,u.username,f.field19,u.usergroupid,u.membergroupids FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
-			`WHERE f.field19 LIKE "${member.user.tag}"`;
+			`WHERE f.field19 LIKE "${convertDiscordTag(member.user.tag)}"`;
 		db.query(query, function(err, rows, fields) {
 			if (err)
 				reject(err)
@@ -1891,7 +2030,7 @@ client.on('guildMemberAdd', member => {
 			
 			member.send(`Hello ${data.name}! The following roles have been automatically granted: ${rolesToAdd.map(r=>r.name).join(', ')}. Use '!help' to see available commands.`);
 		})
-		.catch(console.error);
+		.catch(error => {notifyRequestError(error, null, false);});
 });
 
 /*
@@ -1925,7 +2064,7 @@ function forumSyncTimerCallback()
 	doForumSync(null, guild, PERM_NONE, false, doDaily);
 	if (doDaily)
 		guild.pruneMembers(14, 'Forum sync timer')
-			.catch(console.error);
+			.catch(error => {notifyRequestError(error, null, false);});
 }
 
 //ready handler
@@ -1948,10 +2087,23 @@ client.on("ready", () => {
 	
 	forumSyncTimerCallback(); //prime the date and do initial adds
 	forumSyncTimer = client.setInterval(forumSyncTimerCallback, config.forumSyncIntervalMS);
+	
+	startNextSavedTimer();
+});
+
+
+//guildCreate handler -- triggers when the bot joins a server for the first time
+client.on("guildCreate", guild => {
+	console.log(`New guild joined: ${guild.name} (id: ${guild.id}). This guild has ${guild.memberCount} members!`);
+});
+
+//guildCreate handler -- triggers when the bot leaves a server
+client.on("guildDelete", guild => {
+	console.log(`I have been removed from: ${guild.name} (id: ${guild.id})`);
 });
 
 //common client error handler
-client.on('error', console.error);
+client.on('error', error => {notifyRequestError(error, null, false);});
 
 //everything is defined, start the client
 client.login(config.token)
