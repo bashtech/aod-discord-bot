@@ -11,6 +11,7 @@ const Discord = require('discord.js');
 //include request
 var request = require('request');
 
+//include entities
 const Entities = require('html-entities').AllHtmlEntities;
 const entities = new Entities();
 
@@ -25,6 +26,9 @@ var forumIntegrationConfig = require(config.forumGroupConfig);
 
 //include saved timers
 var savedTimers = require(config.savedTimers);
+
+//include saved timers
+var subscribableRoles = require(config.subscribableRoles);
 
 //permission levels
 const PERM_OWNER = 10
@@ -161,11 +165,15 @@ function getNameFromMessage(message)
 }
 
 //add or remove a role from a guildMember
-function addRemoveRole(message, guild, member, add, roleName)
+function addRemoveRole(message, guild, member, add, roleName, isID)
 {
 	if (!guild)
 		return message.reply("Invalid Guild");
-	const role = guild.roles.find(r=>{return r.name == roleName;});
+	var role;
+	if (isID === true)
+		role = guild.roles.get(roleName);
+	else
+		role = guild.roles.find(r=>{return r.name == roleName;});
 	if (!role)
 		return message.reply("Invalid Role");
 	if(!member)
@@ -480,7 +488,7 @@ function commandHelp(message, cmd, args, guild, perm, permName, isDM)
 				});
 			if (embed.fields.length >= 25)
 			{
-				sendReplyToMessageAuthor(message, {'embed': embed})
+				sendReplyToMessageAuthor(message, {embed: embed})
 					.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 				embed = {
 					title: `Continued....`,
@@ -491,7 +499,7 @@ function commandHelp(message, cmd, args, guild, perm, permName, isDM)
 		}
 	});
 	if (embed.fields.length)
-		sendReplyToMessageAuthor(message, {'embed': embed})
+		sendReplyToMessageAuthor(message, {embed: embed})
 			.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 }
 
@@ -701,7 +709,7 @@ function commandRemChannel(message, cmd, args, guild, perm, permName, isDM)
 
 function commandTopic(message, cmd, args, guild, perm, permName, isDM)
 {
-	if (args.length === 0)
+	if (args.length <= 0)
 		return message.reply("A topic must be provided");
 	
 	let channelName = args[0].toLowerCase();
@@ -714,7 +722,7 @@ function commandTopic(message, cmd, args, guild, perm, permName, isDM)
 	else if (message.channel.type === 'text')
 		channel = message.channel;
 	
-	if (args.length === 0)
+	if (args.length <= 0)
 		return message.reply("A topic must be provided");
 	
 	if (channel)
@@ -880,6 +888,120 @@ async function commandRemDivision(message, cmd, args, guild, perm, permName, isD
 	}
 }
 
+//sub/unsub/list command processing
+function commandSub(message, cmd, args, guild, perm, permName, isDM)
+{
+	switch (cmd)
+	{
+		case 'sub':
+		case 'unsub':
+		{
+			if (args.length <= 0)
+				return message.reply('Role must be provided');
+			
+			let roleName = args.join(' ');
+			if (subscribableRoles[roleName] === undefined) {
+				return message.reply(`Role ${roleName} is not subscribable`);
+			}			
+			
+			return addRemoveRole(message, guild, message.member, cmd==='sub', subscribableRoles[roleName].roleID, true);
+		}
+		case 'list':
+		{
+			let subedRoles = [];
+			let availRoles = [];
+			for (var roleName in subscribableRoles) {
+				if (subscribableRoles.hasOwnProperty(roleName)) {
+					if (message.member.roles.get(subscribableRoles[roleName].roleID))
+						subedRoles.push(roleName);
+					else
+						availRoles.push(roleName);
+				}
+			}
+			subedRoles.sort();
+			availRoles.sort();
+			return message.reply({
+				embed: {
+					title: 'Role Subscriptions',
+					fields: [
+						{ name: 'Subscribed Roles', value: subedRoles.length?subedRoles.join("\n"):'*No Roles Subscribed*' },
+						{ name: 'Available Roles', value: availRoles.length?availRoles.join("\n"):'*No Roles Available*' },
+					]
+				}
+			});
+		}
+	}	
+}
+
+//subrole command processing
+function commandSubRoles(message, cmd, args, guild, perm, permName, isDM)
+{
+	if (args.length <= 0)
+		return message.reply('No parameters provided');
+	
+	let subcmd = args.shift();
+	switch (subcmd)
+	{
+		case 'add':
+		{
+			if (args.length <= 0)
+				return message.reply('Role must be provided');
+			
+			let roleName = args.join(' ');
+			const role = guild.roles.find(r=>{return r.name == roleName;});
+			if (!role)
+				return message.reply(`Role ${roleName} not found`);
+			
+			if (subscribableRoles[roleName] === undefined) {
+				subscribableRoles[roleName] = {
+					roleID: role.id
+				};
+			}
+			else {
+				if (subscribableRoles[roleName].roleID !== role.id)
+					return message.reply(`Role ${roleName} already managed, but ID is different`);
+				else
+					return message.reply(`Role ${roleName} already managed`);
+			}
+			
+			fs.writeFileSync(config.subscribableRoles, JSON.stringify(subscribableRoles), 'utf8');
+			return message.reply(`Role ${roleName} added to subscribable roles`);
+		}
+		case 'rem':
+		{
+			if (args.length <= 0)
+				return message.reply('Role must be provided');
+			
+			let roleName = args.join(' ');
+			if (subscribableRoles[roleName] === undefined) {
+				return message.reply(`Role ${roleName} not managed`);
+			}
+			else {
+				delete subscribableRoles[roleName];
+			}
+			
+			fs.writeFileSync(config.subscribableRoles, JSON.stringify(subscribableRoles), 'utf8');
+			return message.reply(`Role ${roleName} removed from subscribable roles`);
+		}
+		case 'list':
+		{
+			let roles = [];
+			for (var roleName in subscribableRoles) {
+				if (subscribableRoles.hasOwnProperty(roleName)) {
+					roles.push(roleName);
+				}
+			}
+			roles.sort();
+			return message.reply({
+				embed: {
+					title: 'Subscribable Roles',
+					description: roles.length?roles.join("\n"):'*No roles configuerd*'
+				}
+			});
+		}
+	}
+}
+
 /*
 //retrieve all webhooks for the guild from the discord API
 // (for some reason discord.js framework doesn't give us token in the Webhook object
@@ -925,7 +1047,7 @@ function commandShowWebhooks(message, cmd, args, guild, perm, permName, isDM)
 					value: `${hook.id}/${hook.token}`
 				});
 			}
-			message.member.send({'embed': embed});
+			message.member.send({embed: embed});
 		})
 		.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 }*/
@@ -1087,10 +1209,11 @@ function getForumUsersForGroups(groups)
 		let groupStr = groups.join(',');
 		let groupRegex = groups.join('|');
 		let query = 
-			`SELECT u.userid,u.username,f.field19 FROM ${config.mysql.prefix}user AS u ` +
+			`SELECT u.userid,u.username,f.field19,f.field13 FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
 			`WHERE (u.usergroupid IN (${groupStr}) OR u.membergroupids REGEXP '(^|,)(${groupRegex})(,|$)') ` +
-			`AND f.field19 IS NOT NULL AND f.field19 <> ''`;
+			`AND f.field19 IS NOT NULL AND f.field19 <> '' ` +
+			`ORDER BY f.field13,u.username`;
 		db.query(query, function(err, rows, fields) {
 			if (err)
 				return reject(err)
@@ -1100,7 +1223,7 @@ function getForumUsersForGroups(groups)
 				for (var i in rows)
 				{
 					let forumDiscordName = convertForumDiscordName(rows[i].field19);
-					usersByUserNameDiscriminator[forumDiscordName] = {name:rows[i].username,id:rows[i].userid};
+					usersByUserNameDiscriminator[forumDiscordName] = {name:rows[i].username,id:rows[i].userid,division:rows[i].field13};
 				}
 				return resolve(usersByUserNameDiscriminator);
 			}
@@ -1114,6 +1237,33 @@ function truncateStr(str, maxLen)
 	if (str.length <= maxLen)
 		return str;
 	return str.substr(0, maxLen-5) + ' ...';
+}
+
+function getFieldsFromArray(arr, fieldName)
+{	
+	var fields = [];
+	var currValue = "";
+	for (i in arr) {
+		if (currValue.length + arr[i].length + 2 < 1024) {
+			if (currValue.length > 0)
+				currValue = currValue + ', ' + arr[i];
+			else
+				currValue = arr[i];
+		}
+		else {
+			fields.push({
+				name: fieldName + (fields.length > 0 ? ' (cont...)':''),
+				value: currValue
+			});
+			currValue = arr[i];
+		}
+	}
+	if (currValue.length)
+		fields.push({
+			name: fieldName + (fields.length > 0 ? ' (cont...)':''),
+			value: currValue
+		});
+	return fields;
 }
 
 //do forum sync with discord roles
@@ -1132,6 +1282,9 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 	} catch (error) {
 		return notifyRequestError(error,message,(perm >= PERM_MOD));
 	}
+	
+	let date = new Date();
+	fs.writeFileSync('forum-sync.log', `${date.toISOString()}  Forum sync started\n`, 'utf8');
 	
 	for (var roleName in forumIntegrationConfig) {
 		if (forumIntegrationConfig.hasOwnProperty(roleName)) {
@@ -1157,7 +1310,9 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 					notifyRequestError(error,message,(perm >= PERM_MOD));
 					continue;
 				}
-			
+				
+				date = new Date();
+				fs.appendFileSync('forum-sync.log', `${date.toISOString()}  Sync ${role.name}\n`, 'utf8');
 				let embed = { 
 					title: `Sync ${role.name}`,
 					fields: []
@@ -1176,7 +1331,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 					if (forumUser === undefined)
 					{
 						removes++;
-						toRemove.push(m.user.tag);
+						toRemove.push(`${m.user.tag} (${m.displayName})`);
 						if (!checkOnly)
 						{
 							try {
@@ -1201,7 +1356,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 						{
 							renames++;
 							nickNameChanges[m.user.tag] = true;
-							toUpdate.push(`${m.user.tag} (${forumUser.name})`);
+							toUpdate.push(`${m.user.tag} (${m.displayName} ==> ${forumUser.name})`);
 							if (!checkOnly)
 							{
 								try {
@@ -1270,56 +1425,75 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 							else
 							{
 								misses++;
-								noAccount.push(`${u} (${forumUser.name})`);
+								noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
 							}
 						}
 					}
 				}
 				
-				if (message)
-				{
-					if (toAdd.length)
+				var sendMessage = false;
+				if (toAdd.length) {
+					sendMessage = true;
+					
+					fs.appendFileSync('forum-sync.log', `\tMembers to add (${toAdd.length}):\n\t\t`, 'utf8');
+					fs.appendFileSync('forum-sync.log', toAdd.join('\n\t\t') + "\n", 'utf8');
+					
+					if (message)
 						embed.fields.push({
 							name: `Members to add (${toAdd.length})`,
 							value: truncateStr(toAdd.join(', '), 1024)
 						});
-						
-					if (noAccount.length)
+				}
+					
+				if (noAccount.length) {
+					sendMessage = true;
+					
+					fs.appendFileSync('forum-sync.log', `\tMembers to add with no discord user (${noAccount.length}):\n\t\t`, 'utf8');
+					fs.appendFileSync('forum-sync.log', noAccount.join('\n\t\t') + "\n", 'utf8');
+					
+					if (message)
 						embed.fields.push({
 							name: `Members to add with no discord user (${noAccount.length})`,
 							value: truncateStr(noAccount.join(', '), 1024)
 						});
-						
-					if (toRemove.length)
+				}
+					
+				if (toRemove.length) {
+					sendMessage = true;
+					
+					fs.appendFileSync('forum-sync.log', `\tMembers to remove (${toRemove.length}):\n\t\t`, 'utf8');
+					fs.appendFileSync('forum-sync.log', toRemove.join('\n\t\t') + "\n", 'utf8');
+					
+					if (message)
 						embed.fields.push({
 							name: `Members to remove (${toRemove.length})`,
-							value: toRemove.join(', ')
+							value: truncateStr(toRemove.join(', '), 1024)
 						});
-						
-					if (toUpdate.length)
+				}
+					
+				if (toUpdate.length) {
+					sendMessage = true;
+					
+					fs.appendFileSync('forum-sync.log', `\tMembers to rename (${toUpdate.length}):\n\t\t`, 'utf8');
+					fs.appendFileSync('forum-sync.log', toUpdate.join('\n\t\t') + "\n", 'utf8');
+					
+					if (message)
 						embed.fields.push({
 							name: `Members to rename (${toUpdate.length})`,
 							value: truncateStr(toUpdate.join(', '), 1024)
 						});
-					
-					if (toRemove.length || toAdd.length || noAccount.length || toUpdate.length)
-						sendReplyToMessageAuthor(message, {'embed': embed}).catch(()=>{});
 				}
-				else
-				{
-					if (doDaily === true && noAccount.length)
-					{
-						if (sgtsChannel)
-						{
-							embed.fields.push({
-								name: `Members to add with no account (${noAccount.length})`,
-								value: truncateStr(noAccount.join(', '), 1024)
-							});
-							sgtsChannel.send({'embed': embed}).catch(()=>{});
-						}
-					}
+				
+				if (message && sendMessage) {
+					sendReplyToMessageAuthor(message, {embed: embed}).catch(()=>{});
 				}
 			}
+		}
+	}
+	
+	if (doDaily === true && misses > 0) {
+		if (sgtsChannel) {
+			sgtsChannel.send(`The forum sync process found ${misses} members with no discord account. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(()=>{});
 		}
 	}
 	
@@ -1328,6 +1502,8 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 	if (message)
 		sendReplyToMessageAuthor(message, msg).catch(()=>{});
 	console.log(msg);
+	date = new Date();
+	fs.appendFileSync('forum-sync.log', `${date.toISOString()}  ${msg}\n`, 'utf8');
 }
 
 //forum sync command processing
@@ -1354,9 +1530,15 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 							name: roleName + (groupMap.permanent?' (permanent)':''),
 							value: groupMap.forumGroups.map(groupID => `${forumGroups[groupID]} (${groupID})`).join(', ')
 						});
+						
+						if (embed.fields.length >= 25)
+						{
+							sendReplyToMessageAuthor(message, {embed: embed});
+							embed.fields = [];
+						}
 					});
 					
-					sendReplyToMessageAuthor(message, {'embed': embed});
+					sendReplyToMessageAuthor(message, {embed: embed});
 				})
 				.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 			break;
@@ -1370,7 +1552,7 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 					value: guild.roles.array().filter(r=>r.name.endsWith(config.discordOfficerSuffix)).map(r=>r.name).sort().join("\n")
 				}]
 			};
-			sendReplyToMessageAuthor(message, {'embed': embed});
+			sendReplyToMessageAuthor(message, {embed: embed});
 			break;
 		}
 		case 'showforumgroups':
@@ -1384,7 +1566,7 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 							value: Object.keys(forumGroups).map(k => `${forumGroups[k]} (${k})`).sort().join("\n")
 						}]
 					};
-					sendReplyToMessageAuthor(message, {'embed': embed});
+					sendReplyToMessageAuthor(message, {embed: embed});
 				})
 				.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 			break;
@@ -1515,7 +1697,7 @@ function sendMessageToChannel(channel, content)
 	if (json !== undefined)
 	{
 		if (json.embed)
-			return channel.send({'embed': json.embed});
+			return channel.send({embed: json.embed});
 		else if (json.text)
 			return channel.send(json.text);
 	}
@@ -1528,7 +1710,7 @@ function commandRelay(message, cmd, args, guild, perm, permName, isDM)
 {
 	if (isDM)
 		return;
-	if (args.length === 0)
+	if (args.length <= 0)
 		return;
 	
 	let channelName = args[0].toLowerCase();
@@ -1612,7 +1794,7 @@ function commandTest(message, cmd, args, guild, perm, permName, isDM)
 {
 	if (isDM)
 		return;
-	if (args.length === 0)
+	if (args.length <= 0)
 		return message.reply("Seconds must be provided");
 	
 	let seconds = parseInt(args.shift());
@@ -1644,6 +1826,24 @@ commands = {
 		args: "",
 		helpText: "Returns a DM letting you know the bot is alive. Staff and Moderators will get an estimate of network latency.",
 		callback: commandPing
+	},
+	sub: {
+		minPermission: PERM_GUEST,
+		args: "<name>",
+		helpText: "Subscribe to a role.",
+		callback: commandSub
+	},
+	unsub: {
+		minPermission: PERM_GUEST,
+		args: "<name>",
+		helpText: "Unsubscribe from a role.",
+		callback: commandSub
+	},
+	list: {
+		minPermission: PERM_GUEST,
+		args: "",
+		helpText: "List subscribable roles.",
+		callback: commandSub
 	},
 	tracker: {
 		minPermission: PERM_MEMBER,
@@ -1772,6 +1972,12 @@ commands = {
 		args: "<name>",
 		helpText: "Removes a division and division channels.",
 		callback: commandRemDivision
+	},
+	subroles: {
+		minPermission: PERM_STAFF,
+		args: "[add|rem|list] <name>",
+		helpText: "Manage subscribable roles.",
+		callback: commandSubRoles
 	},
 	purge: {
 		minPermission: PERM_STAFF,
@@ -1918,7 +2124,7 @@ client.on("message", message=>{
 	
 	//process arguments and command
 	const args = getParams(message.content.slice(config.prefix.length).trim());
-	if (args.length === 0)
+	if (args.length <= 0)
 		return;
 	const command = args.shift().toLowerCase();
 	try {
