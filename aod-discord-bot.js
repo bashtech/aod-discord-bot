@@ -1325,42 +1325,42 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 				var toRemove = [];
 				var toUpdate = [];
 				var membersByUsernaemDiscriminator = {};
-				for (var m of role.members.values()) {
-					membersByUsernaemDiscriminator[m.user.tag] = m;
-					let forumUser = usersByUsernameDiscriminator[m.user.tag];
+				for (var roleMember of role.members.values()) {
+					membersByUsernaemDiscriminator[roleMember.user.tag] = roleMember;
+					let forumUser = usersByUsernameDiscriminator[roleMember.user.tag];
 					if (forumUser === undefined)
 					{
 						removes++;
-						toRemove.push(`${m.user.tag} (${m.displayName})`);
+						toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
 						if (!checkOnly)
 						{
 							try {
-								await m.removeRole(role, reason)
+								await roleMember.removeRole(role, reason)
 								if (role.name === config.memberRole)
 								{
 									//we're removing them from AOD, clear the name set from the forums
-									await m.setNickname('', reason);
+									await roleMember.setNickname('', reason);
 									//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
-									if (m.roles.get(guestRole.id))
-										await m.removeRole(guestRole);
+									if (roleMember.roles.get(guestRole.id))
+										await roleMember.removeRole(guestRole);
 								}
 							} catch (error) {
-								console.error(`Failed to remove ${role.name} from ${m.user.tag}`);
+								console.error(`Failed to remove ${role.name} from ${roleMember.user.tag}`);
 								notifyRequestError(error,message,(perm >= PERM_MOD));
 							}
 						}
 					}
 					else
 					{
-						if (nickNameChanges[m.user.tag] === undefined && m.displayName !== forumUser.name)
+						if (nickNameChanges[roleMember.user.tag] === undefined && roleMember.displayName !== forumUser.name)
 						{
 							renames++;
-							nickNameChanges[m.user.tag] = true;
-							toUpdate.push(`${m.user.tag} (${m.displayName} ==> ${forumUser.name})`);
+							nickNameChanges[roleMember.user.tag] = true;
+							toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
 							if (!checkOnly)
 							{
 								try {
-									await m.setNickname(forumUser.name, reason);
+									await roleMember.setNickname(forumUser.name, reason);
 								} catch (error) {
 									notifyRequestError(error,message,(perm >= PERM_MOD));
 								}
@@ -1369,10 +1369,10 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 						//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
 						if (!checkOnly && role.name === config.memberRole)
 						{
-							if (m.roles.get(guestRole.id))
+							if (roleMember.roles.get(guestRole.id))
 							{
 								try {
-									await m.removeRole(guestRole);
+									await roleMember.removeRole(guestRole);
 								} catch (error) {
 									notifyRequestError(error,message,(perm >= PERM_MOD));
 								}
@@ -1403,20 +1403,22 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 									try {
 										await guildMember.addRole(role, reason);
 									} catch (error) {
-										console.error(`Failed to add ${role.name} to ${m.user.tag}`);
+										console.error(`Failed to add ${role.name} to ${roleMember.user.tag}`);
 										notifyRequestError(error,message,(perm >= PERM_MOD));
+										continue;
 									}
 								}
 								if (nickNameChanges[guildMember.user.tag] === undefined && guildMember.displayName !== forumUser.name)
 								{
 									renames++;
 									nickNameChanges[guildMember.user.tag] = true;
-									toUpdate.push(`${guildMember.user.tag} (${forumUser.name})`);
+									toUpdate.push(`${guildMember.user.tag} (${guildMember.displayName} ==> ${forumUser.name})`);
 									if (!checkOnly)
 									{
 										try {
 											await guildMember.setNickname(forumUser.name, reason);
 										} catch (error) {
+											console.error(`Failed to rename ${guildMember.user.tag} to ${forumUser.name}`);
 											notifyRequestError(error,message,(perm >= PERM_MOD));
 										}
 									}
