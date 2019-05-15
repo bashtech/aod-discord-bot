@@ -405,7 +405,7 @@ function addTimer(epoch, type, data)
 var commands; 
  
 //params parsing
-var paramsRegEx = /([^\s"']+)|"(((\\")|([^"]))*)"|'(((\\')|([^']))*)'/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
+var paramsRegEx = /([^\s"'\u201C]+)|"(((\\")|([^"]))*)"|'(((\\')|([^']))*)'|\u201C([^\u201D]*)\u201D/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
 var paramsReplaceEscapedSingleRegEx = /\\'/g;
 var paramsReplaceExcapedDoubleRegEx = /\\"/g;
 function getParams(string)
@@ -417,6 +417,7 @@ function getParams(string)
 		var match = paramsRegEx.exec(string);
 		if (match != null)
 		{
+			//console.log(match);
 			let param;
 			if (match[1])
 				param = match[1];
@@ -424,6 +425,8 @@ function getParams(string)
 				param = match[2].replace(paramsReplaceExcapedDoubleRegEx,'"');
 			else if (match[6])
 				param = match[6].replace(paramsReplaceEscapedSingleRegEx,"'");
+			else if (match[10])
+				param= match[10];
 			else
 				param = match[0];
 			params.push(param);
@@ -1284,7 +1287,20 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 	}
 	
 	let date = new Date();
-	fs.writeFileSync('forum-sync.log', `${date.toISOString()}  Forum sync started\n`, 'utf8');
+	fs.writeFileSync(config.syncLogFile, `${date.toISOString()}  Forum sync started\n`, 'utf8');
+	
+	var online=0, offline=0, idle=0, dnd=0, total=0;
+	guild.members.forEach(function (m) {
+			switch (m.presence.status)
+			{
+				case 'idle': idle++; break;
+				case 'offline': offline++; break;
+				case 'dnd': dnd++; break;
+				default: online++;
+			}
+			total++;
+		});
+	fs.writeFileSync(config.populationLogFile, `${online}/${idle}/${dnd}/${total}\n`, 'utf8');
 	
 	for (var roleName in forumIntegrationConfig) {
 		if (forumIntegrationConfig.hasOwnProperty(roleName)) {
@@ -1312,7 +1328,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 				}
 				
 				date = new Date();
-				fs.appendFileSync('forum-sync.log', `${date.toISOString()}  Sync ${role.name}\n`, 'utf8');
+				fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  Sync ${role.name}\n`, 'utf8');
 				let embed = { 
 					title: `Sync ${role.name}`,
 					fields: []
@@ -1330,23 +1346,26 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 					let forumUser = usersByUsernameDiscriminator[roleMember.user.tag];
 					if (forumUser === undefined)
 					{
-						removes++;
-						toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
-						if (!checkOnly)
+						if (role.id !== guestRole.id)
 						{
-							try {
-								await roleMember.removeRole(role, reason)
-								if (role.name === config.memberRole)
-								{
-									//we're removing them from AOD, clear the name set from the forums
-									await roleMember.setNickname('', reason);
-									//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
-									if (roleMember.roles.get(guestRole.id))
-										await roleMember.removeRole(guestRole);
+							removes++;
+							toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
+							if (!checkOnly)
+							{
+								try {
+									await roleMember.removeRole(role, reason);
+									if (role.name === config.memberRole)
+									{
+										//we're removing them from AOD, clear the name set from the forums
+										await roleMember.setNickname('', reason);
+										//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
+										if (roleMember.roles.get(guestRole.id))
+											await roleMember.removeRole(guestRole);
+									}
+								} catch (error) {
+									console.error(`Failed to remove ${role.name} from ${roleMember.user.tag}`);
+									notifyRequestError(error,message,(perm >= PERM_MOD));
 								}
-							} catch (error) {
-								console.error(`Failed to remove ${role.name} from ${roleMember.user.tag}`);
-								notifyRequestError(error,message,(perm >= PERM_MOD));
 							}
 						}
 					}
@@ -1363,6 +1382,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 									await roleMember.setNickname(forumUser.name, reason);
 								} catch (error) {
 									notifyRequestError(error,message,(perm >= PERM_MOD));
+									continue;
 								}
 							}
 						}
@@ -1375,6 +1395,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 									await roleMember.removeRole(guestRole);
 								} catch (error) {
 									notifyRequestError(error,message,(perm >= PERM_MOD));
+									continue;
 								}
 							}
 						}
@@ -1420,74 +1441,80 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 										} catch (error) {
 											console.error(`Failed to rename ${guildMember.user.tag} to ${forumUser.name}`);
 											notifyRequestError(error,message,(perm >= PERM_MOD));
+											continue;
 										}
 									}
 								}
 							}
 							else
 							{
-								misses++;
+								if (role.id !== guestRole.id)
+									misses++;
 								noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
 							}
 						}
 					}
 				}
 				
-				var sendMessage = false;
-				if (toAdd.length) {
-					sendMessage = true;
+				if (role.id !== guestRole.id)
+				{
+					var sendMessage = false;
 					
-					fs.appendFileSync('forum-sync.log', `\tMembers to add (${toAdd.length}):\n\t\t`, 'utf8');
-					fs.appendFileSync('forum-sync.log', toAdd.join('\n\t\t') + "\n", 'utf8');
+					if (toAdd.length) {
+						sendMessage = true;
+						
+						fs.appendFileSync(config.syncLogFile, `\tMembers to add (${toAdd.length}):\n\t\t`, 'utf8');
+						fs.appendFileSync(config.syncLogFile, toAdd.join('\n\t\t') + "\n", 'utf8');
+						
+						if (message)
+							embed.fields.push({
+								name: `Members to add (${toAdd.length})`,
+								value: truncateStr(toAdd.join(', '), 1024)
+							});
+					}
+						
+					if (noAccount.length) {
+						sendMessage = true;
+						
+						fs.appendFileSync(config.syncLogFile, `\tMembers to add with no discord user (${noAccount.length}):\n\t\t`, 'utf8');
+						fs.appendFileSync(config.syncLogFile, noAccount.join('\n\t\t') + "\n", 'utf8');
+						
+						if (message)
+							embed.fields.push({
+								name: `Members to add with no discord user (${noAccount.length})`,
+								value: truncateStr(noAccount.join(', '), 1024)
+							});
+					}
+						
+					if (toRemove.length) {
+						sendMessage = true;
+						
+						fs.appendFileSync(config.syncLogFile, `\tMembers to remove (${toRemove.length}):\n\t\t`, 'utf8');
+						fs.appendFileSync(config.syncLogFile, toRemove.join('\n\t\t') + "\n", 'utf8');
+						
+						if (message)
+							embed.fields.push({
+								name: `Members to remove (${toRemove.length})`,
+								value: truncateStr(toRemove.join(', '), 1024)
+							});
+					}
+						
+					if (toUpdate.length) {
+						sendMessage = true;
+						
+						fs.appendFileSync(config.syncLogFile, `\tMembers to rename (${toUpdate.length}):\n\t\t`, 'utf8');
+						fs.appendFileSync(config.syncLogFile, toUpdate.join('\n\t\t') + "\n", 'utf8');
+						
+						if (message)
+							embed.fields.push({
+								name: `Members to rename (${toUpdate.length})`,
+								value: truncateStr(toUpdate.join(', '), 1024)
+							});
+					}
 					
-					if (message)
-						embed.fields.push({
-							name: `Members to add (${toAdd.length})`,
-							value: truncateStr(toAdd.join(', '), 1024)
-						});
-				}
-					
-				if (noAccount.length) {
-					sendMessage = true;
-					
-					fs.appendFileSync('forum-sync.log', `\tMembers to add with no discord user (${noAccount.length}):\n\t\t`, 'utf8');
-					fs.appendFileSync('forum-sync.log', noAccount.join('\n\t\t') + "\n", 'utf8');
-					
-					if (message)
-						embed.fields.push({
-							name: `Members to add with no discord user (${noAccount.length})`,
-							value: truncateStr(noAccount.join(', '), 1024)
-						});
-				}
-					
-				if (toRemove.length) {
-					sendMessage = true;
-					
-					fs.appendFileSync('forum-sync.log', `\tMembers to remove (${toRemove.length}):\n\t\t`, 'utf8');
-					fs.appendFileSync('forum-sync.log', toRemove.join('\n\t\t') + "\n", 'utf8');
-					
-					if (message)
-						embed.fields.push({
-							name: `Members to remove (${toRemove.length})`,
-							value: truncateStr(toRemove.join(', '), 1024)
-						});
-				}
-					
-				if (toUpdate.length) {
-					sendMessage = true;
-					
-					fs.appendFileSync('forum-sync.log', `\tMembers to rename (${toUpdate.length}):\n\t\t`, 'utf8');
-					fs.appendFileSync('forum-sync.log', toUpdate.join('\n\t\t') + "\n", 'utf8');
-					
-					if (message)
-						embed.fields.push({
-							name: `Members to rename (${toUpdate.length})`,
-							value: truncateStr(toUpdate.join(', '), 1024)
-						});
-				}
-				
-				if (message && sendMessage) {
-					sendReplyToMessageAuthor(message, {embed: embed}).catch(()=>{});
+					if (message && sendMessage) {
+						sendReplyToMessageAuthor(message, {embed: embed}).catch(()=>{});
+					}
 				}
 			}
 		}
@@ -1505,7 +1532,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 		sendReplyToMessageAuthor(message, msg).catch(()=>{});
 	console.log(msg);
 	date = new Date();
-	fs.appendFileSync('forum-sync.log', `${date.toISOString()}  ${msg}\n`, 'utf8');
+	fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  ${msg}\n`, 'utf8');
 }
 
 //forum sync command processing
@@ -2203,7 +2230,10 @@ client.on('guildMemberAdd', member => {
 	getForumGroupsForMember(member)
 		.then(async function (data) {
 			if (data === undefined || data.groups.length === 0)
+			{
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Guest permissions are granted to registered members of our forums.`);
 				return;
+			}
 			
 			let rolesByGroup = getRolesByForumGroup(member.guild);
 			let rolesToAdd = [];
@@ -2227,6 +2257,11 @@ client.on('guildMemberAdd', member => {
 				} catch (error) {
 					return;
 				}
+			}
+			else
+			{
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Guest permissions are granted to registered members of our forums.`);
+				return;
 			}
 			
 			if (member.displayName !== data.name)
