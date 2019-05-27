@@ -1,0 +1,17 @@
+[Unit]
+Description=AOD Discord Bot
+
+[Service]
+PIDFile=/tmp/aod-discord-bot.pid
+User=nginx
+Group=nginx-data
+Restart=always
+KillSignal=SIGQUIT
+WorkingDirectory=/usr/share/nginx/aod-discord-bot
+ExecStart=/usr/share/nginx/aod-discord-bot/aod-discord-bot.js
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=aod-discord-bot
+
+[Install]
+WantedBy=multi-user.target
