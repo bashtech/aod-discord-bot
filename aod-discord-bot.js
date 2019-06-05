@@ -21,6 +21,9 @@ var config = require('./aod-discord-bot.config.json');
 //inclue fs
 const fs = require('fs');
 
+//include md5
+var md5 = require('md5');
+
 //include AOD group config
 var forumIntegrationConfig = require(config.forumGroupConfig);
 
@@ -324,7 +327,7 @@ function savedTimerExpired()
 			{
 				const member = guild.members.get(firstTimer.data.memberID);
 				if (member)
-					member.send('Your test timer has expired');
+					member.send('Your test timer has expired').catch(()=>{});
 				break;
 			}
 			default:
@@ -457,11 +460,22 @@ function asyncNotifyRequestError(promise, message, showError)
 		});
 }
 
+function sendMessageToMember(member, data)
+{
+	if (member)
+		return member.send(data);
+	var promise = new Promise(function(resolve, reject)	{
+		reject();
+	});
+	return promise;
+}
+
+
 //send a reply as DM to the author of a message (if available) and return a promise
 function sendReplyToMessageAuthor(message, data)
 {
-	if (message && message.member)
-		return message.member.send(data);
+	if (message)
+		return sendMessageToMember(message.member, data);
 	var promise = new Promise(function(resolve, reject)	{
 		reject();
 	});
@@ -477,9 +491,13 @@ function commandHelp(message, cmd, args, guild, perm, permName, isDM)
 		footer: "**Note**: Parameters that require spaces should be 'single' or \"double\" quoted."
 	}
 	
+	var filter;
+	if (args.length)
+		filter = args.shift();
+	
 	Object.keys(commands).forEach(cmd=>{
 		let commandObj = commands[cmd];
-		if (commandObj.minPermission <= perm)
+		if (commandObj.minPermission <= perm && (!filter || filter === cmd))
 		{
 			let commandHelpText = commandObj.helpText;
 			if (Array.isArray(commandHelpText))
@@ -516,6 +534,75 @@ function commandPing(message, cmd, args, guild, perm, permName, isDM)
 	else
 		sendReplyToMessageAuthor(message, "Pong!")
 			.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
+}
+
+//login command processing
+async function commandLogin(message, cmd, args, guild, perm, permName, isDM)
+{
+	var member = message.member;
+	if (!isDM)
+		message.delete();
+	
+	if (args.length < 2)
+		return sendMessageToMember(member, "Username and Password must be provided.").catch(()=>{});
+		
+	var username = args.shift();
+	var password = args.shift();
+	
+	var promise = new Promise(function(resolve, reject)	{
+		let db = connectToDB();
+		let password_md5 = db.escape(md5(password));
+		let esc_username = db.escape(username);
+		let query = `CALL check_user(${esc_username},${password_md5})`;
+		db.query(query, function(err, rows, fields) {
+			if (err)
+			{
+				sendMessageToMember(member, `Login failed for ${username}`).catch(()=>{});
+				return reject(err);
+			}
+			else
+			{
+				var success = false;
+				for (var i in rows)
+				{
+					//rows[i].userid
+					//rows[i].username
+					//rows[i].valid
+					if (rows[i] && rows[i][0])
+					{
+						data = rows[i][0];
+						if (data && data.valid == 1)
+						{
+							success = true;
+							let tag = db.escape(convertDiscordTag(member.user.tag));
+							let discordId = db.escape(member.user.id);
+							let query = `UPDATE ${config.mysql.prefix}userfield SET field19=${tag},field20=${discordId} WHERE userid=${data.userid}`;
+							db.query(query, function(err, rows, fields) {
+								if (err) 
+								{
+									sendMessageToMember(member, `Successfully logged in as ${data.username} (${data.userid}), but there was an error updating your user infomation.`).catch(()=>{});
+									console.log(err);
+									return reject(err);
+								}
+								sendMessageToMember(member, `Successfully logged in as ${data.username} (${data.userid}). Please allow up to ${config.forumSyncIntervalMS/60000} minutes for Roles to be updated.`).catch(()=>{});
+								console.log(`${member.user.tag} logged in as ${data.username} (${data.userid})`);
+								return resolve();
+							});
+						}
+					}
+					break; //should never be more than 1 user...
+				}
+				
+				if (!success)
+				{
+					console.log(`${member.user.tag} login failed for ${username}`);
+					sendMessageToMember(member, `Login failed for ${username}`).catch(()=>{});
+				}
+				return resolve();
+			}
+		});
+	});
+	return promise;
 }
 
 //addaod command processing
@@ -664,29 +751,22 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 		return message.reply("Channel already exists");
 	
 	//create channel
-	return guild.createChannel(channelName, cmd, permissions, `Requested by ${getNameFromMessage(message)}`)
+	return guild.createChannel(channelName, {type: cmd, name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}`})
 		.then(c=>{
-			//move channel to category
-			c.setParent(channelCategory)
-				.then(()=>{
-					if (cmd === 'voice')
-						c.setBitrate(96, `Requested by ${getNameFromMessage(message)}`)
-							.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
-					
-					//make sure someone gets into the channel
-					if (temp)
-						client.setTimeout(function () {
-							if (c.members.size === 0)
-								c.delete()
-									.catch(e=>{}); //probably removed already
-						}, 30000);
-					//try to move the person requesting the channel to it
-					if (message.member)
-						message.member.setVoiceChannel(c)
-							.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
-					return message.reply(`Added channel ${c.toString()} in ${channelCategory.name}`);
-				})
-				.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
+			if (cmd === 'voice')
+			{
+				//make sure someone gets into the channel
+				if (temp)
+					client.setTimeout(function () {
+						if (c.members.size === 0)
+							c.delete()
+								.catch(e=>{}); //probably removed already
+					}, 30000);
+				//try to move the person requesting the channel to it
+				if (message.member)
+					message.member.setVoiceChannel(c).catch(error=>{});
+			}
+			return message.reply(`Added channel ${c.toString()} in ${channelCategory.name}`);
 		})
 		.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 }
@@ -734,7 +814,6 @@ function commandTopic(message, cmd, args, guild, perm, permName, isDM)
 	else
 		return message.reply("Channel not found");
 }
-
 
 //move channel command processing
 function commandMoveChannel(message, cmd, args, guild, perm, permName, isDM)
@@ -811,22 +890,19 @@ async function commandAddDivision(message, cmd, args, guild, perm, permName, isD
 		
 		//add category for division
 		let permissions = getPermissionsForEveryone(guild);
-		divisionCategory = await guild.createChannel(divisionName, 'category', permissions, `Requested by ${getNameFromMessage(message)}`);
-		
+		divisionCategory = await guild.createChannel(divisionName, {type: 'category', name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`});
+
 		//create members channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-		let membersChannel = await guild.createChannel(divisionMembersChannel, 'text', permissions, `Requested by ${getNameFromMessage(message)}`);
-		await membersChannel.setParent(divisionCategory);
+		let membersChannel = await guild.createChannel(divisionMembersChannel, {type: 'text', name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`});
 		
 		//create officers channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForModerators(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-		let officersChannel = await guild.createChannel(divisionOfficersChannel, 'text', permissions, `Requested by ${getNameFromMessage(message)}`);
-		await officersChannel.setParent(divisionCategory);
+		let officersChannel = await guild.createChannel(divisionOfficersChannel, {type: 'text', name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`});
 		
 		//create public channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForEveryone(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);					
-		let publicChannel = await guild.createChannel(divisionPublicChannel, 'text', permissions, `Requested by ${getNameFromMessage(message)}`);
-		await publicChannel.setParent(divisionCategory);
+		let publicChannel = await guild.createChannel(divisionPublicChannel, {type: 'text', name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`});
 		
 		return message.reply(`${divisionName} division added`);
 	} catch (error) {
@@ -1212,7 +1288,7 @@ function getForumUsersForGroups(groups)
 		let groupStr = groups.join(',');
 		let groupRegex = groups.join('|');
 		let query = 
-			`SELECT u.userid,u.username,f.field19,f.field13 FROM ${config.mysql.prefix}user AS u ` +
+			`SELECT u.userid,u.username,f.field19,f.field20,f.field13 FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
 			`WHERE (u.usergroupid IN (${groupStr}) OR u.membergroupids REGEXP '(^|,)(${groupRegex})(,|$)') ` +
 			`AND f.field19 IS NOT NULL AND f.field19 <> '' ` +
@@ -1845,7 +1921,7 @@ commands = {
 	},
 	*/
 	help: {
-		minPermission: PERM_GUEST,
+		minPermission: PERM_NONE,
 		args: "",
 		helpText: "Displays the help menu.",
 		callback: commandHelp
@@ -1855,6 +1931,12 @@ commands = {
 		args: "",
 		helpText: "Returns a DM letting you know the bot is alive. Staff and Moderators will get an estimate of network latency.",
 		callback: commandPing
+	},
+	login: {
+		minPermission: PERM_NONE,
+		args: "\"<username>\" \"<password>\"",
+		helpText: "Associate discord user to forum account.",
+		callback: commandLogin
 	},
 	sub: {
 		minPermission: PERM_GUEST,
@@ -2070,23 +2152,26 @@ commands = {
 		helpText: "Terminate the bot",
 		callback: commandQuit
 	},
-	test: {
+	/*test: {
 		minPermission: PERM_OWNER,
 		args: "",
 		helpText: "Temporary command",
 		callback: commandTest
-	},
+	},*/
 }
 
 //process commands
-function processCommand(message, cmd, args, guild, perm, permName, isDM)
+function processCommand(message, cmd, arg_string, guild, perm, permName, isDM)
 {
 	var commandObj = commands[cmd];
 	if (commandObj !== undefined)
 	{
 		if (commandObj.minPermission <= perm)
 		{
-			if (cmd !== 'help' && cmd !== 'ping')
+			var args = getParams(arg_string);			
+			if (cmd == 'login')
+				console.log(`${getNameFromMessage(message)} executed: ${cmd}`);
+			else if (cmd !== 'help' && cmd !== 'ping')
 				console.log(`${getNameFromMessage(message)} executed: ${cmd} "${args.join('" "')}"`)
 			return commandObj.callback(message, cmd, args, guild, perm, permName, isDM);
 		}
@@ -2146,18 +2231,23 @@ client.on("message", message=>{
 			return; //must have guild
 		[perm, permName] = getPermissionLevelForMember(message.member);
 	}
-
-	//if no valid perms, stop now
-	if (perm == PERM_NONE)
-		return;
 	
-	//process arguments and command
-	const args = getParams(message.content.slice(config.prefix.length).trim());
-	if (args.length <= 0)
-		return;
-	const command = args.shift().toLowerCase();
+	//get command and argument string
+	let first_space = message.content.indexOf(' ');
+	var command, arg_string;
+	if (first_space < 0)
+	{
+		command = message.content.slice(config.prefix.length).trim();
+		arg_string = "";
+	}
+	else
+	{
+		command = message.content.slice(config.prefix.length, first_space);
+		arg_string = message.content.slice(first_space+1).trim();
+	}
+	
 	try {
-		return processCommand(message, command, args, guild, perm, permName, isDM);
+		return processCommand(message, command, arg_string, guild, perm, permName, isDM);
 	} catch (error) {notifyRequestError(error,message,(perm >= PERM_MOD));} //don't let user input crash the bot
 });
 
@@ -2184,7 +2274,7 @@ client.on('voiceStateUpdate', (oldMember, newMember)=>{
 function convertDiscordTag(discordTag) 
 {
 	return discordTag.replace(/[^ -~]/gu, function (c) {
-		return `\$#${c.codePointAt()};`;
+		return `\&#${c.codePointAt()};`;
 	});
 }
 
@@ -2194,7 +2284,7 @@ function getForumGroupsForMember(member)
 	var promise = new Promise(function(resolve, reject) {
 		let db = connectToDB();
 		let query = 
-			`SELECT u.userid,u.username,f.field19,u.usergroupid,u.membergroupids FROM ${config.mysql.prefix}user AS u ` +
+			`SELECT u.userid,u.username,f.field19,f.field20,u.usergroupid,u.membergroupids FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
 			`WHERE f.field19 LIKE "${convertDiscordTag(member.user.tag)}"`;
 		db.query(query, function(err, rows, fields) {
@@ -2208,7 +2298,7 @@ function getForumGroupsForMember(member)
 				}
 				if (rows.length > 1) //danger will robinson! name conflict in database
 				{
-					member.send("Hello AOD member! There is a conflict with your discord name. Please verify your profile and contact the leadership for help.");
+					member.send("Hello AOD member! There is a conflict with your discord name. Please verify your profile and contact the leadership for help.").catch(()=>{});
 					return reject(`Member name conflict: ${rows.length} members have the discord tag ${member.user.tag}`);
 				}
 				
@@ -2231,7 +2321,7 @@ client.on('guildMemberAdd', member => {
 		.then(async function (data) {
 			if (data === undefined || data.groups.length === 0)
 			{
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Guest permissions are granted to registered members of our forums.`);
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Guest permissions are granted to registered members of our forums.`).catch(()=>{});
 				return;
 			}
 			
@@ -2260,7 +2350,7 @@ client.on('guildMemberAdd', member => {
 			}
 			else
 			{
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Guest permissions are granted to registered members of our forums.`);
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Guest permissions are granted to registered members of our forums.`).catch(()=>{});
 				return;
 			}
 			
@@ -2271,7 +2361,7 @@ client.on('guildMemberAdd', member => {
 				} catch (error) {}
 			}
 			
-			member.send(`Hello ${data.name}! The following roles have been automatically granted: ${rolesToAdd.map(r=>r.name).join(', ')}. Use '!help' to see available commands.`);
+			member.send(`Hello ${data.name}! The following roles have been automatically granted: ${rolesToAdd.map(r=>r.name).join(', ')}. Use '!help' to see available commands.`).catch(()=>{});
 		})
 		.catch(error => {notifyRequestError(error, null, false);});
 });
