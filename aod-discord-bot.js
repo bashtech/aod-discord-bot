@@ -168,7 +168,25 @@ function getNameFromMessage(message)
 }
 
 //add or remove a role from a guildMember
-function addRemoveRole(message, guild, member, add, roleName, isID)
+function getMemberFromMessageOrArgs(guild, message, args)
+{
+	var member;
+	if (message.mentions && message.mentions.members)
+		member = message.mentions.members.first();
+	if (!member) {
+		if (args.length > 0) {
+			member = guild.members.get(args[0]);
+			if (!member) {
+				let tag = args.join(' ');
+				member = guild.members.find(m=>{return m.user.tag===tag});
+			}
+		}
+	}
+	return member;
+}
+
+
+function addRemoveRole(message, guild, add, roleName, isID, member)
 {
 	if (!guild)
 		return message.reply("Invalid Guild");
@@ -181,7 +199,7 @@ function addRemoveRole(message, guild, member, add, roleName, isID)
 		return message.reply("Invalid Role");
 	if(!member)
 		return message.reply("Please mention a valid member of this server");
-	
+
 	if (add)
 		member.addRole(role, `Requested by ${getNameFromMessage(message)}`)
 						.then(message.reply("Added " + role.name + " to " + member.user.tag))
@@ -485,41 +503,73 @@ function sendReplyToMessageAuthor(message, data)
 //help command processing
 function commandHelp(message, cmd, args, guild, perm, permName, isDM)
 {
+	var filter;
+	var detail = (perm == PERM_NONE ? true : false);
+	var footer = "**Note**: Parameters that require spaces must be 'single' or \"double\" quoted.";
+	if (args.length)
+	{
+		detail = true;
+		filter = args.shift();
+	}
 	var embed = {
 		title: `User Level: **${permName}** Commands`,
+		description: detail ? "" : "Use !help <cmd> to see the details of each command.\n\n",
 		fields: [],
-		footer: "**Note**: Parameters that require spaces should be 'single' or \"double\" quoted."
+		footer: { text: footer }
 	}
-	
-	var filter;
-	if (args.length)
-		filter = args.shift();
 	
 	Object.keys(commands).forEach(cmd=>{
 		let commandObj = commands[cmd];
 		if (commandObj.minPermission <= perm && (!filter || filter === cmd))
 		{
-			let commandHelpText = commandObj.helpText;
-			if (Array.isArray(commandHelpText))
-				commandHelpText = commandHelpText.join("\n> ");
-			if (commandHelpText !== '')
-				embed.fields.push({
-					name: `${cmd} ${commandObj.args}`,
-					value: commandHelpText
-				});
-			if (embed.fields.length >= 25)
+			let commandArgsText = commandObj.args;
+			if (Array.isArray(commandArgsText))
+				commandArgsText = commandArgsText.join(" ");
+			
+			if (detail)
 			{
-				sendReplyToMessageAuthor(message, {embed: embed})
-					.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
-				embed = {
-					title: `Continued....`,
-					fields: [],
-					footer: "**Note**: Parameters that require spaces should be 'single' or \"double\" quoted."
+				let commandHelpText = commandObj.helpText;
+				if (Array.isArray(commandHelpText))
+					commandHelpText = commandHelpText.join("\n> ");
+				if (commandHelpText !== '')
+					embed.fields.push({
+						name: `${cmd} ${commandArgsText}`,
+						value: commandHelpText
+					});
+				if (embed.fields.length >= 25)
+				{
+					sendReplyToMessageAuthor(message, {embed: embed})
+						.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
+					embed = {
+						title: `Continued...`,
+						description: "",
+						fields: [],
+						footer: { text: footer }
+					}
+				}
+			}
+			else
+			{
+				var line = `${cmd} ${commandArgsText}\n`;
+				if (embed.description.length + line.length < 2048)
+				{
+					embed.description = embed.description+line;
+				}
+				else
+				{
+					sendReplyToMessageAuthor(message, {embed: embed})
+						.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
+					embed = {
+						title: `Continued...`,
+						description: "",
+						fields: [],
+						footer: { text: footer }
+					}
 				}
 			}
 		}
 	});
-	if (embed.fields.length)
+	if (embed.fields.length || embed.description.length)
 		sendReplyToMessageAuthor(message, {embed: embed})
 			.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 }
@@ -537,6 +587,7 @@ function commandPing(message, cmd, args, guild, perm, permName, isDM)
 }
 
 //login command processing
+var loginErrorsByUserID = [];
 async function commandLogin(message, cmd, args, guild, perm, permName, isDM)
 {
 	var member = message.member;
@@ -545,6 +596,28 @@ async function commandLogin(message, cmd, args, guild, perm, permName, isDM)
 	
 	if (args.length < 2)
 		return sendMessageToMember(member, "Username and Password must be provided.").catch(()=>{});
+	
+	//check for failed login attempts
+	if (loginErrorsByUserID[member.user.id] !== undefined)
+	{
+		let currEpochMs = (new Date).getTime();
+		let loginError = loginErrorsByUserID[member.user.id];
+		if ((loginError.epochMs + config.forumLoginErrorTimeoutMs) > currEpochMs)
+		{
+			if (loginError.count >= config.maxForumLoginAttempts)
+			{
+				loginError.epochMs = currEpochMs;
+				let minutes = Math.round(config.forumLoginErrorTimeoutMs/60000);
+				console.log(`${member.user.tag} login failed for ${username} (too many attempts)`);
+				return sendMessageToMember(member, `You have too many failed login attempts. Please wait ${minutes} minutes and try again.`).catch(()=>{});
+			}
+		}
+		else
+		{
+			//console.log(`deleting error for ${member.user.tag}`);
+			delete loginErrorsByUserID[member.user.id];
+		}
+	}
 		
 	var username = args.shift();
 	var password = args.shift();
@@ -555,12 +628,7 @@ async function commandLogin(message, cmd, args, guild, perm, permName, isDM)
 		let esc_username = db.escape(username);
 		let query = `CALL check_user(${esc_username},${password_md5})`;
 		db.query(query, function(err, rows, fields) {
-			if (err)
-			{
-				sendMessageToMember(member, `Login failed for ${username}`).catch(()=>{});
-				return reject(err);
-			}
-			else
+			if (!err)
 			{
 				var success = false;
 				for (var i in rows)
@@ -584,57 +652,46 @@ async function commandLogin(message, cmd, args, guild, perm, permName, isDM)
 									console.log(err);
 									return reject(err);
 								}
-								sendMessageToMember(member, `Successfully logged in as ${data.username} (${data.userid}). Please allow up to ${config.forumSyncIntervalMS/60000} minutes for Roles to be updated.`).catch(()=>{});
 								console.log(`${member.user.tag} logged in as ${data.username} (${data.userid})`);
+								let msg = `Successfully logged in as ${data.username} (${data.userid}).`;
+								if (isDM)
+									msg += ` We recommend you delete the \`!login\` message from your history to protect your identity.`;
+								sendMessageToMember(member, msg);
+								setRolesForMember(member, "Forum login");
 								return resolve();
 							});
 						}
 					}
 					break; //should never be more than 1 user...
 				}
-				
-				if (!success)
-				{
-					console.log(`${member.user.tag} login failed for ${username}`);
-					sendMessageToMember(member, `Login failed for ${username}`).catch(()=>{});
-				}
-				return resolve();
 			}
+			if (!success)
+			{
+				//track login errors
+				if (loginErrorsByUserID[member.user.id] === undefined)
+					loginErrorsByUserID[member.user.id] = { epochMs: 0, count: 0 };
+				loginErrorsByUserID[member.user.id].epochMs = (new Date).getTime();
+				loginErrorsByUserID[member.user.id].count++;
+				
+				console.log(`${member.user.tag} login failed for ${username} (count: ${loginErrorsByUserID[member.user.id].count})`);
+				sendMessageToMember(member, `Login failed for ${username}.`).catch(()=>{});
+			}
+			return resolve();
 		});
 	});
 	return promise;
 }
 
-//addaod command processing
-function commandAddAOD(message, cmd, args, guild, perm, permName, isDM)
+//aod command processing
+function commandSetAOD(message, cmd, args, guild, perm, permName, isDM)
 {
-	if (isDM)
-		return message.reply("Must be executed in a text channel");
-	return addRemoveRole(message, guild, message.mentions.members.first(), true, config.memberRole);
+	return addRemoveRole(message, guild, cmd==='addaod', config.memberRole, false, getMemberFromMessageOrArgs(guild, message, args));
 }
 
-//remaod command processing
-function commandRemAOD(message, cmd, args, guild, perm, permName, isDM)
+//guest command processing
+function commandSetGuest(message, cmd, args, guild, perm, permName, isDM)
 {
-	if (isDM)
-		return message.reply("Must be executed in a text channel");
-	return addRemoveRole(message, guild, message.mentions.members.first(), false, config.memberRole);
-}
-
-//addguest command processing
-function commandAddGuest(message, cmd, args, guild, perm, permName, isDM)
-{
-	if (isDM)
-		return message.reply("Must be executed in a text channel");
-	return addRemoveRole(message, guild, message.mentions.members.first(), true, config.guestRole);
-}
-
-//remguest command processing
-function commandRemGuest(message, cmd, args, guild, perm, permName, isDM)
-{
-	if (isDM)
-		return message.reply("Must be executed in a text channel");
-	return addRemoveRole(message, guild, message.mentions.members.first(), false, config.guestRole);
+	return addRemoveRole(message, guild, cmd==='addguest', config.guestRole, false, getMemberFromMessageOrArgs(guild, message, args));
 }
 
 //purge command processing
@@ -874,40 +931,45 @@ async function commandAddDivision(message, cmd, args, guild, perm, permName, isD
 	let divisionMembersChannel = simpleName + '-members';
 	let divisionOfficersChannel = simpleName + '-officers';
 	let divisionPublicChannel = simpleName + '-public';
+	let divisionMemberVoiceChannel = simpleName + '-member-voip';
 	
 	var divisionCategory = guild.channels.find(c=>{return (c.name == divisionName && c.type == 'category');});
 	if (divisionCategory)
-		return message.reply("Division already exists.");
+		return message.reply("Division already exists.").catch(()=>{});
 	var divisionRole = guild.roles.find(r=>{return r.name == roleName;});
 	if (divisionRole)
-		return message.reply("Division already exists.");
+		return message.reply("Division already exists.").catch(()=>{});
 	
 	try {
 		//create officers role
 		divisionRole = await guild.createRole({name: roleName, permissions: 0, mentionable: true}, `Requested by ${getNameFromMessage(message)}`);
 		const memberRole = guild.roles.find(r=>{return r.name == config.memberRole;});
-		await divisionRole.setPosition(memberRole.position+1);
+		await divisionRole.setPosition(memberRole.position+1).catch(e=>{console.log(e)});
 		
 		//add category for division
 		let permissions = getPermissionsForEveryone(guild);
-		divisionCategory = await guild.createChannel(divisionName, {type: 'category', name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`});
+		divisionCategory = await guild.createChannel(divisionName, {type: 'category', name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
 
 		//create members channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-		let membersChannel = await guild.createChannel(divisionMembersChannel, {type: 'text', name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`});
+		let membersChannel = await guild.createChannel(divisionMembersChannel, {type: 'text', name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
 		
 		//create officers channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForModerators(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-		let officersChannel = await guild.createChannel(divisionOfficersChannel, {type: 'text', name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`});
+		let officersChannel = await guild.createChannel(divisionOfficersChannel, {type: 'text', name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
 		
 		//create public channel
-		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForEveryone(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);					
-		let publicChannel = await guild.createChannel(divisionPublicChannel, {type: 'text', name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`});
+		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForEveryone(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);			
+		let publicChannel = await guild.createChannel(divisionPublicChannel, {type: 'text', name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
 		
-		return message.reply(`${divisionName} division added`);
+		//create member voice channel
+		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
+		let memberVoipChannel = await guild.createChannel(divisionMemberVoiceChannel, {type: 'voice', name: divisionMemberVoiceChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
+		
+		return message.reply(`${divisionName} division added`).catch(()=>{});
 	} catch (error) {
 		notifyRequestError(error,message,(perm >= PERM_MOD));
-		return message.reply(`Failed to add ${divisionName} division`);
+		return message.reply(`Failed to add ${divisionName} division`).catch(()=>{});
 	}
 }
 
@@ -977,13 +1039,11 @@ function commandSub(message, cmd, args, guild, perm, permName, isDM)
 		{
 			if (args.length <= 0)
 				return message.reply('Role must be provided');
-			
 			let roleName = args.join(' ');
 			if (subscribableRoles[roleName] === undefined) {
 				return message.reply(`Role ${roleName} is not subscribable`);
-			}			
-			
-			return addRemoveRole(message, guild, message.member, cmd==='sub', subscribableRoles[roleName].roleID, true);
+			}
+			return addRemoveRole(message, guild, cmd==='sub', subscribableRoles[roleName].roleID, true, message.member);
 		}
 		case 'list':
 		{
@@ -1133,44 +1193,32 @@ function commandShowWebhooks(message, cmd, args, guild, perm, permName, isDM)
 
 function commandMute(message, cmd, args, guild, perm, permName, isDM)
 {
-	if (isDM)
-		return message.reply("Must be executed in a text channel");
-	
-	let member = message.mentions.members.first();
+	let member = getMemberFromMessageOrArgs(guild, message, args);
 	if(!member)
 		return message.reply("Please mention a valid member of this server");
 	var [memberPerm, memberPermName] = getPermissionLevelForMember(member);
 	if (perm <= memberPerm)
 		return message.reply(`You cannot mute ${member.user.tag}.`);
 	
-	return addRemoveRole(message, guild, message.mentions.members.first(), cmd==='mute', config.muteRole);
+	return addRemoveRole(message, guild, cmd==='mute', config.muteRole, false, member);
 }
 
 function commandPTT(message, cmd, args, guild, perm, permName, isDM)
 {
-	if (isDM)
-		return message.reply("Must be executed in a text channel");
-	
-	let member = message.mentions.members.first();
+	let member = getMemberFromMessageOrArgs(guild, message, args);
 	if(!member)
 		return message.reply("Please mention a valid member of this server");
-	
-	/*
 	var [memberPerm, memberPermName] = getPermissionLevelForMember(member);
 	if (perm <= memberPerm)
-		return message.reply(`You cannot mute ${member.user.tag}.`);
-	*/
+		return message.reply(`You cannot make ${member.user.tag} PTT.`);
 	
-	return addRemoveRole(message, guild, message.mentions.members.first(), cmd==='setptt', config.pttRole);
+	return addRemoveRole(message, guild, cmd==='setptt', config.pttRole, false, member);
 }
 
 //kick command processing
 function commandKick(message, cmd, args, guild, perm, permName, isDM)
 {
-	if (isDM)
-		return message.reply("Must be executed in a text channel");
-	
-	let member = message.mentions.members.first();
+	let member = getMemberFromMessageOrArgs(guild, message, args);
 	if(!member)
 		return message.reply("Please mention a valid member of this server");
 	if(!member.kickable) 
@@ -1191,25 +1239,32 @@ function commandKick(message, cmd, args, guild, perm, permName, isDM)
 //ban command processing
 function commandBan(message, cmd, args, guild, perm, permName, isDM)
 {
-	if (isDM)
-		return message.reply("Must be executed in a text channel");
+	let toBan = getMemberFromMessageOrArgs(guild, message, args)
+	let tag;
+	if(toBan)
+	{
+		if(!toBan.bannable) 
+			return message.reply(`I cannot ban ${toBan.user.tag}.`);
+		var [memberPerm, memberPermName] = getPermissionLevelForMember(toBan);
+		if (perm <= memberPerm)
+			return message.reply(`You cannot ban ${toBan.user.tag}.`);
+		tag = toBan.user.tag;
+	}
+	else
+	{
+		toBan = message.mentions.users.first();
+		if (!toBan)
+			return message.reply("Please mention a valid member of this server");
+		tag = toBan.tag;
+	}
 	
-	let member = message.mentions.members.first();
-	if(!member)
-		return message.reply("Please mention a valid member of this server");
-	if(!member.bannable) 
-		return message.reply(`I cannot ban ${member.user.tag}.`);
-	var [memberPerm, memberPermName] = getPermissionLevelForMember(member);
-	if (perm <= memberPerm)
-		return message.reply(`You cannot ban ${member.user.tag}.`);
-
 	args.shift(); //trim mention
 	let reason = args.join(' ');
 	if(!reason || reason == '') reason = "No reason provided";
 	
-	member.ban(`Requested by ${getNameFromMessage(message)} ${reason}`)
+	guild.ban(toBan)
 		.catch(error => message.reply(`Sorry ${message.author} I couldn't ban because of : ${error}`));
-	message.reply(`${member.user.tag} has been banned by ${message.author.tag} because: ${reason}`);
+	message.reply(`${tag} has been banned by ${message.author.tag} because: ${reason}`);
 }
 
 //tracker command processing
@@ -1291,20 +1346,29 @@ function getForumUsersForGroups(groups)
 			`SELECT u.userid,u.username,f.field19,f.field20,f.field13 FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
 			`WHERE (u.usergroupid IN (${groupStr}) OR u.membergroupids REGEXP '(^|,)(${groupRegex})(,|$)') ` +
-			`AND f.field19 IS NOT NULL AND f.field19 <> '' ` +
+			`AND ((f.field19 IS NOT NULL AND f.field19 <> '') OR (f.field20 IS NOT NULL AND f.field20 <> '')) ` +
 			`ORDER BY f.field13,u.username`;
 		db.query(query, function(err, rows, fields) {
 			if (err)
 				return reject(err)
 			else
 			{
-				let usersByUserNameDiscriminator = {};
+				let usersByIDOrDiscriminator = {};
 				for (var i in rows)
 				{
-					let forumDiscordName = convertForumDiscordName(rows[i].field19);
-					usersByUserNameDiscriminator[forumDiscordName] = {name:rows[i].username,id:rows[i].userid,division:rows[i].field13};
+					let discordid = rows[i].field20;
+					let discordtag = convertForumDiscordName(rows[i].field19);
+					let index = ((discordid && discordid != '') ? discordid : discordtag);
+					
+					usersByIDOrDiscriminator[index] = {
+						name: rows[i].username,
+						id: rows[i].userid,
+						division: rows[i].field13,
+						discordid: discordid,
+						discordtag: discordtag
+					};
 				}
-				return resolve(usersByUserNameDiscriminator);
+				return resolve(usersByIDOrDiscriminator);
 			}
 		});
 	});
@@ -1343,6 +1407,30 @@ function getFieldsFromArray(arr, fieldName)
 			value: currValue
 		});
 	return fields;
+}
+
+
+function setDiscordIDForForumUser(forumUser, guildMember)
+{
+	if (forumUser.discordid == guildMember.user.id)
+		return;
+	console.log(`Updating Discord ID for ${forumUser.name} (${forumUser.id}) Discord Tag ${guildMember.user.tag} from '${forumUser.discordid}' to '${guildMember.user.id}'`);
+	let db = connectToDB();
+	let tag = db.escape(convertDiscordTag(guildMember.user.tag));
+	let query = `UPDATE ${config.mysql.prefix}userfield SET field20="${guildMember.user.id}" WHERE userid=${forumUser.id}`;
+	db.query(query, function(err, rows, fields) {});
+}
+
+function setDiscordTagForForumUser(forumUser, guildMember)
+{
+	if (forumUser.discordtag == guildMember.user.tag)
+		return;
+	console.log(`Updating Discord Tag for ${forumUser.name} (${forumUser.id}) Discord ID ${guildMember.user.id} from '${forumUser.discordtag}' to '${guildMember.user.tag}'`);
+	let db = connectToDB();
+	let tag = db.escape(convertDiscordTag(guildMember.user.tag));
+	let query = `UPDATE ${config.mysql.prefix}userfield SET field19=${tag} WHERE field20="${guildMember.user.id}" AND userid=${forumUser.id}`;
+	db.query(query, function(err, rows, fields) {});
+	forumUser.discordtag = guildMember.user.tag;
 }
 
 //do forum sync with discord roles
@@ -1395,9 +1483,9 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 			
 			if (role)
 			{
-				let usersByUsernameDiscriminator;
+				let usersByIDOrDiscriminator;
 				try {
-					usersByUsernameDiscriminator = await getForumUsersForGroups(groupMap.forumGroups);
+					usersByIDOrDiscriminator = await getForumUsersForGroups(groupMap.forumGroups);
 				} catch (error) {
 					notifyRequestError(error,message,(perm >= PERM_MOD));
 					continue;
@@ -1416,18 +1504,26 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 				//   make sure anyone remaining has a valid nickname
 				var toRemove = [];
 				var toUpdate = [];
-				var membersByUsernaemDiscriminator = {};
+				var membersByID = {};
 				for (var roleMember of role.members.values()) {
-					membersByUsernaemDiscriminator[roleMember.user.tag] = roleMember;
-					let forumUser = usersByUsernameDiscriminator[roleMember.user.tag];
-					if (forumUser === undefined)
-					{
-						if (role.id !== guestRole.id)
-						{
-							removes++;
-							toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
-							if (!checkOnly)
-							{
+					membersByID[roleMember.user.id] = roleMember;
+					let forumUser = usersByIDOrDiscriminator[roleMember.user.id];
+					if (forumUser === undefined) {
+						forumUser = usersByIDOrDiscriminator[roleMember.user.tag];
+						if (forumUser !== undefined) {
+							usersByIDOrDiscriminator[roleMember.user.id] = forumUser;
+							delete usersByIDOrDiscriminator[roleMember.user.tag];
+							setDiscordIDForForumUser(forumUser, roleMember);
+						}
+					}
+					
+					if (forumUser === undefined) {
+						if (role.id !== guestRole.id) {
+							if (role.id !== guestRole.id) {
+								removes++;
+								toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
+							}
+							if (!checkOnly) {
 								try {
 									await roleMember.removeRole(role, reason);
 									if (role.name === config.memberRole)
@@ -1447,13 +1543,13 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 					}
 					else
 					{
-						if (nickNameChanges[roleMember.user.tag] === undefined && roleMember.displayName !== forumUser.name)
-						{
-							renames++;
-							nickNameChanges[roleMember.user.tag] = true;
-							toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
-							if (!checkOnly)
-							{
+						if (nickNameChanges[roleMember.user.id] === undefined && roleMember.displayName !== forumUser.name) {
+							nickNameChanges[roleMember.user.id] = true;
+							if (role.id !== guestRole.id) {
+								renames++;
+								toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
+							}
+							if (!checkOnly) {
 								try {
 									await roleMember.setNickname(forumUser.name, reason);
 								} catch (error) {
@@ -1462,11 +1558,12 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 								}
 							}
 						}
+						if (forumUser.discordtag != roleMember.user.tag)
+							setDiscordTagForForumUser(forumUser, roleMember);
+						
 						//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
-						if (!checkOnly && role.name === config.memberRole)
-						{
-							if (roleMember.roles.get(guestRole.id))
-							{
+						if (!checkOnly && role.name === config.memberRole) {
+							if (roleMember.roles.get(guestRole.id)) {
 								try {
 									await roleMember.removeRole(guestRole);
 								} catch (error) {
@@ -1484,34 +1581,40 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 				//       otherwise, mark them as an error and move on
 				var toAdd = [];
 				var noAccount = [];
-				for (var u in usersByUsernameDiscriminator) {
-					if (usersByUsernameDiscriminator.hasOwnProperty(u)) {
-					
-						if (membersByUsernaemDiscriminator[u] === undefined)
+				for (var u in usersByIDOrDiscriminator) {
+					if (usersByIDOrDiscriminator.hasOwnProperty(u)) {
+						if (membersByID[u] === undefined)
 						{
-							let forumUser = usersByUsernameDiscriminator[u];
-							let guildMember = guild.members.find(m=>{return m.user.tag===u});
-							if (guildMember)
-							{
-								adds++;
-								toAdd.push(`${u} (${forumUser.name})`);
-								if (!checkOnly)
-								{
+							let forumUser = usersByIDOrDiscriminator[u];
+							let guildMember = guild.members.get(u);
+							if (guildMember === undefined) {
+								guildMember = guild.members.find(m=>{return m.user.tag===u});
+								if (guildMember) {
+									delete usersByIDOrDiscriminator[u]; //don't add the ID to the list, we're done processing
+									setDiscordIDForForumUser(forumUser, guildMember);
+								}
+							}
+							if (guildMember) {
+								if (role.id !== guestRole.id) {
+									adds++;
+									toAdd.push(`${guildMember.user.tag} (${forumUser.name})`);
+								}
+								if (!checkOnly) {
 									try {
 										await guildMember.addRole(role, reason);
 									} catch (error) {
-										console.error(`Failed to add ${role.name} to ${roleMember.user.tag}`);
+										console.error(`Failed to add ${role.name} to ${guildMember.user.tag}`);
 										notifyRequestError(error,message,(perm >= PERM_MOD));
 										continue;
 									}
 								}
-								if (nickNameChanges[guildMember.user.tag] === undefined && guildMember.displayName !== forumUser.name)
-								{
-									renames++;
-									nickNameChanges[guildMember.user.tag] = true;
-									toUpdate.push(`${guildMember.user.tag} (${guildMember.displayName} ==> ${forumUser.name})`);
-									if (!checkOnly)
-									{
+								if (nickNameChanges[guildMember.user.id] === undefined && guildMember.displayName !== forumUser.name) {
+									nickNameChanges[guildMember.user.id] = true;
+									if (role.id !== guestRole.id) {
+										renames++;
+										toUpdate.push(`${guildMember.user.tag} (${guildMember.displayName} ==> ${forumUser.name})`);
+									}
+									if (!checkOnly) {
 										try {
 											await guildMember.setNickname(forumUser.name, reason);
 										} catch (error) {
@@ -1521,73 +1624,61 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 										}
 									}
 								}
+								if (forumUser.discordtag != guildMember.user.tag)
+									setDiscordTagForForumUser(forumUser, guildMember);
 							}
-							else
-							{
-								if (role.id !== guestRole.id)
+							else {
+								if (role.id !== guestRole.id) {
 									misses++;
-								noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
+									noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
+								}
 							}
 						}
 					}
 				}
 				
-				if (role.id !== guestRole.id)
-				{
+				if (role.id !== guestRole.id) {
 					var sendMessage = false;
-					
 					if (toAdd.length) {
 						sendMessage = true;
-						
 						fs.appendFileSync(config.syncLogFile, `\tMembers to add (${toAdd.length}):\n\t\t`, 'utf8');
 						fs.appendFileSync(config.syncLogFile, toAdd.join('\n\t\t') + "\n", 'utf8');
-						
 						if (message)
 							embed.fields.push({
 								name: `Members to add (${toAdd.length})`,
 								value: truncateStr(toAdd.join(', '), 1024)
 							});
 					}
-						
 					if (noAccount.length) {
 						sendMessage = true;
-						
 						fs.appendFileSync(config.syncLogFile, `\tMembers to add with no discord user (${noAccount.length}):\n\t\t`, 'utf8');
 						fs.appendFileSync(config.syncLogFile, noAccount.join('\n\t\t') + "\n", 'utf8');
-						
 						if (message)
 							embed.fields.push({
 								name: `Members to add with no discord user (${noAccount.length})`,
 								value: truncateStr(noAccount.join(', '), 1024)
 							});
 					}
-						
 					if (toRemove.length) {
 						sendMessage = true;
-						
 						fs.appendFileSync(config.syncLogFile, `\tMembers to remove (${toRemove.length}):\n\t\t`, 'utf8');
 						fs.appendFileSync(config.syncLogFile, toRemove.join('\n\t\t') + "\n", 'utf8');
-						
 						if (message)
 							embed.fields.push({
 								name: `Members to remove (${toRemove.length})`,
 								value: truncateStr(toRemove.join(', '), 1024)
 							});
 					}
-						
 					if (toUpdate.length) {
 						sendMessage = true;
-						
 						fs.appendFileSync(config.syncLogFile, `\tMembers to rename (${toUpdate.length}):\n\t\t`, 'utf8');
 						fs.appendFileSync(config.syncLogFile, toUpdate.join('\n\t\t') + "\n", 'utf8');
-						
 						if (message)
 							embed.fields.push({
 								name: `Members to rename (${toUpdate.length})`,
 								value: truncateStr(toUpdate.join(', '), 1024)
 							});
 					}
-					
 					if (message && sendMessage) {
 						sendReplyToMessageAuthor(message, {embed: embed}).catch(()=>{});
 					}
@@ -1606,7 +1697,8 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 	let msg = `Forum Sync Processing Time: ${hrEnd[0] + (Math.round(hrEnd[1]/1000000)/1000)}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account`;	
 	if (message)
 		sendReplyToMessageAuthor(message, msg).catch(()=>{});
-	console.log(msg);
+	if (message || adds || removes || renames)
+		console.log(msg);
 	date = new Date();
 	fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  ${msg}\n`, 'utf8');
 }
@@ -1837,19 +1929,10 @@ function commandRelay(message, cmd, args, guild, perm, permName, isDM)
 		.catch(error=>{notifyRequestError(error,null,PERM_NONE);});
 }
 
-//ban command processing
+//admin command processing
 function commandSetAdmin(message, cmd, args, guild, perm, permName, isDM)
 {
-	if (isDM)
-		return message.reply("Must be executed in a text channel");
-	
-	let member = message.mentions.members.first();
-	let add = (cmd==='addadmin');
-	if(!member)
-		return message.reply("Please mention a valid member of this server");
-	
-	addRemoveRole(message, guild, member, add, 'Admin');
-	message.reply(`${member.user.tag} has been ${add?'added to':'removed from'} the Admin role`);
+	addRemoveRole(message, guild, cmd==='addadmin', 'Admin', false, getMemberFromMessageOrArgs(guild, message, args));
 }
 
 //reload command processing
@@ -1895,19 +1978,62 @@ function commandQuit(message, cmd, args, guild, perm, permName, isDM)
 	process.exit();
 }
 
-function commandTest(message, cmd, args, guild, perm, permName, isDM)
+async function commandTest(message, cmd, args, guild, perm, permName, isDM)
 {
-	if (isDM)
-		return;
-	if (args.length <= 0)
-		return message.reply("Seconds must be provided");
+	var reply = "";
 	
-	let seconds = parseInt(args.shift());
-	if (seconds === NaN)
-		return message.reply("Seconds must be provided");
+	/*
+	guild.channels.forEach(async function (c){
+		if (c.type == 'voice' && c.name.indexOf('temp') >= 0)
+		{
+			reply += `deleted ${c.parent.name} ${c.name}\n`;
+			await c.delete().catch(()=>{});
+		}
+	});
+	message.reply(reply);
+	*/
 	
-	let currEpoch = (new Date).getTime();
-	addTimer(currEpoch + (seconds*1000), 'test', {memberID: message.member.id});
+	/*
+	reply = "";
+	guild.roles.forEach(async function (r){
+		if (r.name.indexOf('Officer') >= 0)
+		{
+			var category = r.name.replace(" Officer", "");
+			const channelCategory = guild.channels.find(c=>{return c.name == category && c.type=='category';});
+			if (channelCategory)
+			{
+				reply += channelCategory.name + "\n";
+				
+				let channelName = category.toLowerCase().replace(/\s/g, '-');
+				channelName += "-member-voip"
+				
+				var defaultDeny = ['VIEW_CHANNEL','CONNECT'];
+				var permissions = getPermissionsForMembers(guild, [], defaultDeny);
+				//add role permissions if necessary
+				permissions = addRoleToPermissions(guild, r, permissions, ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
+				
+				await guild.createChannel(channelName, {type: 'voice', name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: "Recreating backup voip"}).catch(e=>{console.log(e)});
+			}
+		}
+	});
+	message.reply(reply);
+	*/
+	
+	/*
+	const memberRole = guild.roles.find(r=>{return r.name == config.memberRole;});
+	var db = connectToDB();
+	memberRole.members.forEach(m => {
+		let query = 		
+			`UPDATE ${config.mysql.prefix}userfield ` +
+			`SET field20 = "${m.user.id}" ` +
+			`WHERE field19 LIKE "${convertDiscordTag(m.user.tag)}"`;
+		console.log(query);
+		db.query(query, function(err, rows, fields) {
+			if (err)
+				console.log(err);
+		});
+	});
+	*/
 }
 
 //command definitions
@@ -1915,28 +2041,28 @@ commands = {
 	/*
 	command: {
 		minPermission: PERM_LEVEL,
-		args: "String",
-		helpText: "String",
+		args: array of "String" or "String",
+		helpText: array of "String" or "String",
 		callback: function(message, cmd, args, guild, perm, permName, isDM)
 	},
 	*/
 	help: {
 		minPermission: PERM_NONE,
-		args: "",
-		helpText: "Displays the help menu.",
+		args: "[<command>]",
+		helpText: "Displays the help menu. If <command> is present, only that command will be shown.",
 		callback: commandHelp
+	},
+	login: {
+		minPermission: PERM_NONE,
+		args: ["\"<username>\"", "\"<password>\""],
+		helpText: "Associate discord user to forum account.",
+		callback: commandLogin
 	},
 	ping: {
 		minPermission: PERM_GUEST,
 		args: "",
 		helpText: "Returns a DM letting you know the bot is alive. Staff and Moderators will get an estimate of network latency.",
 		callback: commandPing
-	},
-	login: {
-		minPermission: PERM_NONE,
-		args: "\"<username>\" \"<password>\"",
-		helpText: "Associate discord user to forum account.",
-		callback: commandLogin
 	},
 	sub: {
 		minPermission: PERM_GUEST,
@@ -1996,36 +2122,36 @@ commands = {
 		minPermission: PERM_MOD,
 		args: "@mention [<reason>]",
 		helpText: "Bans the mentioned user from the server.",
-		callback: commandKick
+		callback: commandBan
 	},
 	addaod: {
 		minPermission: PERM_RECRUITER,
 		args: "@mention",
 		helpText: "Adds the mentioned user to the AOD Members role.",
-		callback: commandAddAOD
+		callback: commandSetAOD
 	},
 	remaod: {
 		minPermission: PERM_MOD,
 		args: "@mention",
 		helpText: "Removes the mentioned user from the AOD Members role.",
-		callback: commandRemAOD
+		callback: commandSetAOD
 	},
 	addguest: {
 		minPermission: PERM_MOD,
 		args: "@mention",
 		helpText: "Adds the mentioned user to the Guest role.",
-		callback: commandAddGuest
+		callback: commandSetGuest
 	},
 	remguest: {
 		minPermission: PERM_MOD,
 		args: "@mention",
 		helpText: "Removes the mentioned user from the Guest role.",
-		callback: commandRemGuest
+		callback: commandSetGuest
 	},
 	voice: {
 		minPermission: PERM_RECRUITER,
-		args: "[<category>] [<guest|mod|staff|admin>] <name>",
-		helpText: ["Creates a temporary voice channel visible to Members+ by default.",
+		args: ["[<category>]", "[<guest|mod|staff|admin>]", "<name>"],
+		helpText: ["Creates a temporary voice channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires staff permissions).",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
@@ -2034,13 +2160,17 @@ commands = {
 	},
 	ptt: {
 		minPermission: PERM_RECRUITER,
-		args: "[<category>] [<guest|mod|staff|admin>] <name>",
-		helpText: ["Same a 'voice', however, the channel will force PTT"],
+		args: ["[<category>]", "[<guest|mod|staff|admin>]", "<name>"],
+		helpText: ["Creates a temporary push-to-talk channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires staff permissions).",
+			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
+			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
+			"*admin*: channel is visible to Admins (requires Admin permissions)"],
 		callback: commandAddChannel
 	},
 	text: {
 		minPermission: PERM_STAFF,
-		args: "<category> [<guest|mod|staff|admin>] <name>",
+		args: ["<category>", "[<guest|mod|staff|admin>]", "<name>"],
 		helpText: ["Creates a text channel visible to Members+ by default.",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
@@ -2050,7 +2180,7 @@ commands = {
 	},
 	topic: {
 		minPermission: PERM_MOD,
-		args: "[\"<channel>\"] <topic>",
+		args: ["[\"<channel>\"]", "<topic>"],
 		helpText: "Sets the topic for a channel. If no channel is provided, the topic is set for the current channel.",
 		callback: commandTopic
 	},
@@ -2086,7 +2216,7 @@ commands = {
 	},
 	subroles: {
 		minPermission: PERM_STAFF,
-		args: "[add|rem|list] <name>",
+		args: ["[add|rem|list]", "<name>"],
 		helpText: "Manage subscribable roles.",
 		callback: commandSubRoles
 	},
@@ -2098,7 +2228,7 @@ commands = {
 	},
 	forumsync: {
 		minPermission: PERM_MOD,
-		args: "<cmd> [<options>]",
+		args: ["<cmd>", "[<options>]"],
 		helpText: ["Forum sync integration commands:",
 			"*showmap*: Shows the current synchronization map",
 			"*showroles*: Shows the discord roles eligible for integration",
@@ -2118,7 +2248,7 @@ commands = {
 	},*/
 	relay: {
 		minPermission: PERM_ADMIN,
-		args: "[\"<channel>\"] \"<message>\"",
+		args: ["[\"<channel>\"]", "\"<message>\""],
 		helpText: "Relay a message using the bot. If <channel> is provided, the message will be sent there.",
 		callback: commandRelay
 	},
@@ -2286,7 +2416,7 @@ function getForumGroupsForMember(member)
 		let query = 
 			`SELECT u.userid,u.username,f.field19,f.field20,u.usergroupid,u.membergroupids FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
-			`WHERE f.field19 LIKE "${convertDiscordTag(member.user.tag)}"`;
+			`WHERE f.field20="${member.user.id}" OR f.field19 LIKE "${convertDiscordTag(member.user.tag)}"`;
 		db.query(query, function(err, rows, fields) {
 			if (err)
 				reject(err)
@@ -2315,18 +2445,18 @@ function getForumGroupsForMember(member)
 	return promise;
 }
 
-//guildMemberAdd event handler -- triggered when a user joins the guild
-client.on('guildMemberAdd', member => {
+function setRolesForMember(member, reason)
+{
 	getForumGroupsForMember(member)
 		.then(async function (data) {
 			if (data === undefined || data.groups.length === 0)
 			{
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Guest permissions are granted to registered members of our forums.`).catch(()=>{});
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`!login\` to associate your Discord user to our fourms (https://www.clanaod.net).`).catch(()=>{});
 				return;
 			}
 			
 			let rolesByGroup = getRolesByForumGroup(member.guild);
-			let rolesToAdd = [];
+			let rolesToAdd = [], existingRoles = [];
 			for (var i in data.groups)
 			{
 				var group = data.groups[i];
@@ -2334,36 +2464,45 @@ client.on('guildMemberAdd', member => {
 				{
 					Object.keys(rolesByGroup[group]).forEach(roleName=>{
 						let role = rolesByGroup[group][roleName];
-						
-						if (role && !member.roles.get(role.id))
-							rolesToAdd.push(role);
+						if (role)
+						{
+							if(!member.roles.get(role.id))
+								rolesToAdd.push(role);
+							else
+								existingRoles.push(role);
+						}
 					});
 				}
 			}
 			if (rolesToAdd.length)
 			{
 				try {
-					await member.addRoles(rolesToAdd, 'First time join');
+					await member.addRoles(rolesToAdd, reason);
 				} catch (error) {
 					return;
 				}
 			}
-			else
+			else if (!existingRoles.length)
 			{
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Guest permissions are granted to registered members of our forums.`).catch(()=>{});
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`!login\` to associate your Discord user to our fourms (https://www.clanaod.net).`).catch(()=>{});
 				return;
 			}
 			
 			if (member.displayName !== data.name)
 			{
 				try {
-					await member.setNickname(data.name, 'First time join');
+					await member.setNickname(data.name, reason);
 				} catch (error) {}
 			}
-			
-			member.send(`Hello ${data.name}! The following roles have been automatically granted: ${rolesToAdd.map(r=>r.name).join(', ')}. Use '!help' to see available commands.`).catch(()=>{});
+			let roles = existingRoles.concat(rolesToAdd);
+			member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use \`!help\` to see available commands.`).catch(()=>{});
 		})
 		.catch(error => {notifyRequestError(error, null, false);});
+}
+
+//guildMemberAdd event handler -- triggered when a user joins the guild
+client.on('guildMemberAdd', member => {
+	setRolesForMember(member, 'First time join');
 });
 
 /*
@@ -2398,6 +2537,19 @@ function forumSyncTimerCallback()
 	if (doDaily)
 		guild.pruneMembers(14, 'Forum sync timer')
 			.catch(error => {notifyRequestError(error, null, false);});
+
+	//clearout expired login errors
+	let currEpochMs = (new Date).getTime();
+	for (var id in loginErrorsByUserID) {
+		if (loginErrorsByUserID.hasOwnProperty(id)) {
+			let loginError = loginErrorsByUserID[id];
+			if ((loginError.epochMs + config.forumLoginErrorTimeoutMs) < currEpochMs)
+			{
+				//console.log(`deleting error for ${member.user.tag} in timer`);
+				delete loginErrorsByUserID[id];
+			}
+		}
+	}
 }
 
 //ready handler
