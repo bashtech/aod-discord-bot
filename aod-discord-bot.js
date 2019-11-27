@@ -37,9 +37,10 @@ var subscribableRoles = require(config.subscribableRoles);
 const PERM_OWNER = 10
 const PERM_ADMIN = 9;
 const PERM_STAFF = 8;
-const PERM_MOD = 7;
-const PERM_RECRUITER = 6;
-const PERM_MEMBER = 5;
+const PERM_DIVISION_COMMANDER = 7;
+const PERM_MOD = 6;
+const PERM_RECRUITER = 5;
+const PERM_MEMBER = 4;
 const PERM_GUEST = 1;
 const PERM_NONE = 0;
 
@@ -223,6 +224,8 @@ function getPermissionLevelForMember(member)
 			return [PERM_ADMIN, 'Admin'];
 		else if (config.staffRoles.includes(r.name))
 			return [PERM_STAFF, 'Staff'];
+		else if (config.divisionCommandRoles.includes(r.name))
+			return [PERM_DIVISION_COMMANDER, 'Division Commander'];
 		else if (config.modRoles.includes(r.name))
 			return [PERM_MOD, 'Moderator'];
 		else if (r.name.endsWith('Officer') || config.recruiterRoles.includes(r.name))
@@ -551,6 +554,8 @@ function commandHelp(message, cmd, args, guild, perm, permName, isDM)
 			else
 			{
 				var line = `${cmd} ${commandArgsText}\n`;
+				if (commandObj.dmOnly === true)
+					line = "***(DM ONLY)*** " + line;
 				if (embed.description.length + line.length < 2048)
 				{
 					embed.description = embed.description+line;
@@ -592,7 +597,10 @@ async function commandLogin(message, cmd, args, guild, perm, permName, isDM)
 {
 	var member = message.member;
 	if (!isDM)
+	{
 		message.delete();
+		sendMessageToMember(member, `***WARNING:*** You have entered your credentials into a public channel. Your password may be compromised. Please change your password immediately.`).catch(()=>{});
+	}
 	
 	if (args.length < 2)
 		return sendMessageToMember(member, "Username and Password must be provided.").catch(()=>{});
@@ -700,15 +708,62 @@ function commandPurge(message, cmd, args, guild, perm, permName, isDM)
 	if (isDM)
 		return message.reply("Must be executed in a text channel");
 	
-	const deleteCount = parseInt(args[0], 10);
+	var deleteCount = parseInt(args[0], 10);
 	
-	if(!deleteCount || deleteCount < 2 || deleteCount > 100)
-		return message.reply("Please provide a number between 2 and 100 for the number of messages to delete");
+	if(!deleteCount || deleteCount < 1 || deleteCount > 100)
+		return message.reply("Please provide a number between 1 and 100 for the number of messages to delete");
+	deleteCount++; //remove the request to purge as well
 
 	message.channel.fetchMessages({limit: deleteCount})
 		.then(fetched=>message.channel.bulkDelete(fetched)
 			.catch(error => message.reply(`Couldn't delete messages because of: ${error}`)))
 		.catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
+}
+
+var channelPermissionLevels = ['guest', 'mod', 'staff', 'admin', 'member'];
+function getChannelPermissions(guild, perm, level, ptt, divisionRole)
+{
+	//get permissions based on type
+	var defaultDeny;
+	if (ptt)
+		defaultDeny = ['VIEW_CHANNEL','CONNECT','USE_VAD'];
+	else
+		defaultDeny = ['VIEW_CHANNEL','CONNECT'];
+	
+	var permissions;
+	switch (level)
+	{
+		case 'guest':
+			if (perm < PERM_MOD)
+				return message.reply("You don't have permissions to add this channel type");
+			permissions = getPermissionsForEveryone(guild, [], defaultDeny);
+			//add role permissions if necessary
+			if (divisionRole)
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
+			break;
+		case 'mod':
+			if (perm < PERM_MOD)
+				return message.reply("You don't have permissions to add this channel type");
+			permissions = getPermissionsForModerators(guild, [], defaultDeny);
+			break;
+		case 'staff':
+			if (perm < PERM_STAFF)
+				return message.reply("You don't have permissions to add this channel type");
+			permissions = getPermissionsForStaff(guild, [], defaultDeny);
+			break;
+		case 'admin':
+			if (perm < PERM_ADMIN)
+				return message.reply("You don't have permissions to add this channel type");
+			permissions = getPermissionsForAdmin(guild, [], defaultDeny);
+			break;
+		default:
+			permissions = getPermissionsForMembers(guild, [], defaultDeny);
+			//add role permissions if necessary
+			if (divisionRole)
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
+			break;
+	}
+	return permissions;
 }
 
 //voice command processing
@@ -723,18 +778,20 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 	
 	if ((channelCategory = guild.channels.find(c=>{return (c.name.toLowerCase() == args[0].toLowerCase() && c.type == 'category');})))
 	{
-		if (perm < PERM_STAFF)
-			return message.reply("You don't have permissions to add a channel to a specific category");
+		//check if this category has an associated officer role
+		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
+		divisionRole = guild.roles.find(r=>{return r.name == roleName;});		
+		
+		if (perm < PERM_DIVISION_COMMANDER)
+			return message.reply("You may not create a permanent channel");
+		if (perm == PERM_DIVISION_COMMANDER && (!divisionRole || !message.member.roles.get(divisionRole.id)))
+			return message.reply("You may only add channels to a division you command");
 		if (channelCategory.type != 'category')
 			return message.reply("Mentioned channel must be a category");
 		if (perm < PERM_ADMIN && channelCategory.children.size >= config.maxChannelsPerCategory)
 			return message.reply("Category is full");
 		args.shift();
 		temp = false;
-		
-		//check if this category has an associated officer role
-		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
-		divisionRole = guild.roles.find(r=>{return r.name == roleName;});
 	}
 	else
 	{
@@ -749,57 +806,18 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
 	
-	//get permissions based on type
-	var defaultDeny;
-	if (cmd === 'ptt')
-		defaultDeny = ['VIEW_CHANNEL','CONNECT','USE_VAD'];
-	else
-		defaultDeny = ['VIEW_CHANNEL','CONNECT'];
-	
-	var permissions;
-	switch (args[0])
-	{
-		case 'guest':
-			if (perm < PERM_MOD)
-				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForEveryone(guild, [], defaultDeny);
-			//add role permissions if necessary
-			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-			args.shift();
-			break;
-		case 'mod':
-			if (perm < PERM_MOD)
-				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForModerators(guild, [], defaultDeny);
-			args.shift();
-			break;
-		case 'staff':
-			if (perm < PERM_STAFF)
-				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForStaff(guild, [], defaultDeny);
-			args.shift();
-			break;
-		case 'admin':
-			if (perm < PERM_ADMIN)
-				return message.reply("You don't have permissions to add this channel type");
-			permissions = getPermissionsForAdmin(guild, [], defaultDeny);
-			args.shift();
-			break;
-		default:
-			permissions = getPermissionsForMembers(guild, [], defaultDeny);
-			//add role permissions if necessary
-			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-			break;
+	//process level argument if present
+	var level = "member";
+	if (channelPermissionLevels.includes(args[0])) {
+		level = args[0];
+		args.shift();
 	}
-
+	
 	//check for existing channel
 	let channelName = args.join(' ').toLowerCase().replace(/\s/g, '-');
 	if (channelName === undefined || channelName == '')
 		return message.reply("A name must be provided");
-	if (cmd === 'ptt')
-	{
+	if (cmd === 'ptt') {
 		channelName += '-ptt';
 		cmd = 'voice';
 	}
@@ -807,11 +825,13 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 	if (existingChannel)
 		return message.reply("Channel already exists");
 	
+	//get channel permissions
+	var permissions = getChannelPermissions(guild, perm, level, cmd === 'ptt', divisionRole);
+	
 	//create channel
 	return guild.createChannel(channelName, {type: cmd, name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}`})
 		.then(c=>{
-			if (cmd === 'voice')
-			{
+			if (cmd === 'voice') {
 				//make sure someone gets into the channel
 				if (temp)
 					client.setTimeout(function () {
@@ -826,6 +846,51 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 			return message.reply(`Added channel ${c.toString()} in ${channelCategory.name}`);
 		})
 		.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
+}
+
+//set channel perms command processing
+function commandSetPerms(message, cmd, args, guild, perm, permName, isDM)
+{
+	if (args[0] === undefined)
+		return message.reply("Invalid parameters");
+	
+	//process level argument if present
+	var level = "member";
+	if (channelPermissionLevels.includes(args[0])) {
+		level = args[0];
+		args.shift();
+	}
+	
+	if (args[0] === undefined)
+		return message.reply("Invalid parameters");
+	
+	//check for existing channel
+	let channelName = args.join(' ').toLowerCase().replace(/\s/g, '-');
+	if (channelName === undefined || channelName == '')
+		return message.reply("A name must be provided");
+		
+	if (config.protectedChannels.includes(channelName))
+		return message.reply(`${channelName} is a protected channel.`);
+	
+	var existingChannel = guild.channels.find(c=>{return c.name == channelName;});
+	if (!existingChannel || existingChannel.type === 'category')
+		return message.reply("Channel not found");
+	
+	//check if we're in a category and get the proper division role
+	var divisionCategory = existingChannel.parent;
+	var divisionRole;
+	if (divisionCategory) {
+		var divisionRoleName = divisionCategory.name + " " + config.discordOfficerSuffix;
+		divisionRole = guild.roles.find(r=>{return r.name === divisionRoleName});
+	}
+	
+	//get channel permissions
+	var permissions = getChannelPermissions(guild, perm, level, cmd === 'ptt', divisionRole);
+
+	//replace channel permission overrides
+	existingChannel.replacePermissionOverwrites({overwrites:permissions, reason: `Requested by ${getNameFromMessage(message)}`})
+		.then(()=>{message.reply(`Channel ${channelName} permissions updated`);})
+		.catch(error=>{message.reply(`Failed to update channel ${channelName} permissions`);notifyRequestError(error,message,(perm >= PERM_MOD))});
 }
 
 //remove channel command processing
@@ -948,23 +1013,33 @@ async function commandAddDivision(message, cmd, args, guild, perm, permName, isD
 		
 		//add category for division
 		let permissions = getPermissionsForEveryone(guild);
-		divisionCategory = await guild.createChannel(divisionName, {type: 'category', name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
+		divisionCategory = await guild.createChannel(divisionName, 
+			{type: 'category', name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`})
+			.catch(e=>{console.log(e)});
 
 		//create members channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-		let membersChannel = await guild.createChannel(divisionMembersChannel, {type: 'text', name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
+		let membersChannel = await guild.createChannel(divisionMembersChannel, 
+			{type: 'text', name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`})
+			.catch(e=>{console.log(e)});
 		
 		//create officers channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForModerators(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-		let officersChannel = await guild.createChannel(divisionOfficersChannel, {type: 'text', name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
+		let officersChannel = await guild.createChannel(divisionOfficersChannel, 
+			{type: 'text', name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`})
+			.catch(e=>{console.log(e)});
 		
 		//create public channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForEveryone(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);			
-		let publicChannel = await guild.createChannel(divisionPublicChannel, {type: 'text', name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
+		let publicChannel = await guild.createChannel(divisionPublicChannel, 
+			{type: 'text', name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`})
+			.catch(e=>{console.log(e)});
 		
 		//create member voice channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-		let memberVoipChannel = await guild.createChannel(divisionMemberVoiceChannel, {type: 'voice', name: divisionMemberVoiceChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`}).catch(e=>{console.log(e)});
+		let memberVoipChannel = await guild.createChannel(divisionMemberVoiceChannel, 
+			{type: 'voice', name: divisionMemberVoiceChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}`})
+			.catch(e=>{console.log(e)});
 		
 		return message.reply(`${divisionName} division added`).catch(()=>{});
 	} catch (error) {
@@ -1301,7 +1376,7 @@ function getForumGroups()
 {
 	var promise = new Promise(function(resolve, reject)	{
 		let db = connectToDB();
-		let query = `SELECT usergroupid AS id,title AS name FROM ${config.mysql.prefix}usergroup WHERE title LIKE "AOD%" OR title LIKE "%Officers"`
+		let query = `SELECT usergroupid AS id,title AS name FROM ${config.mysql.prefix}usergroup`; //WHERE title LIKE "AOD%" OR title LIKE "%Officers"
 		db.query(query, function(err, rows, fields) {
 			if (err)
 				return reject(err)
@@ -1451,7 +1526,11 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 	}
 	
 	let date = new Date();
-	fs.writeFileSync(config.syncLogFile, `${date.toISOString()}  Forum sync started\n`, 'utf8');
+	try {
+		fs.writeFileSync(config.syncLogFile, `${date.toISOString()}  Forum sync started\n`, 'utf8');
+	} catch (e) {
+		console.error(e);
+	}
 	
 	var online=0, offline=0, idle=0, dnd=0, total=0;
 	guild.members.forEach(function (m) {
@@ -1464,7 +1543,11 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily)
 			}
 			total++;
 		});
-	fs.writeFileSync(config.populationLogFile, `${online}/${idle}/${dnd}/${total}\n`, 'utf8');
+	try {
+		fs.writeFileSync(config.populationLogFile, `${online}/${idle}/${dnd}/${total}\n`, 'utf8')
+	} catch (e) {
+		console.error(e);
+	}
 	
 	for (var roleName in forumIntegrationConfig) {
 		if (forumIntegrationConfig.hasOwnProperty(roleName)) {
@@ -1756,14 +1839,20 @@ function commandForumSync(message, cmd, args, guild, perm, permName, isDM)
 		{
 			getForumGroups()
 				.then(forumGroups=>{
-					let embed = { 
-						title: '',
-						fields: [{
-							name: 'AOD Forum Groups',
-							value: Object.keys(forumGroups).map(k => `${forumGroups[k]} (${k})`).sort().join("\n")
-						}]
-					};
-					sendReplyToMessageAuthor(message, {embed: embed});
+					var list = Object.keys(forumGroups).map(k => `${forumGroups[k]} (${k})`).sort();
+					var i,j,size=25;
+					for (i=0,j=list.length; i<j; i+=size)
+					{
+						let chunk = list.slice(i,i+size);
+						let embed = { 
+							title: '',
+							fields: [{
+								name: 'AOD Forum Groups',
+								value: chunk.join("\n")
+							}]
+						};
+						sendReplyToMessageAuthor(message, {embed: embed});
+					}
 				})
 				.catch(error=>{notifyRequestError(error,message,(perm >= PERM_MOD))});
 			break;
@@ -2054,9 +2143,10 @@ commands = {
 	},
 	login: {
 		minPermission: PERM_NONE,
-		args: ["\"<username>\"", "\"<password>\""],
-		helpText: "Associate discord user to forum account.",
-		callback: commandLogin
+		args: ["\"<username|email>\"", "\"<password>\""],
+		helpText: "Associate discord user to AOD forum account.\nWARNING: This command may only be used in a DM to the discord bot.",
+		callback: commandLogin,
+		dmOnly: true
 	},
 	ping: {
 		minPermission: PERM_GUEST,
@@ -2178,6 +2268,16 @@ commands = {
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
 		callback: commandAddChannel
 	},
+	setperms: {
+		minPermission: PERM_STAFF,
+		args: ["[<guest|mod|staff|admin>]", "<name>"],
+		helpText: ["Updates a channels permissions.",
+			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
+			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
+			"*admin*: channel is visible to Admins (requires Admin permissions)"],
+		callback: commandSetPerms
+	},
 	topic: {
 		minPermission: PERM_MOD,
 		args: ["[\"<channel>\"]", "<topic>"],
@@ -2223,7 +2323,7 @@ commands = {
 	purge: {
 		minPermission: PERM_STAFF,
 		args: "<num>",
-		helpText: "Purges the last <num> messages from the channel the command was run in (2 <= num <= 100).",
+		helpText: "Purges the last <num> messages from the channel the command was run in (1 <= num <= 100).",
 		callback: commandPurge
 	},
 	forumsync: {
@@ -2268,19 +2368,22 @@ commands = {
 		minPermission: PERM_OWNER,
 		args: "",
 		helpText: "Reload the configuration",
-		callback: commandReload
+		callback: commandReload,
+		dmOnly: true
 	},
 	status: {
 		minPermission: PERM_ADMIN,
 		args: "",
 		helpText: "Bot Status",
-		callback: commandStatus
+		callback: commandStatus,
+		dmOnly: true
 	},
 	quit: {
 		minPermission: PERM_OWNER,
 		args: "",
 		helpText: "Terminate the bot",
-		callback: commandQuit
+		callback: commandQuit,
+		dmOnly: true
 	},
 	/*test: {
 		minPermission: PERM_OWNER,
@@ -2303,6 +2406,10 @@ function processCommand(message, cmd, arg_string, guild, perm, permName, isDM)
 				console.log(`${getNameFromMessage(message)} executed: ${cmd}`);
 			else if (cmd !== 'help' && cmd !== 'ping')
 				console.log(`${getNameFromMessage(message)} executed: ${cmd} "${args.join('" "')}"`)
+			
+			//if (commandObj.dmOnly === true && !isDM)
+			//do nothing for now...
+			
 			return commandObj.callback(message, cmd, args, guild, perm, permName, isDM);
 		}
 	}
