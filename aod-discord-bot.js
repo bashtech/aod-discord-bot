@@ -168,7 +168,7 @@ function getNameFromMessage(message)
 	return "<unknown>";
 }
 
-//add or remove a role from a guildMember
+//get the guild member object from the message
 function getMemberFromMessageOrArgs(guild, message, args)
 {
 	var member;
@@ -186,7 +186,7 @@ function getMemberFromMessageOrArgs(guild, message, args)
 	return member;
 }
 
-
+//add or remove a role from a guildMember
 function addRemoveRole(message, guild, add, roleName, isID, member)
 {
 	if (!guild)
@@ -734,26 +734,34 @@ function getChannelPermissions(guild, perm, level, ptt, divisionRole)
 	switch (level)
 	{
 		case 'guest':
-			if (perm < PERM_MOD)
-				return message.reply("You don't have permissions to add this channel type");
+			if (perm < PERM_MOD) {
+				message.reply("You don't have permissions to add this channel type");
+				return null;
+			}
 			permissions = getPermissionsForEveryone(guild, [], defaultDeny);
 			//add role permissions if necessary
 			if (divisionRole)
 				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
 			break;
 		case 'mod':
-			if (perm < PERM_MOD)
-				return message.reply("You don't have permissions to add this channel type");
+			if (perm < PERM_MOD) {
+				message.reply("You don't have permissions to add this channel type");
+				return null;
+			}
 			permissions = getPermissionsForModerators(guild, [], defaultDeny);
 			break;
 		case 'staff':
-			if (perm < PERM_STAFF)
-				return message.reply("You don't have permissions to add this channel type");
+			if (perm < PERM_STAFF) {
+				message.reply("You don't have permissions to add this channel type");
+				return null;
+			}
 			permissions = getPermissionsForStaff(guild, [], defaultDeny);
 			break;
 		case 'admin':
-			if (perm < PERM_ADMIN)
-				return message.reply("You don't have permissions to add this channel type");
+			if (perm < PERM_ADMIN) {
+				message.reply("You don't have permissions to add this channel type");
+				return null;
+			}
 			permissions = getPermissionsForAdmin(guild, [], defaultDeny);
 			break;
 		default:
@@ -815,6 +823,11 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 	
 	//check for existing channel
 	let channelName = args.join(' ').toLowerCase().replace(/\s/g, '-');
+	if (channelCategory) {
+		let channelPrefix = channelCategory.name.toLowerCase().replace(/\s/g, '-') + '-';
+		if (channelName.indexOf(channelPrefix) < 0)
+			channelName = channelPrefix + channelName;
+	}
 	if (channelName === undefined || channelName == '')
 		return message.reply("A name must be provided");
 	if (cmd === 'ptt') {
@@ -827,6 +840,8 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM)
 	
 	//get channel permissions
 	var permissions = getChannelPermissions(guild, perm, level, cmd === 'ptt', divisionRole);
+	if (!permissions)
+		return;
 	
 	//create channel
 	return guild.createChannel(channelName, {type: cmd, name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}`})
@@ -886,6 +901,8 @@ function commandSetPerms(message, cmd, args, guild, perm, permName, isDM)
 	
 	//get channel permissions
 	var permissions = getChannelPermissions(guild, perm, level, cmd === 'ptt', divisionRole);
+	if (!permissions)
+		return;
 
 	//replace channel permission overrides
 	existingChannel.replacePermissionOverwrites({overwrites:permissions, reason: `Requested by ${getNameFromMessage(message)}`})
@@ -905,11 +922,27 @@ function commandRemChannel(message, cmd, args, guild, perm, permName, isDM)
 		return message.reply(`${channelName} is a protected channel.`);
 	
 	var existingChannel = guild.channels.find(c=>{return c.name == channelName;});
-	if (existingChannel && existingChannel.type !== 'category')
-		existingChannel.delete(`Requested by ${getNameFromMessage(message)}`)
-			.then(()=>{message.reply(`Channel ${channelName} removed`);});
-	else
+	if (!existingChannel || existingChannel.type === 'category')
 		return message.reply("Channel not found");
+	
+	if (perm < PERM_DIVISION_COMMANDER)
+		return message.reply("You may not delete this channel");
+	
+	var channelCategory = existingChannel.parent;
+	if (channelCategory) {
+		//check if this category has an associated officer role
+		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
+		divisionRole = guild.roles.find(r=>{return r.name == roleName;});		
+		if (perm == PERM_DIVISION_COMMANDER && (!divisionRole || !message.member.roles.get(divisionRole.id)))
+			return message.reply("You may only delete channels from a division you command");
+	}
+	else {
+		if (perm < PERM_STAFF)
+			return message.reply("You may not delete this channel");
+	}
+
+	existingChannel.delete(`Requested by ${getNameFromMessage(message)}`)
+		.then(()=>{message.reply(`Channel ${channelName} removed`);});	
 }
 
 function commandTopic(message, cmd, args, guild, perm, permName, isDM)
@@ -2259,7 +2292,7 @@ commands = {
 		callback: commandAddChannel
 	},
 	text: {
-		minPermission: PERM_STAFF,
+		minPermission: PERM_DIVISION_COMMANDER,
 		args: ["<category>", "[<guest|mod|staff|admin>]", "<name>"],
 		helpText: ["Creates a text channel visible to Members+ by default.",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
@@ -2285,7 +2318,7 @@ commands = {
 		callback: commandTopic
 	},
 	remchannel: {
-		minPermission: PERM_STAFF,
+		minPermission: PERM_DIVISION_COMMANDER,
 		args: "<name>",
 		helpText: "Removes a channel.",
 		callback: commandRemChannel
