@@ -25,13 +25,35 @@ const fs = require('fs');
 var md5 = require('md5');
 
 //include AOD group config
-var forumIntegrationConfig = require(config.forumGroupConfig);
+var forumIntegrationConfig;
+try {
+	forumIntegrationConfig = require(config.forumGroupConfig);
+} catch (error) {
+	forumIntegrationConfig = {};
+}
 
 //include saved timers
-var savedTimers = require(config.savedTimers);
+var savedTimers;
+try {
+	savedTimers = require(config.savedTimers);
+} catch (error) {
+	savedTimers = [];
+}
 
-//include saved timers
-var subscribableRoles = require(config.subscribableRoles);
+//include subscribableRoles
+var subscribableRoles;
+try {
+	subscribableRoles = require(config.subscribableRoles);
+} catch (error) {
+	subscribableRoles = {};
+}
+var assignableRoles;
+try {
+	assignableRoles = require(config.assignableRoles);
+} catch (error) {
+	assignableRoles = {};
+}
+
 
 //permission levels
 const PERM_OWNER = 10
@@ -604,7 +626,10 @@ async function commandLogin(message, cmd, args, guild, perm, permName, isDM)
 	
 	if (args.length < 2)
 		return sendMessageToMember(member, "Username and Password must be provided.").catch(()=>{});
-	
+
+	var username = args.shift();
+	var password = args.shift();
+
 	//check for failed login attempts
 	if (loginErrorsByUserID[member.user.id] !== undefined)
 	{
@@ -626,9 +651,6 @@ async function commandLogin(message, cmd, args, guild, perm, permName, isDM)
 			delete loginErrorsByUserID[member.user.id];
 		}
 	}
-		
-	var username = args.shift();
-	var password = args.shift();
 	
 	var promise = new Promise(function(resolve, reject)	{
 		let db = connectToDB();
@@ -1140,6 +1162,24 @@ async function commandRemDivision(message, cmd, args, guild, perm, permName, isD
 //sub/unsub/list command processing
 function commandSub(message, cmd, args, guild, perm, permName, isDM)
 {
+	let rolesConfig;
+	let member = message.mentions.users.first();
+	let assign = false;
+	if (member) {
+		if (perm < PERM_MOD) {
+			return message.reply("You don't have permissions assign roles.");
+		}
+		if (args.length > 0)
+			args.shift();
+		member = guild.members.get(member.id);
+		rolesConfig = assignableRoles;
+		assign = true;
+	}
+	else {
+		rolesConfig = subscribableRoles;
+		member = message.member;
+	}
+
 	switch (cmd)
 	{
 		case 'sub':
@@ -1148,18 +1188,21 @@ function commandSub(message, cmd, args, guild, perm, permName, isDM)
 			if (args.length <= 0)
 				return message.reply('Role must be provided');
 			let roleName = args.join(' ');
-			if (subscribableRoles[roleName] === undefined) {
-				return message.reply(`Role ${roleName} is not subscribable`);
+			if (rolesConfig[roleName] === undefined) {
+				if (assign)
+					return message.reply(`Role ${roleName} is not assignable`);
+				else
+					return message.reply(`Role ${roleName} is not subscribable`);
 			}
-			return addRemoveRole(message, guild, cmd==='sub', subscribableRoles[roleName].roleID, true, message.member);
+			return addRemoveRole(message, guild, cmd==='sub', rolesConfig[roleName].roleID, true, member);
 		}
 		case 'list':
 		{
 			let subedRoles = [];
 			let availRoles = [];
-			for (var roleName in subscribableRoles) {
-				if (subscribableRoles.hasOwnProperty(roleName)) {
-					if (message.member.roles.get(subscribableRoles[roleName].roleID))
+			for (var roleName in rolesConfig) {
+				if (rolesConfig.hasOwnProperty(roleName)) {
+					if (member.roles.get(rolesConfig[roleName].roleID))
 						subedRoles.push(roleName);
 					else
 						availRoles.push(roleName);
@@ -1167,15 +1210,26 @@ function commandSub(message, cmd, args, guild, perm, permName, isDM)
 			}
 			subedRoles.sort();
 			availRoles.sort();
-			return message.reply({
-				embed: {
-					title: 'Role Subscriptions',
-					fields: [
-						{ name: 'Subscribed Roles', value: subedRoles.length?subedRoles.join("\n"):'*No Roles Subscribed*' },
-						{ name: 'Available Roles', value: availRoles.length?availRoles.join("\n"):'*No Roles Available*' },
-					]
-				}
-			});
+			if (assign)
+				return message.reply({
+					embed: {
+						title: 'Assigned Roles',
+						fields: [
+							{ name: 'Assigned Roles', value: subedRoles.length?subedRoles.join("\n"):'*No Roles Assigned*' },
+							{ name: 'Available Roles', value: availRoles.length?availRoles.join("\n"):'*No Roles Available*' },
+						]
+					}
+				});
+			else
+				return message.reply({
+					embed: {
+						title: 'Role Subscriptions',
+						fields: [
+							{ name: 'Subscribed Roles', value: subedRoles.length?subedRoles.join("\n"):'*No Roles Subscribed*' },
+							{ name: 'Available Roles', value: availRoles.length?availRoles.join("\n"):'*No Roles Available*' },
+						]
+					}
+				});
 		}
 	}	
 }
@@ -1189,8 +1243,20 @@ function commandSubRoles(message, cmd, args, guild, perm, permName, isDM)
 	let subcmd = args.shift();
 	switch (subcmd)
 	{
+		case 'adda':
 		case 'add':
 		{
+			let rolesConfig;
+			let rolesConfigFile;
+			if (subcmd === 'adda') {
+				rolesConfig = assignableRoles;
+				rolesConfigFile = config.assignableRoles;
+			}
+			else {
+				rolesConfig = subscribableRoles;
+				rolesConfigFile = config.subscribableRoles;
+			}
+	
 			if (args.length <= 0)
 				return message.reply('Role must be provided');
 			
@@ -1199,50 +1265,71 @@ function commandSubRoles(message, cmd, args, guild, perm, permName, isDM)
 			if (!role)
 				return message.reply(`Role ${roleName} not found`);
 			
-			if (subscribableRoles[roleName] === undefined) {
-				subscribableRoles[roleName] = {
+			if (rolesConfig[roleName] === undefined) {
+				rolesConfig[roleName] = {
 					roleID: role.id
 				};
 			}
 			else {
-				if (subscribableRoles[roleName].roleID !== role.id)
+				if (rolesConfig[roleName].roleID !== role.id)
 					return message.reply(`Role ${roleName} already managed, but ID is different`);
 				else
 					return message.reply(`Role ${roleName} already managed`);
 			}
 			
-			fs.writeFileSync(config.subscribableRoles, JSON.stringify(subscribableRoles), 'utf8');
+			fs.writeFileSync(rolesConfigFile, JSON.stringify(rolesConfig), 'utf8');
 			return message.reply(`Role ${roleName} added to subscribable roles`);
 		}
+		case 'rema':
 		case 'rem':
 		{
+			let rolesConfig;
+			let rolesConfigFile;
+			if (subcmd === 'rema') {
+				rolesConfig = assignableRoles;
+				rolesConfigFile = config.assignableRoles;
+			}
+			else {
+				rolesConfig = subscribableRoles;
+				rolesConfigFile = config.subscribableRoles;
+			}
+			
 			if (args.length <= 0)
 				return message.reply('Role must be provided');
 			
 			let roleName = args.join(' ');
-			if (subscribableRoles[roleName] === undefined) {
+			if (rolesConfig[roleName] === undefined) {
 				return message.reply(`Role ${roleName} not managed`);
 			}
 			else {
-				delete subscribableRoles[roleName];
+				delete rolesConfig[roleName];
 			}
 			
-			fs.writeFileSync(config.subscribableRoles, JSON.stringify(subscribableRoles), 'utf8');
+			fs.writeFileSync(rolesConfigFile, JSON.stringify(rolesConfig), 'utf8');
 			return message.reply(`Role ${roleName} removed from subscribable roles`);
 		}
 		case 'list':
 		{
-			let roles = [];
+			let subRoles = [];
+			let assignRoles = [];
 			for (var roleName in subscribableRoles) {
 				if (subscribableRoles.hasOwnProperty(roleName)) {
-					roles.push(roleName);
+					subRoles.push(roleName);
 				}
 			}
-			roles.sort();
+			for (var roleName in assignableRoles) {
+				if (assignableRoles.hasOwnProperty(roleName)) {
+					assignRoles.push(roleName);
+				}
+			}
+			subRoles.sort();
+			assignRoles.sort();
 			return message.reply({
 				embed: {
-					title: 'Subscribable Roles',
-					description: roles.length?roles.join("\n"):'*No roles configuerd*'
+					fields: [ 
+						{ name: "Subscribable Roles", value: subRoles.length?subRoles.join("\n"):'*No roles configuerd*' },
+						{ name: "Assignable Roles", value: assignRoles.length?assignRoles.join("\n"):'*No roles configuerd*' }
+					]
 				}
 			});
 		}
@@ -2104,6 +2191,8 @@ async function commandTest(message, cmd, args, guild, perm, permName, isDM)
 {
 	var reply = "";
 	
+	message.reply(`"${args.join('" "')}"`);
+	
 	/*
 	guild.channels.forEach(async function (c){
 		if (c.type == 'voice' && c.name.indexOf('temp') >= 0)
@@ -2189,20 +2278,20 @@ commands = {
 	},
 	sub: {
 		minPermission: PERM_GUEST,
-		args: "<name>",
-		helpText: "Subscribe to a role.",
+		args: ["[@mention]", "<role>"],
+		helpText: "Subscribe to a role. Use @mention to assign a role to someone else (requires Moderator permissions)",
 		callback: commandSub
 	},
 	unsub: {
 		minPermission: PERM_GUEST,
-		args: "<name>",
-		helpText: "Unsubscribe from a role.",
+		args: ["[@mention]", "<role>"],
+		helpText: "Unsubscribe from a role. Use @mention to remove a role from someone else (requires Moderator permissions)",
 		callback: commandSub
 	},
 	list: {
 		minPermission: PERM_GUEST,
-		args: "",
-		helpText: "List subscribable roles.",
+		args: ["[@mention]"],
+		helpText: "List subscribable roles. Use @mention to show assignable roles for someone else (requires Moderator permissions)",
 		callback: commandSub
 	},
 	tracker: {
@@ -2349,8 +2438,14 @@ commands = {
 	},
 	subroles: {
 		minPermission: PERM_STAFF,
-		args: ["[add|rem|list]", "<name>"],
-		helpText: "Manage subscribable roles.",
+		args: ["<add|adda|rem|rema|list>", "<name>"],
+		helpText: [ "Manage subscribable roles.",
+			"*add*: Add a role that members can self-subscribe to",
+			"*adda*: Add a role that that can be assigned",
+			"*rem*: Remove a role that members can self-subscribe to",
+			"*rema*: Remove a role that that can be assigned",
+			"*list*: List all managed roles",
+		],
 		callback: commandSubRoles
 	},
 	purge: {
@@ -2418,12 +2513,12 @@ commands = {
 		callback: commandQuit,
 		dmOnly: true
 	},
-	/*test: {
+	test: {
 		minPermission: PERM_OWNER,
 		args: "",
 		helpText: "Temporary command",
 		callback: commandTest
-	},*/
+	},
 }
 
 //process commands
