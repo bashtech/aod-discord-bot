@@ -861,8 +861,10 @@ function commandSetPerms(message, cmd, args, guild, perm, permName, isDM) {
 	//replace channel permission overrides
 	existingChannel.replacePermissionOverwrites({ overwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 		.then(() => { message.reply(`Channel ${channelName} permissions updated`); })
-		.catch(error => { message.reply(`Failed to update channel ${channelName} permissions`);
-			notifyRequestError(error, message, (perm >= PERM_MOD)); });
+		.catch(error => {
+			message.reply(`Failed to update channel ${channelName} permissions`);
+			notifyRequestError(error, message, (perm >= PERM_MOD));
+		});
 }
 
 //remove channel command processing
