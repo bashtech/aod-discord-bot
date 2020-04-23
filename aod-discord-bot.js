@@ -194,7 +194,7 @@ function getMemberFromMessageOrArgs(guild, message, args) {
 		if (args.length > 0) {
 			member = guild.members.get(args[0]);
 			if (!member) {
-				let tag = args.join(' ');
+				let tag = args[0];
 				member = guild.members.find(m => { return m.user.tag === tag; });
 			}
 		}
@@ -607,34 +607,49 @@ async function commandLogin(message, cmd, args, guild, perm, permName, isDM) {
 		db.query(query, function(err, rows, fields) {
 			var success = false;
 			if (!err) {
-				for (var i in rows) {
-					//rows[i].userid
-					//rows[i].username
-					//rows[i].valid
-					if (rows[i] && rows[i][0]) {
-						data = rows[i][0];
-						if (data && data.valid == 1) {
-							success = true;
-							let tag = db.escape(convertDiscordTag(member.user.tag));
-							let discordId = db.escape(member.user.id);
-							let query = `UPDATE ${config.mysql.prefix}userfield SET field19=${tag},field20=${discordId} WHERE userid=${data.userid}`;
-							db.query(query, function(err, rows, fields) {
-								if (err) {
-									sendMessageToMember(member, `Successfully logged in as ${data.username} (${data.userid}), but there was an error updating your user infomation.`).catch(() => {});
-									console.log(err);
-									return reject(err);
+				//rows[i].userid
+				//rows[i].username
+				//rows[i].valid
+				//should never be more than 1 user...
+				if (rows && rows.length && rows[0][0]) {
+					let data = rows[0][0];
+					if (data && data.valid == 1) {
+						success = true;
+						let tag = db.escape(convertDiscordTag(member.user.tag));
+						let discordId = db.escape(member.user.id);
+						let query2 =
+							`SELECT u.userid,u.username FROM ${config.mysql.prefix}userfield f ` +
+							`INNER JOIN ${config.mysql.prefix}user u ON f.userid=u.userid ` +
+							`WHERE (f.field19=${tag} OR f.field20=${discordId}) AND f.userid!=${data.userid}`;
+						db.query(query2, function(err, rows2, fields) {
+							if (rows2 && rows2.length) {
+								let data2 = rows2[0];
+								const sgtsChannel = guild.channels.find(c => { return c.name === 'aod-sergeants'; });
+								console.log(`Existing forum account found ${data2.username} ${data2.userid}`);
+								if (sgtsChannel) {
+									sgtsChannel.send(`${member.user.tag} logged in as ${data.username} but was already known as ${data2.username}`).catch(() => {});
 								}
-								console.log(`${member.user.tag} logged in as ${data.username} (${data.userid})`);
-								let msg = `Successfully logged in as ${data.username} (${data.userid}).`;
-								if (isDM)
-									msg += ` We recommend you delete the \`!login\` message from your history to protect your identity.`;
-								sendMessageToMember(member, msg);
-								setRolesForMember(member, "Forum login");
-								return resolve();
-							});
-						}
+								query2 = `UPDATE ${config.mysql.prefix}userfield SET field19='',field20='' WHERE userid=${data2.userid}`;
+								db.query(query2);
+							}
+						});
+
+						query2 = `UPDATE ${config.mysql.prefix}userfield SET field19=${tag},field20=${discordId} WHERE userid=${data.userid}`;
+						db.query(query2, function(err, rows2, fields) {
+							if (err) {
+								sendMessageToMember(member, `Successfully logged in as ${data.username} (${data.userid}), but there was an error updating your user infomation.`).catch(() => {});
+								console.log(err);
+								return reject(err);
+							}
+							console.log(`${member.user.tag} logged in as ${data.username} (${data.userid})`);
+							let msg = `Successfully logged in as ${data.username} (${data.userid}).`;
+							if (isDM)
+								msg += ` We recommend you delete the \`!login\` message from your history to protect your identity.`;
+							sendMessageToMember(member, msg);
+							setRolesForMember(member, "Forum login");
+							return resolve();
+						});
 					}
-					break; //should never be more than 1 user...
 				}
 			}
 			if (!success) {
@@ -1376,7 +1391,7 @@ function commandTracker(message, cmd, args, guild, perm, permName, isDM) {
 		},
 		json: true
 	};
-	process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
+	process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 	request(postOptions, function(error, response, body) {
 		if (error)
 			return message.reply('There was an error processing the request');
@@ -1446,13 +1461,17 @@ function getForumUsersForGroups(groups) {
 					let discordtag = convertForumDiscordName(rows[i].field19);
 					let index = ((discordid && discordid != '') ? discordid : discordtag);
 
-					usersByIDOrDiscriminator[index] = {
-						name: rows[i].username,
-						id: rows[i].userid,
-						division: rows[i].field13,
-						discordid: discordid,
-						discordtag: discordtag
-					};
+					if (usersByIDOrDiscriminator[index] !== undefined) {
+						console.log(`Found duplicate tag ${usersByIDOrDiscriminator[index].discordtag} for forum user ${rows[i].username} first seen for forum user ${usersByIDOrDiscriminator[index].name}`);
+					} else {
+						usersByIDOrDiscriminator[index] = {
+							name: rows[i].username,
+							id: rows[i].userid,
+							division: rows[i].field13,
+							discordid: discordid,
+							discordtag: discordtag
+						};
+					}
 				}
 				return resolve(usersByIDOrDiscriminator);
 			}
@@ -1518,12 +1537,14 @@ function setDiscordTagForForumUser(forumUser, guildMember) {
 async function doForumSync(message, guild, perm, checkOnly, doDaily) {
 	var hrStart = process.hrtime();
 	const guestRole = guild.roles.find(r => { return r.name == config.guestRole; });
+	const memberRole = guild.roles.find(r => { return r.name == config.memberRole; });
 	const sgtsChannel = guild.channels.find(c => { return c.name === 'aod-sergeants'; });
 	const reason = (message ? `Requested by ${getNameFromMessage(message)}` : 'Periodic Sync');
 	let adds = 0,
 		removes = 0,
 		renames = 0,
-		misses = 0;
+		misses = 0,
+		duplicates = 0;
 
 	let nickNameChanges = {};
 	let forumGroups;
@@ -1567,6 +1588,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily) {
 		console.error(e);
 	}
 
+	var seenByID = {}; //make sure we don't have users added as both guest and member
 	for (var roleName in forumIntegrationConfig) {
 		if (forumIntegrationConfig.hasOwnProperty(roleName)) {
 			var groupMap = forumIntegrationConfig[roleName];
@@ -1603,6 +1625,7 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily) {
 				var toRemove = [];
 				var toUpdate = [];
 				var membersByID = {};
+				var duplicateTag = [];
 				for (var roleMember of role.members.values()) {
 					membersByID[roleMember.user.id] = roleMember;
 					let forumUser = usersByIDOrDiscriminator[roleMember.user.id];
@@ -1657,13 +1680,38 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily) {
 							setDiscordTagForForumUser(forumUser, roleMember);
 
 						//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
-						if (!checkOnly && role.name === config.memberRole) {
-							if (roleMember.roles.get(guestRole.id)) {
-								try {
-									await roleMember.removeRole(guestRole);
-								} catch (error) {
-									notifyRequestError(error, message, (perm >= PERM_MOD));
-									continue;
+						if (role.id === memberRole.id) {
+							if (seenByID[roleMember.id] !== undefined) {
+								duplicateTag.push(`${roleMember.user.tag} (${forumUser.name}) -- First seen user ${seenByID[roleMember.id].name}`);
+								duplicates++;
+							} else {
+								seenByID[roleMember.id] = forumUser;
+							}
+							if (!checkOnly) {
+								if (roleMember.roles.get(guestRole.id)) {
+									try {
+										await roleMember.removeRole(guestRole);
+									} catch (error) {
+										notifyRequestError(error, message, (perm >= PERM_MOD));
+										continue;
+									}
+								}
+							}
+						} else if (role.id === guestRole.id) {
+							if (seenByID[roleMember.id] !== undefined) {
+								duplicateTag.push(`${roleMember.user.tag} (${forumUser.name}) -- First seen user ${seenByID[roleMember.id].name}`);
+								duplicates++;
+							} else {
+								seenByID[roleMember.id] = forumUser;
+							}
+							if (!checkOnly) {
+								if (roleMember.roles.get(memberRole.id)) {
+									try {
+										await roleMember.removeRole(memberRole);
+									} catch (error) {
+										notifyRequestError(error, message, (perm >= PERM_MOD));
+										continue;
+									}
 								}
 							}
 						}
@@ -1772,6 +1820,16 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily) {
 								value: truncateStr(toUpdate.join(', '), 1024)
 							});
 					}
+					if (duplicateTag.length) {
+						sendMessage = true;
+						fs.appendFileSync(config.syncLogFile, `\tDuplicate Tags (${duplicateTag.length}):\n\t\t`, 'utf8');
+						fs.appendFileSync(config.syncLogFile, duplicateTag.join('\n\t\t') + "\n", 'utf8');
+						if (message)
+							embed.fields.push({
+								name: `Duplicate Tags (${duplicateTag.length})`,
+								value: truncateStr(duplicateTag.join(', '), 1024)
+							});
+					}
 					if (message && sendMessage) {
 						sendReplyToMessageAuthor(message, { embed: embed }).catch(() => {});
 					}
@@ -1782,12 +1840,12 @@ async function doForumSync(message, guild, perm, checkOnly, doDaily) {
 
 	if (doDaily === true && misses > 0) {
 		if (sgtsChannel) {
-			sgtsChannel.send(`The forum sync process found ${misses} members with no discord account. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
+			sgtsChannel.send(`The forum sync process found ${misses} members with no discord account and ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
 		}
 	}
 
 	let hrEnd = process.hrtime(hrStart);
-	let msg = `Forum Sync Processing Time: ${hrEnd[0] + (Math.round(hrEnd[1]/1000000)/1000)}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account`;
+	let msg = `Forum Sync Processing Time: ${hrEnd[0] + (Math.round(hrEnd[1]/1000000)/1000)}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account, ${duplicates} duplicate tags`;
 	if (message)
 		sendReplyToMessageAuthor(message, msg).catch(() => {});
 	if (message || adds || removes || renames)
@@ -2000,6 +2058,22 @@ function commandRelay(message, cmd, args, guild, perm, permName, isDM) {
 
 	sendMessageToChannel(channel, content)
 		.finally(() => { message.delete(); })
+		.catch(error => { notifyRequestError(error, null, PERM_NONE); });
+}
+
+function commandRelayDm(message, cmd, args, guild, perm, permName, isDM) {
+	if (args.length <= 0)
+		return;
+	let member = getMemberFromMessageOrArgs(guild, message, args);
+	if (!member)
+		return;
+	args.shift();
+
+	let content = args.join(' ');
+	if (!content || content === '')
+		return;
+
+	sendMessageToMember(member, content)
 		.catch(error => { notifyRequestError(error, null, PERM_NONE); });
 }
 
@@ -2340,6 +2414,12 @@ commands = {
 		helpText: "Relay a message using the bot. If <channel> is provided, the message will be sent there.",
 		callback: commandRelay
 	},
+	relaydm: {
+		minPermission: PERM_ADMIN,
+		args: ["[\"<@mention|name#tag>\"]", "\"<message>\""],
+		helpText: "Relay a DM using the bot.",
+		callback: commandRelayDm
+	},
 	addadmin: {
 		minPermission: PERM_OWNER,
 		args: "@mention",
@@ -2616,6 +2696,12 @@ function forumSyncTimerCallback() {
 		}
 	}
 }
+
+//messageDelete handler
+client.on("messageDelete", (message) => {
+	if (!message.content.startsWith('!relay ') && !message.content.startsWith('!login '))
+		console.log(`Deleted message from ${message.author.tag} in #${message.channel.name}: ${message.content}`);
+});
 
 //ready handler
 client.on("ready", () => {
