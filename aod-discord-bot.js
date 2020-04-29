@@ -644,7 +644,7 @@ async function commandLogin(message, cmd, args, guild, perm, permName, isDM) {
 							console.log(`${member.user.tag} logged in as ${data.username} (${data.userid})`);
 							let msg = `Successfully logged in as ${data.username} (${data.userid}).`;
 							if (isDM)
-								msg += ` We recommend you delete the \`!login\` message from your history to protect your identity.`;
+								msg += ` We recommend you delete the \`${config.prefix}login\` message from your history to protect your identity.`;
 							sendMessageToMember(member, msg);
 							setRolesForMember(member, "Forum login");
 							return resolve();
@@ -695,12 +695,12 @@ function commandPurge(message, cmd, args, guild, perm, permName, isDM) {
 		.catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
 }
 
-var channelPermissionLevels = ['guest', 'mod', 'staff', 'admin', 'member'];
+var channelPermissionLevels = ['feed', 'guest', 'member', 'officer', 'mod', 'staff', 'admin'];
 
-function getChannelPermissions(guild, perm, level, ptt, divisionRole) {
+function getChannelPermissions(guild, perm, level, type, divisionRole) {
 	//get permissions based on type
 	var defaultDeny;
-	if (ptt)
+	if (type == 'ptt')
 		defaultDeny = ['VIEW_CHANNEL', 'CONNECT', 'USE_VAD'];
 	else
 		defaultDeny = ['VIEW_CHANNEL', 'CONNECT'];
@@ -724,6 +724,18 @@ function getChannelPermissions(guild, perm, level, ptt, divisionRole) {
 			}
 			permissions = getPermissionsForModerators(guild, [], defaultDeny);
 			break;
+		case 'officer':
+			if (perm < PERM_MOD) {
+				message.reply("You don't have permissions to add this channel type");
+				return null;
+			}
+			if (!divisionRole) {
+				message.reply("No officer role could be determined");
+				return null;
+			}
+			permissions = getPermissionsForModerators(guild, [], defaultDeny);
+			permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT']);
+			break;
 		case 'staff':
 			if (perm < PERM_STAFF) {
 				message.reply("You don't have permissions to add this channel type");
@@ -738,7 +750,26 @@ function getChannelPermissions(guild, perm, level, ptt, divisionRole) {
 			}
 			permissions = getPermissionsForAdmin(guild, [], defaultDeny);
 			break;
-		default:
+		case 'feed':
+			if (type !== 'text') {
+				message.reply("Feed may only be used for text channels");
+				return null;
+			}
+			if (perm < PERM_DIVISION_COMMANDER) {
+				message.reply("You don't have permissions to add this channel type");
+				return null;
+			}
+			permissions = getPermissionsForModerators(guild, [], defaultDeny);
+			//add member/guest as read only
+			const memberRole = guild.roles.find(r => { return r.name == config.memberRole; });
+			permissions = addRoleToPermissions(guild, memberRole, permissions, ['VIEW_CHANNEL'], ['SEND_MESSAGES', 'SEND_TTS_MESSAGES', 'SPEAK']);
+			const guestRole = guild.roles.find(r => { return r.name == config.guestRole; });
+			permissions = addRoleToPermissions(guild, guestRole, permissions, ['VIEW_CHANNEL'], ['SEND_MESSAGES', 'SEND_TTS_MESSAGES', 'SPEAK']);
+			//add role permissions if necessary
+			if (divisionRole)
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
+			break;
+		default: //member
 			permissions = getPermissionsForMembers(guild, [], defaultDeny);
 			//add role permissions if necessary
 			if (divisionRole)
@@ -791,6 +822,9 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM) {
 		args.shift();
 	}
 
+	if (args[0] === undefined)
+		return message.reply("Invalid parameters");
+
 	//check for existing channel
 	let channelName = args.join(' ').toLowerCase().replace(/\s/g, '-');
 	if (channelCategory) {
@@ -800,18 +834,20 @@ function commandAddChannel(message, cmd, args, guild, perm, permName, isDM) {
 	}
 	if (channelName === undefined || channelName == '')
 		return message.reply("A name must be provided");
-	if (cmd === 'ptt') {
-		channelName += '-ptt';
-		cmd = 'voice';
-	}
+
 	var existingChannel = guild.channels.find(c => { return c.name == channelName; });
 	if (existingChannel)
 		return message.reply("Channel already exists");
 
 	//get channel permissions
-	var permissions = getChannelPermissions(guild, perm, level, cmd === 'ptt', divisionRole);
+	var permissions = getChannelPermissions(guild, perm, level, cmd, divisionRole);
 	if (!permissions)
 		return;
+
+	if (cmd === 'ptt') {
+		channelName += '-ptt';
+		cmd = 'voice';
+	}
 
 	//create channel
 	return guild.createChannel(channelName, { type: cmd, name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
@@ -857,7 +893,7 @@ function commandSetPerms(message, cmd, args, guild, perm, permName, isDM) {
 		return message.reply(`${channelName} is a protected channel.`);
 
 	var existingChannel = guild.channels.find(c => { return c.name == channelName; });
-	if (!existingChannel || existingChannel.type === 'category')
+	if (!existingChannel || (existingChannel.type !== 'text' && existingChannel.type !== 'voice'))
 		return message.reply("Channel not found");
 
 	//check if we're in a category and get the proper division role
@@ -868,8 +904,8 @@ function commandSetPerms(message, cmd, args, guild, perm, permName, isDM) {
 		divisionRole = guild.roles.find(r => { return r.name === divisionRoleName; });
 	}
 
-	//get channel permissions
-	var permissions = getChannelPermissions(guild, perm, level, cmd === 'ptt', divisionRole);
+	//get channel permissions //FIXME: support PTT?
+	var permissions = getChannelPermissions(guild, perm, level, existingChannel.type, divisionRole);
 	if (!permissions)
 		return;
 
@@ -2296,9 +2332,11 @@ commands = {
 	},
 	voice: {
 		minPermission: PERM_RECRUITER,
-		args: ["[<category>]", "[<guest|mod|staff|admin>]", "<name>"],
+		args: ["[<category>]", "[<guest|member|officer|mod|staff|admin>]", "<name>"],
 		helpText: ["Creates a temporary voice channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires staff permissions).",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+			"*member*: channel is visible to Moderator+ (requires Officer permissions)",
+			"*officer*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
@@ -2306,9 +2344,11 @@ commands = {
 	},
 	ptt: {
 		minPermission: PERM_RECRUITER,
-		args: ["[<category>]", "[<guest|mod|staff|admin>]", "<name>"],
+		args: ["[<category>]", "[<guest|member|officer|mod|staff|admin>]", "<name>"],
 		helpText: ["Creates a temporary push-to-talk channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires staff permissions).",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+			"*member*: channel is visible to Moderator+ (requires Officer permissions)",
+			"*officer*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
@@ -2316,9 +2356,12 @@ commands = {
 	},
 	text: {
 		minPermission: PERM_DIVISION_COMMANDER,
-		args: ["<category>", "[<guest|mod|staff|admin>]", "<name>"],
+		args: ["<category>", "[<feed|guest|member|officer|mod|staff|admin>]", "<name>"],
 		helpText: ["Creates a text channel visible to Members+ by default.",
+			"*feed*: channel is visible to Guest+, but only Officer+ may send messages (requires Divivion Commander permissions)",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+			"*member*: channel is visible to Moderator+ (requires Officer permissions)",
+			"*officer*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
@@ -2326,9 +2369,11 @@ commands = {
 	},
 	setperms: {
 		minPermission: PERM_STAFF,
-		args: ["[<guest|mod|staff|admin>]", "<name>"],
+		args: ["[<feed|guest|member|officer|mod|staff|admin>]", "<name>"],
 		helpText: ["Updates a channels permissions.",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+			"*member*: channel is visible to Moderator+ (requires Officer permissions)",
+			"*officer*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
@@ -2603,7 +2648,7 @@ function setRolesForMember(member, reason) {
 	getForumGroupsForMember(member)
 		.then(async function(data) {
 			if (data === undefined || data.groups.length === 0) {
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`!login\` to associate your Discord user to our fourms (https://www.clanaod.net).`).catch(() => {});
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` to associate your Discord user to our fourms (https://www.clanaod.net).`).catch(() => {});
 				return;
 			}
 
@@ -2631,7 +2676,7 @@ function setRolesForMember(member, reason) {
 					return;
 				}
 			} else if (!existingRoles.length) {
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`!login\` to associate your Discord user to our fourms (https://www.clanaod.net).`).catch(() => {});
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` to associate your Discord user to our fourms (https://www.clanaod.net).`).catch(() => {});
 				return;
 			}
 
@@ -2699,7 +2744,7 @@ function forumSyncTimerCallback() {
 
 //messageDelete handler
 client.on("messageDelete", (message) => {
-	if (!message.content.startsWith('!relay ') && !message.content.startsWith('!login '))
+	if (message.channel && !message.content.startsWith(config.prefix + 'relay ') && !message.content.startsWith(config.prefix + 'login '))
 		console.log(`Deleted message from ${message.author.tag} in #${message.channel.name}: ${message.content}`);
 });
 
