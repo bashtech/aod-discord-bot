@@ -266,7 +266,7 @@ function addRoleToPermissions(guild, role, permissions, allow, deny) {
 	return permissions;
 }
 //build a list of permissions for admin
-function getPermissionsForAdmin(guild, defaultAllow, defaultDeny) {
+function getPermissionsForAdmin(guild, defaultAllow, defaultDeny, allow, deny) {
 	let permissions = [{
 		id: guild.id,
 		allow: (Array.isArray(defaultAllow) ? defaultAllow : []),
@@ -282,42 +282,42 @@ function getPermissionsForAdmin(guild, defaultAllow, defaultDeny) {
 	config.adminRoles.forEach(n => {
 		const role = guild.roles.find(r => { return r.name == n; });
 		if (role)
-			permissions = addRoleToPermissions(guild, role, permissions);
+			permissions = addRoleToPermissions(guild, role, permissions, allow, deny);
 	});
 	return permissions;
 }
 //build a list of permissions for staff+
-function getPermissionsForStaff(guild, defaultAllow, defaultDeny) {
-	let permissions = getPermissionsForAdmin(guild, defaultAllow, defaultDeny);
+function getPermissionsForStaff(guild, defaultAllow, defaultDeny, allow, deny) {
+	let permissions = getPermissionsForAdmin(guild, defaultAllow, defaultDeny, allow, deny);
 	// add staff
 	config.staffRoles.forEach(n => {
 		const role = guild.roles.find(r => { return r.name == n; });
-		permissions = addRoleToPermissions(guild, role, permissions);
+		permissions = addRoleToPermissions(guild, role, permissions, allow, deny);
 	});
 	return permissions;
 }
 //build a list of permissions for mod+
-function getPermissionsForModerators(guild, defaultAllow, defaultDeny) {
-	let permissions = getPermissionsForStaff(guild, defaultAllow, defaultDeny);
+function getPermissionsForModerators(guild, defaultAllow, defaultDeny, allow, deny) {
+	let permissions = getPermissionsForStaff(guild, defaultAllow, defaultDeny, allow, deny);
 	// add moderators
 	config.modRoles.forEach(n => {
 		const role = guild.roles.find(r => { return r.name == n; });
 		if (role)
-			permissions = addRoleToPermissions(guild, role, permissions);
+			permissions = addRoleToPermissions(guild, role, permissions, allow, deny);
 	});
 	return permissions;
 }
 //build a list of permissions for member+
-function getPermissionsForMembers(guild, defaultAllow, defaultDeny) {
-	let permissions = getPermissionsForModerators(guild, defaultAllow, defaultDeny);
+function getPermissionsForMembers(guild, defaultAllow, defaultDeny, allow, deny) {
+	let permissions = getPermissionsForModerators(guild, defaultAllow, defaultDeny, allow, deny);
 	const memberRole = guild.roles.find(r => { return r.name == config.memberRole; });
-	return addRoleToPermissions(guild, memberRole, permissions);
+	return addRoleToPermissions(guild, memberRole, permissions, allow, deny);
 }
 //build a list of permissions for guest+
-function getPermissionsForEveryone(guild, defaultAllow, defaultDeny) {
-	let permissions = getPermissionsForMembers(guild, defaultAllow, defaultDeny);
+function getPermissionsForEveryone(guild, defaultAllow, defaultDeny, allow, deny) {
+	let permissions = getPermissionsForMembers(guild, defaultAllow, defaultDeny, allow, deny);
 	const guestRole = guild.roles.find(r => { return r.name == config.guestRole; });
-	return addRoleToPermissions(guild, guestRole, permissions);
+	return addRoleToPermissions(guild, guestRole, permissions, allow, deny);
 }
 
 /*************************************
@@ -759,7 +759,14 @@ function getChannelPermissions(guild, perm, level, type, divisionRole) {
 				message.reply("You don't have permissions to add this channel type");
 				return null;
 			}
-			permissions = getPermissionsForModerators(guild, [], defaultDeny);
+			//get permissions for staff -- add manage webhooks
+			permissions = getPermissionsForStaff(guild, [], defaultDeny, ['VIEW_CHANNEL', 'CONNECT', 'SEND_MESSAGES', 'MANAGE_WEBHOOKS']);
+			//add moderators
+			config.modRoles.forEach(n => {
+				const role = guild.roles.find(r => { return r.name == n; });
+				if (role)
+					permissions = addRoleToPermissions(guild, role, permissions, ['VIEW_CHANNEL', 'CONNECT', 'SEND_MESSAGES']);
+			});
 			//add member/guest as read only
 			const memberRole = guild.roles.find(r => { return r.name == config.memberRole; });
 			permissions = addRoleToPermissions(guild, memberRole, permissions, ['VIEW_CHANNEL'], ['SEND_MESSAGES', 'SEND_TTS_MESSAGES', 'SPEAK']);
@@ -767,13 +774,13 @@ function getChannelPermissions(guild, perm, level, type, divisionRole) {
 			permissions = addRoleToPermissions(guild, guestRole, permissions, ['VIEW_CHANNEL'], ['SEND_MESSAGES', 'SEND_TTS_MESSAGES', 'SPEAK']);
 			//add role permissions if necessary
 			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT', 'SEND_MESSAGES', 'MANAGE_MESSAGES']);
 			break;
 		default: //member
 			permissions = getPermissionsForMembers(guild, [], defaultDeny);
 			//add role permissions if necessary
 			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT', 'SEND_MESSAGES', 'MANAGE_MESSAGES']);
 			break;
 	}
 	return permissions;
@@ -987,8 +994,9 @@ function commandMoveChannel(message, cmd, args, guild, perm, permName, isDM) {
 
 	var existingChannel = guild.channels.find(c => { return c.name == channelName; });
 	if (existingChannel)
-		existingChannel.setPosition(cmd === 'up' ? -2 : 2, true)
-		.then(() => { message.reply(`Channel ${channelName} moved`); });
+		existingChannel.setPosition(cmd === 'up' ? -1 : 1, {relative: true, reason: `Requested by ${getNameFromMessage(message)}`})
+		.then(() => { message.reply(`Channel ${channelName} moved`); })
+		.catch(error => { notifyRequestError(error, message, (perm >= PERM_MOD)); });
 	else
 		return message.reply("Channel not found");
 }
@@ -2272,61 +2280,61 @@ commands = {
 	},
 	mute: {
 		minPermission: PERM_MOD,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Adds the Muted role to the user.",
 		callback: commandMute
 	},
 	unmute: {
 		minPermission: PERM_MOD,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Removes the Muted role from the user.",
 		callback: commandMute
 	},
 	setptt: {
 		minPermission: PERM_MOD,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Adds the Force Push-to-Talk role to the user.",
 		callback: commandPTT
 	},
 	clearptt: {
 		minPermission: PERM_MOD,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Removes the Force Push-to-Talk role from the user.",
 		callback: commandPTT
 	},
 	kick: {
 		minPermission: PERM_RECRUITER,
-		args: "@mention [<reason>]",
+		args: "<@mention|tag|snowflake> [<reason>]",
 		helpText: "Kicks the mentioned user from the server.",
 		callback: commandKick
 	},
 	ban: {
 		minPermission: PERM_MOD,
-		args: "@mention [<reason>]",
+		args: "<@mention|tag|snowflake> [<reason>]",
 		helpText: "Bans the mentioned user from the server.",
 		callback: commandBan
 	},
 	addaod: {
 		minPermission: PERM_RECRUITER,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Adds the mentioned user to the AOD Members role.",
 		callback: commandSetAOD
 	},
 	remaod: {
 		minPermission: PERM_MOD,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Removes the mentioned user from the AOD Members role.",
 		callback: commandSetAOD
 	},
 	addguest: {
 		minPermission: PERM_MOD,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Adds the mentioned user to the Guest role.",
 		callback: commandSetGuest
 	},
 	remguest: {
 		minPermission: PERM_MOD,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Removes the mentioned user from the Guest role.",
 		callback: commandSetGuest
 	},
@@ -2461,19 +2469,19 @@ commands = {
 	},
 	relaydm: {
 		minPermission: PERM_ADMIN,
-		args: ["[\"<@mention|name#tag>\"]", "\"<message>\""],
+		args: ["[<@mention|tag|snowflake>]", "\"<message>\""],
 		helpText: "Relay a DM using the bot.",
 		callback: commandRelayDm
 	},
 	addadmin: {
 		minPermission: PERM_OWNER,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Add the Admin role to a user",
 		callback: commandSetAdmin
 	},
 	remadmin: {
 		minPermission: PERM_OWNER,
-		args: "@mention",
+		args: "<@mention|tag|snowflake>",
 		helpText: "Remove the Admin role from a user",
 		callback: commandSetAdmin
 	},
