@@ -231,7 +231,7 @@ function getPermissionLevelForMember(member) {
 	if (member.permissions.bitfield & 0x00000008)
 		return [PERM_OWNER, "Admin"];
 
-	const r = member.highestRole;
+	const r = member.roles.highest;
 	if (r) {
 		if (config.adminRoles.includes(r.name))
 			return [PERM_ADMIN, 'Admin'];
@@ -679,7 +679,7 @@ function commandPurge(message, member, cmd, args, guild, perm, permName, isDM) {
 		return message.reply("Please provide a number between 1 and 100 for the number of messages to delete");
 	deleteCount++; //remove the request to purge as well
 
-	message.channel.fetchMessages({ limit: deleteCount })
+	message.channel.messages.fetch({ limit: deleteCount })
 		.then(fetched => message.channel.bulkDelete(fetched)
 			.catch(error => message.reply(`Couldn't delete messages because of: ${error}`)))
 		.catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
@@ -1894,25 +1894,22 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 		case 'showmap': {
 			getForumGroups()
 				.then(forumGroups => {
-					let embed = {
-						title: 'Configured Group Maps',
-						fields: []
-					};
-
+					var fields = [];
 					Object.keys(forumIntegrationConfig).forEach(roleName => {
 						var groupMap = forumIntegrationConfig[roleName];
-						embed.fields.push({
+						fields.push({
 							name: roleName + (groupMap.permanent ? ' (permanent)' : ''),
 							value: groupMap.forumGroups.map(groupID => `${forumGroups[groupID]} (${groupID})`).join(', ')
 						});
-
-						if (embed.fields.length >= 25) {
-							sendReplyToMessageAuthor(message, member, guild, { embed: embed });
-							embed.fields = [];
+						if (fields.length >= 25) {
+							sendReplyToMessageAuthor(message, member, guild, { embed: { title : 'Configured Group Maps', fields: fields }});
+							fields = [];
 						}
 					});
 
-					sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+					if (fields.length > 0) {
+						sendReplyToMessageAuthor(message, member, guild, { embed: { title : 'Configured Group Maps', fields: fields }});
+					}
 				})
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
 			break;
@@ -1922,7 +1919,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 				title: '',
 				fields: [{
 					name: 'Discord Officer Roles',
-					value: guild.roles.array().filter(r => r.name.endsWith(config.discordOfficerSuffix)).map(r => r.name).sort().join("\n")
+					value: guild.roles.cache.array().filter(r => r.name.endsWith(config.discordOfficerSuffix)).map(r => r.name).sort().join("\n")
 				}]
 			};
 			sendReplyToMessageAuthor(message, member, guild, { embed: embed });
@@ -2717,7 +2714,7 @@ function forumSyncTimerCallback() {
 	lastDate = currentDate;
 	doForumSync(null, null, guild, PERM_NONE, false, doDaily);
 	if (doDaily)
-		guild.pruneMembers(14, 'Forum sync timer')
+		guild.members.prune({ days:14, reason:'Forum sync timer' })
 		.catch(error => { notifyRequestError(null, null, guild, error, false); });
 
 	//clearout expired login errors
