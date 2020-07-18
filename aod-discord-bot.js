@@ -1381,27 +1381,27 @@ function commandKick(message, member, cmd, args, guild, perm, permName, isDM) {
 
 //ban command processing
 function commandBan(message, member, cmd, args, guild, perm, permName, isDM) {
-	let toBan = getMemberFromMessageOrArgs(guild, message, args);
+	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
 	let tag;
-	if (toBan) {
-		if (!toBan.bannable)
-			return message.reply(`I cannot ban ${toBan.user.tag}.`);
-		var [memberPerm, memberPermName] = getPermissionLevelForMember(toBan);
+	if (targetMember) {
+		if (!targetMember.bannable)
+			return message.reply(`I cannot ban ${targetMember.user.tag}.`);
+		var [memberPerm, memberPermName] = getPermissionLevelForMember(targetMember);
 		if (perm <= memberPerm)
-			return message.reply(`You cannot ban ${toBan.user.tag}.`);
-		tag = toBan.user.tag;
+			return message.reply(`You cannot ban ${targetMember.user.tag}.`);
+		tag = targetMember.user.tag;
 	} else {
-		toBan = message.mentions.users.first();
-		if (!toBan)
+		targetMember = message.mentions.users.first();
+		if (!targetMember)
 			return message.reply("Please mention a valid member of this server");
-		tag = toBan.tag;
+		tag = targetMember.tag;
 	}
 
 	args.shift(); //trim mention
 	let reason = args.join(' ');
 	if (!reason || reason == '') reason = "No reason provided";
 
-	guild.ban(toBan)
+	targetMember.ban(targetMember)
 		.catch(error => message.reply(`Sorry ${message.author} I couldn't ban because of : ${error}`));
 	message.reply(`${tag} has been banned by ${message.author.tag} because: ${reason}`);
 }
@@ -2664,7 +2664,7 @@ function setRolesForMember(member, reason) {
 					return;
 				}
 			} else if (!existingRoles.length) {
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` to associate your Discord user to our fourms (https://www.clanaod.net).`).catch(() => {});
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` in a DM the to associate your Discord user to our fourms (https://www.clanaod.net). \`${config.prefix}help login\` can provide more details.`).catch(() => {});
 				return;
 			}
 
