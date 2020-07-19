@@ -18,6 +18,9 @@ var request = require('request');
 const Entities = require('html-entities').AllHtmlEntities;
 const entities = new Entities();
 
+const sprintf = require('sprintf-js').sprintf;
+//const vsprintf = require('sprintf-js').vsprintf;
+
 //include config
 var config = require('./aod-discord-bot.config.json');
 
@@ -551,7 +554,11 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 function commandPing(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (perm >= PERM_STAFF)
 		sendReplyToMessageAuthor(message, member, guild, "Ping?")
-		.then(m => { m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${Math.round(client.ws.ping)}ms`).catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); }); })
+		.then(m => {
+			let pingTime = sprintf('%.3f', client.ws.ping);
+			m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${pingTime}ms`)
+				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); }); 
+		})
 		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
 	else
 		sendReplyToMessageAuthor(message, member, guild, "Pong!")
@@ -1489,12 +1496,18 @@ function getForumUsersForGroups(groups) {
 				for (var i in rows) {
 					let discordid = rows[i].field20;
 					let discordtag = convertForumDiscordName(rows[i].field19);
-					let index = ((discordid && discordid != '') ? discordid : discordtag);
+					let index = discordtag;
+					let indexIsId = false;
+					if (discordid && discordid != '') {
+						index = discordid;
+						indexIsId = true;
+					}
 
 					if (usersByIDOrDiscriminator[index] !== undefined) {
 						console.log(`Found duplicate tag ${usersByIDOrDiscriminator[index].discordtag} for forum user ${rows[i].username} first seen for forum user ${usersByIDOrDiscriminator[index].name}`);
 					} else {
 						usersByIDOrDiscriminator[index] = {
+							indexIsId: indexIsId,
 							name: rows[i].username,
 							id: rows[i].userid,
 							division: rows[i].field13,
@@ -1574,6 +1587,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 		removes = 0,
 		renames = 0,
 		misses = 0,
+		disconnected = 0,
 		duplicates = 0;
 
 	let nickNameChanges = {};
@@ -1662,6 +1676,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 					if (forumUser === undefined) {
 						forumUser = usersByIDOrDiscriminator[roleMember.user.tag];
 						if (forumUser !== undefined) {
+							forumUser.indexIsId = true;
 							usersByIDOrDiscriminator[roleMember.user.id] = forumUser;
 							delete usersByIDOrDiscriminator[roleMember.user.tag];
 							setDiscordIDForForumUser(forumUser, roleMember);
@@ -1754,6 +1769,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 				//       otherwise, mark them as an error and move on
 				var toAdd = [];
 				var noAccount = [];
+				var leftServer = [];
 				for (var u in usersByIDOrDiscriminator) {
 					if (usersByIDOrDiscriminator.hasOwnProperty(u)) {
 						if (membersByID[u] === undefined) {
@@ -1800,8 +1816,14 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 									setDiscordTagForForumUser(forumUser, guildMember);
 							} else {
 								if (role.id !== guestRole.id) {
-									misses++;
-									noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
+									if (forumUser.indexIsId) {
+										disconnected++;
+										leftServer.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
+									}
+									else {
+										misses++;
+										noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
+									}
 								}
 							}
 						}
@@ -1828,6 +1850,15 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 							embed.fields.push({
 								name: `Members to add with no discord user (${noAccount.length})`,
 								value: truncateStr(noAccount.join(', '), 1024)
+							});
+					}if (leftServer.length) {
+						sendMessage = true;
+						fs.appendFileSync(config.syncLogFile, `\tMembers who have left server (${leftServer.length}):\n\t\t`, 'utf8');
+						fs.appendFileSync(config.syncLogFile, leftServer.join('\n\t\t') + "\n", 'utf8');
+						if (message)
+							embed.fields.push({
+								name: `Members to add with no discord user (${leftServer.length})`,
+								value: truncateStr(leftServer.join(', '), 1024)
 							});
 					}
 					if (toRemove.length) {
@@ -1870,12 +1901,13 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 
 	if (doDaily === true && misses > 0) {
 		if (sgtsChannel) {
-			sgtsChannel.send(`The forum sync process found ${misses} members with no discord account and ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
+			sgtsChannel.send(`The forum sync process found ${misses} members with no discord account, ${disconnected} members who have left the server, and ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
 		}
 	}
 
 	let hrEnd = process.hrtime(hrStart);
-	let msg = `Forum Sync Processing Time: ${hrEnd[0] + (Math.round(hrEnd[1]/1000000)/1000)}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account, ${duplicates} duplicate tags`;
+	let hrEndS = sprintf('%.3f', (hrEnd[0] + hrEnd[1]/1000000000));
+	let msg = `Forum Sync Processing Time: ${hrEndS}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account, ${duplicates} duplicate tags`;
 	if (message)
 		sendReplyToMessageAuthor(message, member, guild, msg).catch(() => {});
 	if (message || adds || removes || renames)
