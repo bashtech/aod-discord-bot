@@ -79,9 +79,7 @@ var undefined;
 var lastForumSync;
 
 //initialize client
-const client = new Discord.Client({
-	sync: true
-});
+const client = new Discord.Client({});
 
 
 /*************************************
@@ -461,7 +459,7 @@ function notifyRequestError(message, member, guild, error, showError) {
 	if (showError && message) {
 		if (member)
 			member.send('An error occurred while processing your request: ' + message.content + "\n" + error.toString())
-				.catch(console.error);
+			.catch(console.error);
 	}
 }
 
@@ -557,7 +555,7 @@ function commandPing(message, member, cmd, args, guild, perm, permName, isDM) {
 		.then(m => {
 			let pingTime = sprintf('%.3f', client.ws.ping);
 			m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${pingTime}ms`)
-				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); }); 
+				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
 		})
 		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
 	else
@@ -990,7 +988,7 @@ function commandMoveChannel(message, member, cmd, args, guild, perm, permName, i
 
 	var existingChannel = guild.channels.cache.find(c => { return c.name == channelName; });
 	if (existingChannel)
-		existingChannel.setPosition(cmd === 'up' ? -1 : 1, {relative: true, reason: `Requested by ${getNameFromMessage(message)}`})
+		existingChannel.setPosition(cmd === 'up' ? -1 : 1, { relative: true, reason: `Requested by ${getNameFromMessage(message)}` })
 		.then(() => { message.reply(`Channel ${channelName} moved`); })
 		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
 	else
@@ -1047,7 +1045,7 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 
 	try {
 		//create officers role
-		divisionRole = await guild.roles.create({data: { name: roleName, permissions: 0, mentionable: true }, reason:`Requested by ${getNameFromMessage(message)}`});
+		divisionRole = await guild.roles.create({ data: { name: roleName, permissions: 0, mentionable: true }, reason: `Requested by ${getNameFromMessage(message)}` });
 		const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
 		await divisionRole.setPosition(memberRole.position + 1).catch(e => { console.log(e); });
 
@@ -1144,7 +1142,7 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 		}
 		if (args.length > 0)
 			args.shift();
-		member = guild.members.cache.get(mention.id);
+		member = guild.members.fetch(mention.id);
 		rolesConfig = assignableRoles;
 		assign = true;
 	} else {
@@ -1775,10 +1773,10 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 						if (membersByID[u] === undefined) {
 							let forumUser = usersByIDOrDiscriminator[u];
 							let guildMember = guild.members.resolve(u);
-							if (guildMember === undefined) {
+							if (guildMember === undefined || guildMember === null) {
 								guildMember = guild.members.cache.find(m => { return m.user.tag === u; });
 								if (guildMember) {
-									delete usersByIDOrDiscriminator[u]; //don't add the ID to the list, we're done processing
+									//don't update the list, we're done processing and don't want to interrupt processing							
 									setDiscordIDForForumUser(forumUser, guildMember);
 								}
 							}
@@ -1819,8 +1817,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 									if (forumUser.indexIsId) {
 										disconnected++;
 										leftServer.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
-									}
-									else {
+									} else {
 										misses++;
 										noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
 									}
@@ -1851,7 +1848,8 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 								name: `Members to add with no discord user (${noAccount.length})`,
 								value: truncateStr(noAccount.join(', '), 1024)
 							});
-					}if (leftServer.length) {
+					}
+					if (leftServer.length) {
 						sendMessage = true;
 						fs.appendFileSync(config.syncLogFile, `\tMembers who have left server (${leftServer.length}):\n\t\t`, 'utf8');
 						fs.appendFileSync(config.syncLogFile, leftServer.join('\n\t\t') + "\n", 'utf8');
@@ -1906,8 +1904,8 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 	}
 
 	let hrEnd = process.hrtime(hrStart);
-	let hrEndS = sprintf('%.3f', (hrEnd[0] + hrEnd[1]/1000000000));
-	let msg = `Forum Sync Processing Time: ${hrEndS}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account, ${duplicates} duplicate tags`;
+	let hrEndS = sprintf('%.3f', (hrEnd[0] + hrEnd[1] / 1000000000));
+	let msg = `Forum Sync Processing Time: ${hrEndS}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account, ${disconnected} members who have left the server, ${duplicates} duplicate tags`;
 	if (message)
 		sendReplyToMessageAuthor(message, member, guild, msg).catch(() => {});
 	if (message || adds || removes || renames)
@@ -1934,13 +1932,13 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 							value: groupMap.forumGroups.map(groupID => `${forumGroups[groupID]} (${groupID})`).join(', ')
 						});
 						if (fields.length >= 25) {
-							sendReplyToMessageAuthor(message, member, guild, { embed: { title : 'Configured Group Maps', fields: fields }});
+							sendReplyToMessageAuthor(message, member, guild, { embed: { title: 'Configured Group Maps', fields: fields } });
 							fields = [];
 						}
 					});
 
 					if (fields.length > 0) {
-						sendReplyToMessageAuthor(message, member, guild, { embed: { title : 'Configured Group Maps', fields: fields }});
+						sendReplyToMessageAuthor(message, member, guild, { embed: { title: 'Configured Group Maps', fields: fields } });
 					}
 				})
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
@@ -2746,7 +2744,7 @@ function forumSyncTimerCallback() {
 	lastDate = currentDate;
 	doForumSync(null, null, guild, PERM_NONE, false, doDaily);
 	if (doDaily)
-		guild.members.prune({ days:14, reason:'Forum sync timer' })
+		guild.members.prune({ days: 14, reason: 'Forum sync timer' })
 		.catch(error => { notifyRequestError(null, null, guild, error, false); });
 
 	//clearout expired login errors
