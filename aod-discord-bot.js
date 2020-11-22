@@ -181,7 +181,7 @@ function getNameFromMessage(message) {
 		if (message.member)
 			return `${message.member.displayName} (${message.member.user.tag})`;
 		if (message.author)
-			return message.author.username;
+			return message.author.tag;
 	}
 	return "<unknown>";
 }
@@ -1030,13 +1030,14 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 	if (divisionName === undefined || divisionName == '')
 		return message.reply("A name must be provided");
 	let roleName = divisionName + ' ' + config.discordOfficerSuffix;
-	let simpleName = divisionName.toLowerCase().replace(/\s/g, '-');
+	let lcName = divisionName.toLowerCase();
+	let simpleName = lcName.replace(/\s/g, '-');
 	let divisionMembersChannel = simpleName + '-members';
 	let divisionOfficersChannel = simpleName + '-officers';
 	let divisionPublicChannel = simpleName + '-public';
 	let divisionMemberVoiceChannel = simpleName + '-member-voip';
 
-	var divisionCategory = guild.channels.cache.find(c => { return (c.name == divisionName && c.type == 'category'); });
+	var divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == 'category'); });
 	if (divisionCategory)
 		return message.reply("Division already exists.").catch(() => {});
 	var divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
@@ -1477,6 +1478,7 @@ function convertForumDiscordName(discordName) {
 //get forum users from forum groups
 function getForumUsersForGroups(groups) {
 	var promise = new Promise(function(resolve, reject) {
+		let usersByIDOrDiscriminator = {};
 		let db = connectToDB();
 		let groupStr = groups.join(',');
 		let groupRegex = groups.join('|');
@@ -1486,37 +1488,38 @@ function getForumUsersForGroups(groups) {
 			`WHERE (u.usergroupid IN (${groupStr}) OR u.membergroupids REGEXP '(^|,)(${groupRegex})(,|$)') ` +
 			`AND ((f.field19 IS NOT NULL AND f.field19 <> '') OR (f.field20 IS NOT NULL AND f.field20 <> '')) ` +
 			`ORDER BY f.field13,u.username`;
-		db.query(query, function(err, rows, fields) {
-			if (err)
-				return reject(err);
-			else {
-				let usersByIDOrDiscriminator = {};
-				for (var i in rows) {
-					let discordid = rows[i].field20;
-					let discordtag = convertForumDiscordName(rows[i].field19);
-					let index = discordtag;
-					let indexIsId = false;
-					if (discordid && discordid != '') {
-						index = discordid;
-						indexIsId = true;
-					}
-
-					if (usersByIDOrDiscriminator[index] !== undefined) {
-						console.log(`Found duplicate tag ${usersByIDOrDiscriminator[index].discordtag} for forum user ${rows[i].username} first seen for forum user ${usersByIDOrDiscriminator[index].name}`);
-					} else {
-						usersByIDOrDiscriminator[index] = {
-							indexIsId: indexIsId,
-							name: rows[i].username,
-							id: rows[i].userid,
-							division: rows[i].field13,
-							discordid: discordid,
-							discordtag: discordtag
-						};
-					}
+		let queryError = false;
+		db.query(query)
+			.on('error', function(err) { 
+				queryError = true;
+				reject(err); 
+			})
+			.on('result', function(row) {
+				let discordid = row.field20;
+				let discordtag = convertForumDiscordName(row.field19);
+				let index = discordtag;
+				let indexIsId = false;
+				if (discordid && discordid != '') {
+					index = discordid;
+					indexIsId = true;
 				}
-				return resolve(usersByIDOrDiscriminator);
-			}
-		});
+				if (usersByIDOrDiscriminator[index] !== undefined) {
+					console.log(`Found duplicate tag ${usersByIDOrDiscriminator[index].discordtag} for forum user ${row.username} first seen for forum user ${usersByIDOrDiscriminator[index].name}`);
+				} else {
+					usersByIDOrDiscriminator[index] = {
+						indexIsId: indexIsId,
+						name: row.username,
+						id: row.userid,
+						division: row.field13,
+						discordid: discordid,
+						discordtag: discordtag
+					};
+				}
+			})
+			.on('end', function(err) { 
+				if (!queryError)
+					resolve(usersByIDOrDiscriminator);
+			});
 	});
 	return promise;
 }
@@ -1577,6 +1580,8 @@ function setDiscordTagForForumUser(forumUser, guildMember) {
 //do forum sync with discord roles
 async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 	var hrStart = process.hrtime();
+	await guild.roles.fetch()
+		.catch(error => {console.log(error);});
 	const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
 	const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
 	const sgtsChannel = guild.channels.cache.find(c => { return c.name === 'aod-sergeants'; });
@@ -1608,6 +1613,8 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 		idle = 0,
 		dnd = 0,
 		total = 0;
+	await guild.members.fetch()
+		.catch(error => {console.log(error);});
 	guild.members.cache.forEach(function(m) {
 		switch (m.presence.status) {
 			case 'idle':
@@ -1683,10 +1690,8 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 
 					if (forumUser === undefined) {
 						if (role.id !== guestRole.id) {
-							if (role.id !== guestRole.id) {
-								removes++;
-								toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
-							}
+							removes++;
+							toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
 							if (!checkOnly) {
 								try {
 									await roleMember.roles.remove(role, reason);
@@ -1813,7 +1818,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 								if (forumUser.discordtag != guildMember.user.tag)
 									setDiscordTagForForumUser(forumUser, guildMember);
 							} else {
-								if (role.id !== guestRole.id) {
+								if (role.id === memberRole.id) {
 									if (forumUser.indexIsId) {
 										disconnected++;
 										leftServer.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
@@ -1999,7 +2004,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 
 			getForumGroups()
 				.then(forumGroups => {
-					var forumGroupId = parseInt(Object.keys(forumGroups).cache.find(k => {
+					var forumGroupId = parseInt(Object.keys(forumGroups).find(k => {
 						if (forumGroups[k] !== groupName)
 							return false;
 						return true;
@@ -2054,7 +2059,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 
 			getForumGroups()
 				.then(forumGroups => {
-					var forumGroupId = parseInt(Object.keys(forumGroups).cache.find(k => {
+					var forumGroupId = parseInt(Object.keys(forumGroups).find(k => {
 						if (forumGroups[k] !== groupName)
 							return false;
 						return true;
@@ -2114,7 +2119,7 @@ function commandRelay(message, member, cmd, args, guild, perm, permName, isDM) {
 		return;
 
 	sendMessageToChannel(channel, content)
-		.finally(() => { message.delete(); })
+		.finally(() => { if (!isDM) message.delete(); })
 		.catch(error => { notifyRequestError(message, member, guild, error, PERM_NONE); });
 }
 
@@ -2131,6 +2136,7 @@ function commandRelayDm(message, member, cmd, args, guild, perm, permName, isDM)
 		return;
 
 	sendMessageToMember(targetMember, content)
+		.finally(() => { if (!isDM) message.delete(); })
 		.catch(error => { notifyRequestError(message, targetMember, guild, error, PERM_NONE); });
 }
 
@@ -2577,10 +2583,11 @@ client.on("message", message => {
 			if (!guild)
 				return; //must have guild
 
-			member = guild.member(message.author);
+			member = guild.members.resolve(message.author.id);
 			if (!member)
 				return; //ignore messages from any real client that isn't in the guild
 
+			message.member = member;
 			isDM = true;
 			[perm, permName] = getPermissionLevelForMember(member);
 		}
@@ -2767,11 +2774,17 @@ client.on("messageDelete", (message) => {
 });
 
 //ready handler
-client.on("ready", () => {
-	console.log(`Bot has started, with ${client.users.cache.size} users, in ${client.channels.cache.size} channels of ${client.guilds.cache.size} guilds.`);
-
+client.on("ready", async function () {
 	//remove any empty temp channels
 	const guild = client.guilds.resolve(config.guildId);
+	console.log(`Bot has started, with ${client.users.cache.size} users, in ${client.channels.cache.size} channels of ${client.guilds.cache.size} guilds.`);
+	
+	await guild.members.fetch()
+		.catch(error => {console.log(error);});
+	await guild.roles.fetch()
+		.catch(error => {console.log(error);});
+	console.log(`Member fetch complete`);
+	
 	const tempChannelCategory = guild.channels.cache.find(c => { return c.name === config.tempChannelCategory; });
 	if (tempChannelCategory && tempChannelCategory.children && tempChannelCategory.children.size) {
 		tempChannelCategory.children.forEach(function(c) {
