@@ -422,8 +422,8 @@ var commands;
 
 //params parsing
 var paramsRegEx = /([^\s"'\u201C]+)|"(((\\")|([^"]))*)"|'(((\\')|([^']))*)'|\u201C([^\u201D]*)\u201D/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
-var paramsReplaceEscapedSingleRegEx = /\\'/g;
-var paramsReplaceExcapedDoubleRegEx = /\\"/g;
+const paramsReplaceEscapedSingleRegEx = /\\'/g;
+const paramsReplaceExcapedDoubleRegEx = /\\"/g;
 
 function getParams(string) {
 	paramsRegEx.lastIndex = 0;
@@ -492,7 +492,7 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 		filter = args.shift();
 	}
 	var embed = {
-		title: `User Level: **${permName}** Commands`,
+		title: `Available Commands (User Level: **${permName}**)`,
 		description: detail ? "" : "Use !help <cmd> to see the details of each command.\n\n",
 		fields: [],
 		footer: { text: footer }
@@ -562,6 +562,49 @@ function commandPing(message, member, cmd, args, guild, perm, permName, isDM) {
 		sendReplyToMessageAuthor(message, member, guild, "Pong!")
 		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
 }
+
+//roll command processing
+var diceRegEx = /^([0-9]+)?[dD]([0-9]+)$/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
+function commandRoll(message, member, cmd, args, guild, perm, permName, isDM) {
+	let num = 1;
+	let size = 6;
+	if (args.length > 0) {
+		diceRegEx.lastIndex = 0;
+		let sides = args.shift();
+		sides.replace(/\s/g, '');
+		let match = diceRegEx.exec(sides);
+		if (match != null) {
+			let param = parseInt(match[1]);
+			if (param >= 1 && param <= 20)
+				num = param;
+			param = parseInt(match[2]);
+			if (param >= 1 && param <= 100)
+				size = param;
+		}
+	}
+	let reply = `${num}d${size} result: `;
+	let total = 0;
+	for (let i = 0; i < num; i++) {
+		let result = Math.floor(Math.random() * size) + 1;
+		total += result;
+		if (i > 0)
+			reply += ', ';
+		reply += result;
+	}
+	if (num > 0)
+		reply += ` (total: ${total})`;
+	message.reply(reply);
+}
+
+//flip command processing
+function commandFlip(message, member, cmd, args, guild, perm, permName, isDM) {
+	let result = Math.floor(Math.random() * 2);
+	if (result > 0)
+		message.reply(`Result: heads`);
+	else
+		message.reply(`Result: tails`);
+}
+
 
 //login command processing
 var loginErrorsByUserID = [];
@@ -1460,7 +1503,7 @@ function getForumGroups() {
 	return promise;
 }
 
-var unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
+const unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
 function convertForumDiscordName(discordName) {
 	discordName = discordName.replace(unicodeRegEx, function() {
 		//arguments[0] = full unicode
@@ -1608,7 +1651,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 		console.error(e);
 	}
 
-	var online = 0,
+	let online = 0,
 		offline = 0,
 		idle = 0,
 		dnd = 0,
@@ -2252,13 +2295,16 @@ commands = {
 		args: array of "String" or "String",
 		helpText: array of "String" or "String",
 		callback: function(message, cmd, args, guild, perm, permName, isDM)
+		dmOnly: optional boolean (default false)
+		doLog: optional boolean (default true)
 	},
 	*/
 	help: {
 		minPermission: PERM_NONE,
 		args: "[<command>]",
 		helpText: "Displays the help menu. If <command> is present, only that command will be shown.",
-		callback: commandHelp
+		callback: commandHelp,
+		doLog: false
 	},
 	login: {
 		minPermission: PERM_NONE,
@@ -2271,7 +2317,22 @@ commands = {
 		minPermission: PERM_GUEST,
 		args: "",
 		helpText: "Returns a DM letting you know the bot is alive. Staff and Moderators will get an estimate of network latency.",
-		callback: commandPing
+		callback: commandPing,
+		doLog: false
+	},
+	roll: {
+		minPermission: PERM_GUEST,
+		args: "[<count>d<size>]",
+		helpText: "Roll a dice. A six sided dice is used by default. An optional number of dice from 1 to 20 and an optional number of sides from 1 to 100 may be provided.",
+		callback: commandRoll,
+		doLog: false
+	},
+	flip: {
+		minPermission: PERM_GUEST,
+		args: "",
+		helpText: "Flip a coin.",
+		callback: commandFlip,
+		doLog: false
 	},
 	sub: {
 		minPermission: PERM_GUEST,
@@ -2539,10 +2600,13 @@ function processCommand(message, member, cmd, arg_string, guild, perm, permName,
 	if (commandObj !== undefined) {
 		if (commandObj.minPermission <= perm) {
 			var args = getParams(arg_string);
-			if (cmd == 'login')
-				console.log(`${getNameFromMessage(message)} executed: ${cmd}`);
-			else if (cmd !== 'help' && cmd !== 'ping')
-				console.log(`${getNameFromMessage(message)} executed: ${cmd} "${args.join('" "')}"`);
+			if (commandObj.doLog !== false)
+			{
+				if (cmd == 'login')
+					console.log(`${getNameFromMessage(message)} executed: ${cmd}`);
+				else
+					console.log(`${getNameFromMessage(message)} executed: ${cmd} "${args.join('" "')}"`);
+			}
 			//if (commandObj.dmOnly === true && !isDM)
 			//do nothing for now...
 			return commandObj.callback(message, member, cmd, args, guild, perm, permName, isDM);
