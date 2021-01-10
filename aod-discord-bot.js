@@ -6,7 +6,7 @@
  * Author: Adam Schultz <archangel122184@gmail.com>
  */
 
-/*jshint esversion: 8 */
+/* jshint esversion: 8 */
 
 //include discord.js
 const Discord = require('discord.js');
@@ -1533,9 +1533,9 @@ function getForumUsersForGroups(groups) {
 			`ORDER BY f.field13,u.username`;
 		let queryError = false;
 		db.query(query)
-			.on('error', function(err) { 
+			.on('error', function(err) {
 				queryError = true;
-				reject(err); 
+				reject(err);
 			})
 			.on('result', function(row) {
 				let discordid = row.field20;
@@ -1559,7 +1559,7 @@ function getForumUsersForGroups(groups) {
 					};
 				}
 			})
-			.on('end', function(err) { 
+			.on('end', function(err) {
 				if (!queryError)
 					resolve(usersByIDOrDiscriminator);
 			});
@@ -1624,7 +1624,7 @@ function setDiscordTagForForumUser(forumUser, guildMember) {
 async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 	var hrStart = process.hrtime();
 	await guild.roles.fetch()
-		.catch(error => {console.log(error);});
+		.catch(error => { console.log(error); });
 	const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
 	const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
 	const sgtsChannel = guild.channels.cache.find(c => { return c.name === 'aod-sergeants'; });
@@ -1657,7 +1657,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 		dnd = 0,
 		total = 0;
 	await guild.members.fetch()
-		.catch(error => {console.log(error);});
+		.catch(error => { console.log(error); });
 	guild.members.cache.forEach(function(m) {
 		switch (m.presence.status) {
 			case 'idle':
@@ -2600,8 +2600,7 @@ function processCommand(message, member, cmd, arg_string, guild, perm, permName,
 	if (commandObj !== undefined) {
 		if (commandObj.minPermission <= perm) {
 			var args = getParams(arg_string);
-			if (commandObj.doLog !== false)
-			{
+			if (commandObj.doLog !== false) {
 				if (cmd == 'login')
 					console.log(`${getNameFromMessage(message)} executed: ${cmd}`);
 				else
@@ -2838,17 +2837,17 @@ client.on("messageDelete", (message) => {
 });
 
 //ready handler
-client.on("ready", async function () {
+client.on("ready", async function() {
 	//remove any empty temp channels
 	const guild = client.guilds.resolve(config.guildId);
 	console.log(`Bot has started, with ${client.users.cache.size} users, in ${client.channels.cache.size} channels of ${client.guilds.cache.size} guilds.`);
-	
+
 	await guild.members.fetch()
-		.catch(error => {console.log(error);});
+		.catch(error => { console.log(error); });
 	await guild.roles.fetch()
-		.catch(error => {console.log(error);});
+		.catch(error => { console.log(error); });
 	console.log(`Member fetch complete`);
-	
+
 	const tempChannelCategory = guild.channels.cache.find(c => { return c.name === config.tempChannelCategory; });
 	if (tempChannelCategory && tempChannelCategory.children && tempChannelCategory.children.size) {
 		tempChannelCategory.children.forEach(function(c) {
