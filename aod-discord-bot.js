@@ -1620,6 +1620,14 @@ function setDiscordTagForForumUser(forumUser, guildMember) {
 	forumUser.discordtag = guildMember.user.tag;
 }
 
+function matchGuildRoleName(guildRole) {
+	return guildRole.name === this;
+}
+
+function matchGuildMemberTag(guildMember) {
+	return guildMember.user.tag === this;
+}
+
 //do forum sync with discord roles
 async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 	var hrStart = process.hrtime();
@@ -1688,7 +1696,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 			var role;
 			if (groupMap.roleID === undefined) {
 				//make sure we actually have the roleID in our structure
-				role = guild.roles.cache.find(r => { return r.name == roleName; });
+				role = guild.roles.cache.find(matchGuildRoleName, roleName);
 				if (role)
 					groupMap.roleID = role.id;
 			} else
@@ -1822,7 +1830,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 							let forumUser = usersByIDOrDiscriminator[u];
 							let guildMember = guild.members.resolve(u);
 							if (guildMember === undefined || guildMember === null) {
-								guildMember = guild.members.cache.find(m => { return m.user.tag === u; });
+								guildMember = guild.members.cache.find(matchGuildMemberTag, u);
 								if (guildMember) {
 									//don't update the list, we're done processing and don't want to interrupt processing							
 									setDiscordIDForForumUser(forumUser, guildMember);
@@ -2746,7 +2754,7 @@ function setRolesForMember(member, reason) {
 			for (var i in data.groups) {
 				var group = data.groups[i];
 				if (rolesByGroup[group] !== undefined) {
-					Object.keys(rolesByGroup[group]).forEach(roleName => {
+					for (const roleName of Object.keys(rolesByGroup[group])) {
 						let role = rolesByGroup[group][roleName];
 						if (role) {
 							if (!member.roles.cache.get(role.id))
@@ -2754,7 +2762,7 @@ function setRolesForMember(member, reason) {
 							else
 								existingRoles.push(role);
 						}
-					});
+					}
 				}
 			}
 			if (rolesToAdd.length) {
