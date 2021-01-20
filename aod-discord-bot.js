@@ -48,20 +48,13 @@ try {
 	savedTimers = [];
 }
 
-//include subscribableRoles
-var subscribableRoles;
+//include managedRoles
+var managedRoles;
 try {
-	subscribableRoles = require(config.subscribableRoles);
+	managedRoles = require(config.managedRoles);
 } catch (error) {
 	console.log(error);
-	subscribableRoles = { roles: {}, menuOrder: [] };
-}
-var assignableRoles;
-try {
-	assignableRoles = require(config.assignableRoles);
-} catch (error) {
-	console.log(error);
-	assignableRoles = { roles: {}, menuOrder: [] };
+	managedRoles = { subscribable: {}, assignable: {}, menuOrder: [] };
 }
 
 
@@ -491,7 +484,7 @@ function notifyRequestError(message, member, guild, error, showError) {
 
 function sendMessageToMember(member, data) {
 	if (member)
-		return member.send(data);
+		return member.send(data).catch(() => {});
 	var promise = new Promise(function(resolve, reject) {
 		reject();
 	});
@@ -537,11 +530,9 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 					name: `${filter} ${commandArgsText}`,
 					value: commandHelpText
 				});
-			sendReplyToMessageAuthor(message, member, guild, { embed: embed })
-				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+			sendReplyToMessageAuthor(message, member, guild, { embed: embed });
 		} else {
-			sendReplyToMessageAuthor(message, member, guild, "Unknown command.")
-				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+			sendReplyToMessageAuthor(message, member, guild, "Unknown command.");
 		}
 	} else {
 		let embed = {
@@ -573,8 +564,7 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 					if (embed.description.length + line.length < 2048) {
 						embed.description = embed.description + line;
 					} else {
-						sendReplyToMessageAuthor(message, member, guild, { embed: embed })
-							.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+						sendReplyToMessageAuthor(message, member, guild, { embed: embed });
 						embed = {
 							title: `Continued...`,
 							description: "",
@@ -586,8 +576,7 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 			}
 		}
 		if (embed.description.length)
-			sendReplyToMessageAuthor(message, member, guild, { embed: embed })
-			.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+			sendReplyToMessageAuthor(message, member, guild, { embed: embed });
 	}
 }
 
@@ -600,10 +589,10 @@ function commandPing(message, member, cmd, args, guild, perm, permName, isDM) {
 			m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${pingTime}ms`)
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
 		})
-		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+		.catch(console.error);
 	else
 		sendReplyToMessageAuthor(message, member, guild, "Pong!")
-		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+		.catch(console.error);
 }
 
 //roll command processing
@@ -654,11 +643,11 @@ var loginErrorsByUserID = [];
 async function commandLogin(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (!isDM) {
 		message.delete();
-		sendMessageToMember(member, `***WARNING:*** You have entered your credentials into a public channel. Your password may be compromised. Please change your password immediately.`).catch(() => {});
+		sendMessageToMember(member, `***WARNING:*** You have entered your credentials into a public channel. Your password may be compromised. Please change your password immediately.`);
 	}
 
 	if (args.length < 2)
-		return sendMessageToMember(member, "Username and Password must be provided.").catch(() => {});
+		return sendMessageToMember(member, "Username and Password must be provided.");
 
 	var username = args.shift();
 	var password = args.shift();
@@ -672,7 +661,7 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 				loginError.epochMs = currEpochMs;
 				let minutes = Math.round(config.forumLoginErrorTimeoutMs / 60000);
 				console.log(`${member.user.tag} login failed for ${username} (too many attempts)`);
-				return sendMessageToMember(member, `You have too many failed login attempts. Please wait ${minutes} minutes and try again.`).catch(() => {});
+				return sendMessageToMember(member, `You have too many failed login attempts. Please wait ${minutes} minutes and try again.`);
 			}
 		} else {
 			//console.log(`deleting error for ${member.user.tag}`);
@@ -718,7 +707,7 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 						query2 = `UPDATE ${config.mysql.prefix}userfield SET field19=${tag},field20=${discordId} WHERE userid=${data.userid}`;
 						db.query(query2, function(err, rows2, fields) {
 							if (err) {
-								sendMessageToMember(member, `Successfully logged in as ${data.username} (${data.userid}), but there was an error updating your user infomation.`).catch(() => {});
+								sendMessageToMember(member, `Successfully logged in as ${data.username} (${data.userid}), but there was an error updating your user infomation.`);
 								console.log(err);
 								return reject(err);
 							}
@@ -741,7 +730,7 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 				loginErrorsByUserID[member.user.id].count++;
 
 				console.log(`${member.user.tag} login failed for ${username} (count: ${loginErrorsByUserID[member.user.id].count})`);
-				sendMessageToMember(member, `Login failed for ${username}.`).catch(() => {});
+				sendMessageToMember(member, `Login failed for ${username}.`);
 			}
 			return resolve();
 		});
@@ -1218,22 +1207,26 @@ async function commandRemDivision(message, member, cmd, args, guild, perm, permN
 	}
 }
 
+function escapeNameCharacter(ch) {
+	return ('\\' + ch);
+}
+
+function escapeNameForOutput(name) {
+	return name.replace(/[*_]/g, escapeNameCharacter);
+}
+
 //sub/unsub/list command processing
 function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
-	let rolesConfig;
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
 	let assign = false;
 	if (targetMember) {
-		if (perm < PERM_MOD) {
+		if (perm < PERM_MOD)
 			return message.reply("You don't have permissions assign roles.");
-		}
 		if (args.length > 0)
 			args.shift();
-		member = targetMember;
-		rolesConfig = assignableRoles;
 		assign = true;
 	} else {
-		rolesConfig = subscribableRoles;
+		targetMember = member;
 	}
 
 	switch (cmd) {
@@ -1242,75 +1235,150 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 			if (args.length <= 0)
 				return message.reply('Role must be provided');
 			let roleName = args.join(' ');
-			let config = rolesConfig.roles[roleName];
+			let rolesConfig;
+			let otherRolesConfig;
+			if (assign) {
+				rolesConfig = managedRoles.assignable;
+				otherRolesConfig = managedRoles.subscribable;
+			} else {
+				rolesConfig = managedRoles.subscribable;
+				otherRolesConfig = managedRoles.assignable;
+			}
+
+			let config = rolesConfig[roleName];
+			if (!config && assign && cmd === 'unsub')
+				config = otherRolesConfig[roleName];
 			if (!config) {
 				let menuOrder = parseInt(roleName);
-				if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= rolesConfig.menuOrder.length) {
-					roleName = rolesConfig.menuOrder[menuOrder - 1];
-					config = rolesConfig.roles[roleName];
+				if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= managedRoles.menuOrder.length) {
+					roleName = managedRoles.menuOrder[menuOrder - 1];
+					config = rolesConfig[roleName];
+					if (!config && assign && cmd === 'unsub')
+						config = otherRolesConfig[roleName];
 				}
 			}
-			if (config === undefined) {
+			if (!config) {
 				if (assign)
 					return message.reply(`Role ${roleName} is not assignable`);
 				else
 					return message.reply(`Role ${roleName} is not subscribable`);
 			}
-			return addRemoveRole(message, guild, cmd === 'sub', config.roleID, true, member);
+			return addRemoveRole(message, guild, cmd === 'sub', config.roleID, true, targetMember);
 		}
 		case 'list': {
-			let subedRoles = [];
-			let availRoles = [];
-			for (let roleName of new Set(rolesConfig.menuOrder)) {
-				let config = rolesConfig.roles[roleName];
-				let role = guild.roles.resolve(rolesConfig.roles[roleName].roleID);
-				let size = (role ? role.members.size : 0);
-				if (config) {
-					if (member.roles.cache.get(rolesConfig.roles[roleName].roleID))
-						subedRoles.push(`[${config.menuOrder}] ${roleName} (${size} members)`);
-					else
-						availRoles.push(`[${config.menuOrder}] ${roleName}`);
+			if (args.length) {
+				if (perm < PERM_MOD) {
+					return message.reply("You don't have permissions to show role members.");
 				}
-			}
-			if (assign)
-				return message.reply({
-					embed: {
-						title: `Assigned Roles for ${member.nickname}`,
-						fields: [
-							{ name: 'Assigned Roles', value: subedRoles.length ? subedRoles.join("\n") : '*No Roles Assigned*' },
-							{ name: 'Available Roles', value: availRoles.length ? availRoles.join("\n") : '*No Roles Available*' },
-						]
+				let roleName = args.join(' ');
+				let menuOrder = parseInt(roleName);
+				if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= managedRoles.menuOrder.length) {
+					roleName = managedRoles.menuOrder[menuOrder - 1];
+				}
+				let role = guild.roles.cache.find(r => { return r.name == roleName; });
+				if (role) {
+					if (role.members.size > 256) {
+						return message.reply(`Role ${roleName} has more than 256 members.`);
 					}
-				});
-			else
-				return message.reply({
-					embed: {
-						title: 'Role Subscriptions',
+					let embed = {
+						title: `Members of ${roleName} (${role.members.size})`,
+						description: ''
+					};
+					for (let roleMember of role.members.sort((a, b) => a.displayName.localeCompare(b.displayName)).values()) {
+						let displayName = escapeNameForOutput(`${roleMember.displayName} (${roleMember.user.tag})`);
+						let line = `${displayName}\n`;
+						if (embed.description.length + line.length < 2048) {
+							embed.description = embed.description + line;
+						} else {
+							sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+							embed = {
+								title: `Continued...`,
+								description: "",
+							};
+						}
+					}
+					if (embed.description.length)
+						return sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+				} else {
+					return message.reply(`Role ${roleName} does not exist`);
+				}
+			} else {
+				let subedRoles = [];
+				let assignedRoles = [];
+				let availRoles = [];
+				for (let index = 0; index < managedRoles.menuOrder.length; index++) {
+					let roleName = managedRoles.menuOrder[index];
+					let subConfig;
+					let assignConfig;
+					if ((subConfig = managedRoles.subscribable[roleName])) {
+						if (targetMember.roles.cache.get(subConfig.roleID)) {
+							let role = guild.roles.resolve(subConfig.roleID);
+							let size = (role ? role.members.size : 0);
+							subedRoles.push(`[${subConfig.menuOrder}] ${roleName} (${size} members)`);
+						} else if (!assign) {
+							availRoles.push(`[${subConfig.menuOrder}] ${roleName}`);
+						}
+					} else if (assign && (assignConfig = managedRoles.assignable[roleName])) {
+						if (targetMember.roles.cache.get(assignConfig.roleID)) {
+							let role = guild.roles.resolve(assignConfig.roleID);
+							let size = (role ? role.members.size : 0);
+							assignedRoles.push(`[${assignConfig.menuOrder}] ${roleName} (${size} members)`);
+						} else {
+							availRoles.push(`[${assignConfig.menuOrder}] ${roleName}`);
+						}
+					}
+				}
+				if (assign) {
+					let displayName = escapeNameForOutput(targetMember.displayName);
+					let embed = {
+						title: `Roles for ${displayName}`,
 						fields: [
 							{ name: 'Subscribed Roles', value: subedRoles.length ? subedRoles.join("\n") : '*No Roles Subscribed*' },
+							{ name: 'Assigned Roles', value: assignedRoles.length ? assignedRoles.join("\n") : '*No Roles Assigned*' },
 							{ name: 'Available Roles', value: availRoles.length ? availRoles.join("\n") : '*No Roles Available*' },
 						]
-					}
-				});
+					};
+					return sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+				} else {
+					return sendReplyToMessageAuthor(message, member, guild, {
+						embed: {
+							title: 'Role Subscriptions',
+							fields: [
+								{ name: 'Subscribed Roles', value: subedRoles.length ? subedRoles.join("\n") : '*No Roles Subscribed*' },
+								{ name: 'Available Roles', value: availRoles.length ? availRoles.join("\n") : '*No Roles Available*' },
+							]
+						}
+					});
+				}
+			}
 		}
 	}
 }
 
-function saveRolesConfigFile(rolesConfig, rolesConfigFile) {
+function saveRolesConfigFile() {
 	let roles = [];
-	for (let roleName in rolesConfig.roles) {
-		if (rolesConfig.roles.hasOwnProperty(roleName)) {
+	for (let roleName in managedRoles.subscribable) {
+		if (managedRoles.subscribable.hasOwnProperty(roleName)) {
 			roles.push(roleName);
+		}
+	}
+	for (let roleName in managedRoles.assignable) {
+		if (managedRoles.assignable.hasOwnProperty(roleName)) {
+			if (!roles.includes(roleName))
+				roles.push(roleName);
 		}
 	}
 	roles.sort();
 	let menuOrder = 1;
 	for (let roleName of roles) {
-		rolesConfig.roles[roleName].menuOrder = menuOrder;
+		if (managedRoles.subscribable[roleName] !== undefined)
+			managedRoles.subscribable[roleName].menuOrder = menuOrder;
+		if (managedRoles.assignable[roleName] !== undefined)
+			managedRoles.assignable[roleName].menuOrder = menuOrder;
 		menuOrder++;
 	}
-	rolesConfig.menuOrder = roles;
-	fs.writeFileSync(rolesConfigFile, JSON.stringify(rolesConfig), 'utf8');
+	managedRoles.menuOrder = roles;
+	fs.writeFileSync(config.managedRoles, JSON.stringify(managedRoles), 'utf8');
 }
 
 //subrole command processing
@@ -1323,18 +1391,15 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 		case 'adda':
 		case 'add': {
 			let rolesConfig;
-			let rolesConfigFile;
 			let otherRolesConfig;
 			let commonString;
 			if (subcmd === 'adda') {
-				rolesConfig = assignableRoles;
-				rolesConfigFile = config.assignableRoles;
-				otherRolesConfig = subscribableRoles;
+				rolesConfig = managedRoles.assignable;
+				otherRolesConfig = managedRoles.subscribable;
 				commonString = 'assignable';
 			} else {
-				rolesConfig = subscribableRoles;
-				rolesConfigFile = config.subscribableRoles;
-				otherRolesConfig = assignableRoles;
+				rolesConfig = managedRoles.subscribable;
+				otherRolesConfig = managedRoles.assignable;
 				commonString = 'subscribable';
 			}
 
@@ -1346,39 +1411,36 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			if (!role)
 				return message.reply(`Role ${roleName} not found`);
 
-			if (rolesConfig.roles[roleName] === undefined) {
-				rolesConfig.roles[roleName] = {
+			if (rolesConfig[roleName] === undefined) {
+				rolesConfig[roleName] = {
 					roleID: role.id
 				};
 				//sync the created flag
-				if (otherRolesConfig.roles[roleName] !== undefined && otherRolesConfig.roles[roleName].created === true) {
-					rolesConfig.roles[roleName].created = true;
+				if (otherRolesConfig[roleName] !== undefined && otherRolesConfig[roleName].created === true) {
+					rolesConfig[roleName].created = true;
 				}
 			} else {
-				if (rolesConfig.roles[roleName].roleID !== role.id)
+				if (rolesConfig[roleName].roleID !== role.id)
 					return message.reply(`Role ${roleName} is already managed, but ID is different`);
 				else
 					return message.reply(`Role ${roleName} is already managed`);
 			}
 
-			saveRolesConfigFile(rolesConfig, rolesConfigFile);
+			saveRolesConfigFile();
 			return message.reply(`Role ${roleName} added to ${commonString} roles`);
 		}
 		case 'rema':
 		case 'rem': {
 			let rolesConfig;
-			let rolesConfigFile;
 			let otherRolesConfig;
 			let commonString;
 			if (subcmd === 'rema') {
-				rolesConfig = assignableRoles;
-				rolesConfigFile = config.assignableRoles;
-				otherRolesConfig = subscribableRoles;
+				rolesConfig = managedRoles.assignable;
+				otherRolesConfig = managedRoles.subscribable;
 				commonString = 'assignable';
 			} else {
-				rolesConfig = subscribableRoles;
-				rolesConfigFile = config.subscribableRoles;
-				otherRolesConfig = assignableRoles;
+				rolesConfig = managedRoles.subscribable;
+				otherRolesConfig = managedRoles.assignable;
 				commonString = 'subscribable';
 			}
 
@@ -1386,33 +1448,30 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 				return message.reply('Role name must be provided');
 
 			let roleName = args.join(' ');
-			if (rolesConfig.roles[roleName] === undefined) {
+			if (rolesConfig[roleName] === undefined) {
 				return message.reply(`Role ${roleName} is not managed`);
 			} else {
-				let deleteRole = (rolesConfig.roles[roleName].created && otherRolesConfig.roles[roleName] === undefined);
-				let role = guild.roles.resolve(rolesConfig.roles[roleName].roleID);
-				delete rolesConfig.roles[roleName];
+				let deleteRole = (rolesConfig[roleName].created && otherRolesConfig[roleName] === undefined);
+				let role = guild.roles.resolve(rolesConfig[roleName].roleID);
+				delete rolesConfig[roleName];
 				if (deleteRole && role)
 					await role.delete(`Requested by ${getNameFromMessage(message)}`);
 			}
 
-			saveRolesConfigFile(rolesConfig, rolesConfigFile);
+			saveRolesConfigFile();
 			return message.reply(`Role ${roleName} removed from ${commonString} roles`);
 		}
 		case 'createa':
 		case 'create': {
 			let rolesConfig;
-			let rolesConfigFile;
 			let addCmd;
 			let commonString;
 			if (subcmd === 'createa') {
-				rolesConfig = assignableRoles;
-				rolesConfigFile = config.assignableRoles;
+				rolesConfig = managedRoles.assignable;
 				addCmd = 'adda';
 				commonString = 'assignable';
 			} else {
-				rolesConfig = subscribableRoles;
-				rolesConfigFile = config.subscribableRoles;
+				rolesConfig = managedRoles.subscribable;
 				addCmd = 'add';
 				commonString = 'subscribable';
 			}
@@ -1423,89 +1482,94 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			let roleName = args.join(' ');
 			const role = guild.roles.cache.find(r => { return r.name == roleName; });
 			if (role)
-				return message.reply(`Role ${roleName} already exists. Use \`${config.prefix}${cmd} ${addCmd}\` to add it to the managed roles.`);
+				return message.reply(`Role ${roleName} already exists. Use \`${config.prefix}${cmd} ${addCmd} ${roleName}\` to add it to the managed roles.`);
 
-			let newRole = await guild.roles.create({ data: { name: roleName, permissions: 0, mentionable: true }, reason: `Requested by ${getNameFromMessage(message)}` });
+			let newRole;
+			try {
+				newRole = await guild.roles.create({ data: { name: roleName, permissions: 0, mentionable: true }, reason: `Requested by ${getNameFromMessage(message)}` });
+			} catch (error) {
+				return notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+			}
+			roleName = newRole.name; //in case discord alters
 			//FIXME: do we need to set the position?
 
-			if (rolesConfig.roles[roleName] === undefined) {
-				rolesConfig.roles[roleName] = {
+			console.log(rolesConfig);
+			if (rolesConfig[roleName] === undefined) {
+				rolesConfig[roleName] = {
 					roleID: newRole.id,
 					created: true
 				};
 			} else {
-				if (rolesConfig.roles[roleName].roleID !== newRole.id)
+				if (rolesConfig[roleName].roleID !== newRole.id)
 					return message.reply(`Role ${roleName} already managed, but ID is different`);
 				else
 					return message.reply(`Role ${roleName} already managed`);
 			}
 
-			saveRolesConfigFile(rolesConfig, rolesConfigFile);
+			saveRolesConfigFile();
 			return message.reply(`Role ${roleName} created and added to ${commonString} roles`);
 		}
 		case 'list': {
 			let subRoles = [];
 			let assignRoles = [];
-			for (let roleName of new Set(subscribableRoles.menuOrder)) {
-				let config = subscribableRoles.roles[roleName];
+			for (let roleName of new Set(managedRoles.menuOrder)) {
+				let config = managedRoles.subscribable[roleName];
 				if (config) {
-					let role = guild.roles.resolve(subscribableRoles.roles[roleName].roleID);
+					let role = guild.roles.resolve(config.roleID);
 					let size = (role ? role.members.size : 0);
-					subRoles.push(`${roleName} (${size} members)`);
+					let createdFlag = (config.created === true ? '*' : '');
+					subRoles.push(`${roleName}${createdFlag} (${size} members)`);
 				}
-			}
-			for (let roleName of new Set(assignableRoles.menuOrder)) {
-				let config = assignableRoles.roles[roleName];
+				config = managedRoles.assignable[roleName];
 				if (config) {
-					let role = guild.roles.resolve(assignableRoles.roles[roleName].roleID);
+					let role = guild.roles.resolve(config.roleID);
 					let size = (role ? role.members.size : 0);
-					assignRoles.push(`${roleName} (${size} members)`);
+					let createdFlag = (config.created === true ? '*' : '');
+					assignRoles.push(`${roleName}${createdFlag} (${size} members)`);
 				}
 			}
 			subRoles.sort();
 			assignRoles.sort();
-			return message.reply({
+			return sendReplyToMessageAuthor(message, member, guild, {
 				embed: {
 					fields: [
 						{ name: "Subscribable Roles", value: subRoles.length ? subRoles.join("\n") : '*No roles configuerd*' },
 						{ name: "Assignable Roles", value: assignRoles.length ? assignRoles.join("\n") : '*No roles configuerd*' }
-					]
+					],
+					footer: { text: '* indicates roles that would be deleted upon removal' }
 				}
 			});
 		}
 		case 'prune': {
 			let subRoles = [];
 			let assignRoles = [];
-			for (let roleName in subscribableRoles.roles) {
-				if (subscribableRoles.roles.hasOwnProperty(roleName)) {
-					let role = guild.roles.resolve(subscribableRoles.roles[roleName].roleID);
+			for (let roleName of new Set(managedRoles.menuOrder)) {
+				if (managedRoles.subscribable[roleName]) {
+					let role = guild.roles.resolve(managedRoles.subscribable[roleName].roleID);
 					if (!role) {
-						delete subscribableRoles.roles[roleName];
+						delete managedRoles.subscribable[roleName];
 						subRoles.push(roleName);
 					}
 				}
-			}
-			for (let roleName in assignableRoles.roles) {
-				if (assignableRoles.roles.hasOwnProperty(roleName)) {
-					let role = guild.roles.resolve(assignableRoles.roles[roleName].roleID);
+				if (managedRoles.assignable[roleName]) {
+					let role = guild.roles.resolve(managedRoles.assignable[roleName].roleID);
 					if (!role) {
-						delete assignableRoles.roles[roleName];
+						delete managedRoles.assignable[roleName];
 						assignRoles.push(roleName);
 					}
 				}
 			}
+
 			subRoles.sort();
 			assignRoles.sort();
-			if (subRoles.length)
-				saveRolesConfigFile(subscribableRoles, config.subscribableRoles);
-			if (assignRoles.length)
-				saveRolesConfigFile(assignableRoles, config.assignableRoles);
-			return message.reply({
+			if (subRoles.length || assignRoles.length)
+				saveRolesConfigFile();
+			return sendReplyToMessageAuthor(message, member, guild, {
 				embed: {
 					title: "Roles Pruned",
 					fields: [
-						{ name: "Subscribable Roles", value: subRoles.length ? subRoles.join("\n") : '*No roles configuerd*' },
-						{ name: "Assignable Roles", value: assignRoles.length ? assignRoles.join("\n") : '*No roles configuerd*' }
+						{ name: "Subscribable Roles", value: subRoles.length ? subRoles.join("\n") : '*None*' },
+						{ name: "Assignable Roles", value: assignRoles.length ? assignRoles.join("\n") : '*None*' }
 					]
 				}
 			});
@@ -1897,11 +1961,11 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 				//   track them by tag so we can easily access them again later
 				//   if their tags aren't configured on the forums, mark for removal
 				//   make sure anyone remaining has a valid nickname
-				var toRemove = [];
-				var toUpdate = [];
-				var membersByID = {};
-				var duplicateTag = [];
-				for (var roleMember of role.members.values()) {
+				let toRemove = [];
+				let toUpdate = [];
+				let membersByID = {};
+				let duplicateTag = [];
+				for (let roleMember of role.members.values()) {
 					membersByID[roleMember.user.id] = roleMember;
 					let forumUser = usersByIDOrDiscriminator[roleMember.user.id];
 					if (forumUser === undefined) {
@@ -1996,10 +2060,10 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 				//   if we haven't already seen the guild member
 				//       if there is a guild member record, at them to the role and make sure the nickname is valid
 				//       otherwise, mark them as an error and move on
-				var toAdd = [];
-				var noAccount = [];
-				var leftServer = [];
-				for (var u in usersByIDOrDiscriminator) {
+				let toAdd = [];
+				let noAccount = [];
+				let leftServer = [];
+				for (let u in usersByIDOrDiscriminator) {
 					if (usersByIDOrDiscriminator.hasOwnProperty(u)) {
 						if (membersByID[u] === undefined) {
 							let forumUser = usersByIDOrDiscriminator[u];
@@ -2059,7 +2123,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 				}
 
 				if (role.id !== guestRole.id) {
-					var sendMessage = false;
+					let sendMessage = false;
 					if (toAdd.length) {
 						sendMessage = true;
 						fs.appendFileSync(config.syncLogFile, `\tMembers to add (${toAdd.length}):\n\t\t`, 'utf8');
@@ -2121,7 +2185,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 							});
 					}
 					if (message && sendMessage) {
-						sendReplyToMessageAuthor(message, member, guild, { embed: embed }).catch(() => {});
+						sendReplyToMessageAuthor(message, member, guild, { embed: embed });
 					}
 				}
 			}
@@ -2138,7 +2202,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 	let hrEndS = sprintf('%.3f', (hrEnd[0] + hrEnd[1] / 1000000000));
 	let msg = `Forum Sync Processing Time: ${hrEndS}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account, ${disconnected} members who have left the server, ${duplicates} duplicate tags`;
 	if (message)
-		sendReplyToMessageAuthor(message, member, guild, msg).catch(() => {});
+		sendReplyToMessageAuthor(message, member, guild, msg);
 	if (message || adds || removes || renames)
 		console.log(msg);
 	date = new Date();
@@ -2363,7 +2427,7 @@ function commandRelayDm(message, member, cmd, args, guild, perm, permName, isDM)
 
 	sendMessageToMember(targetMember, content)
 		.finally(() => { if (!isDM) message.delete(); })
-		.catch(error => { notifyRequestError(message, targetMember, guild, error, PERM_NONE); });
+		.catch(console.error);
 }
 
 //admin command processing
