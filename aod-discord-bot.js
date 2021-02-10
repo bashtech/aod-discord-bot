@@ -367,16 +367,26 @@ function savedTimerExpired() {
 		savedTimers.shift();
 		doSave = true;
 
-		switch (firstTimer.type) {
-			case 'test': {
-				const member = guild.members.resolve(firstTimer.data.memberID);
-				if (member)
-					member.send('Your test timer has expired').catch(() => {});
-				break;
+		try {
+			switch (firstTimer.type) {
+				case 'test': {
+					const member = guild.members.resolve(firstTimer.data.memberID);
+					if (member)
+						member.send('Your test timer has expired').catch(() => {});
+					break;
+				}
+				case 'reminder': {
+					const member = guild.members.resolve(firstTimer.data.memberID);
+					if (member)
+						member.send(`Reminder: ${firstTimer.data.message}`).catch(() => {});
+					break;
+				}
+				default: {
+					console.error(`Unknown timer type: ${firstTimer.type}`);
+				}
 			}
-			default: {
-				console.error(`Unknown timer type: ${firstTimer.type}`);
-			}
+		} catch (error) {
+			console.log(error);
 		}
 	}
 
@@ -428,6 +438,12 @@ function addTimer(epoch, type, data) {
 			data: data
 		});
 	}
+	startNextSavedTimer();
+	fs.writeFileSync(config.savedTimers, JSON.stringify(savedTimers), 'utf8');
+}
+
+function deleteTimer(index) {
+	savedTimers.splice(index, 1);
 	startNextSavedTimer();
 	fs.writeFileSync(config.savedTimers, JSON.stringify(savedTimers), 'utf8');
 }
@@ -637,6 +653,72 @@ function commandFlip(message, member, cmd, args, guild, perm, permName, isDM) {
 		message.reply(`Result: tails`);
 }
 
+function commandReminder(message, member, cmd, args, guild, perm, permName, isDM) {
+	let num = savedTimers.length;
+	let menuOrder = 1;
+	let myReminders = [];
+	for (let idx = 0; idx < num; idx++) {
+		let timer = savedTimers[idx];
+		if (timer.type == 'reminder' && timer.data.memberID == member.id) {
+			myReminders.push({
+				index: idx,
+				menuOrder: menuOrder,
+				timer: timer
+			});
+			menuOrder++;
+		}
+	}
+
+	if (args.length > 0) {
+		if (args[0] == 'rem') {
+			args.shift();
+			if (args.length > 0) {
+				let menuOrder = args.shift();
+				menuOrder = parseInt(menuOrder);
+				if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= myReminders.length) {
+					let reminder = myReminders[menuOrder - 1];
+					deleteTimer(reminder.index);
+					return sendReplyToMessageAuthor(message, member, guild, `Removed reminder: ${reminder.timer.data.message}`);
+				}
+			}
+			return sendReplyToMessageAuthor(message, member, guild, `Reminder required.`);
+		} else {
+			if (myReminders.length >= 5)
+				return sendReplyToMessageAuthor(message, member, guild, `Max reminders already set.`);
+			let seconds = processTimeStr(args[0]);
+			if (seconds < 0)
+				return message.reply('Timeout required');
+			if (seconds < 60 || seconds > 604800)
+				return message.reply('Timeout must be > 1 minute and < 7 days');
+			args.shift();
+
+			let reminderMessage = args.join(' ');
+			let expireEpoch = (new Date()).getTime() + (seconds * 1000); //in ms;
+			let timerData = {
+				memberID: member.id,
+				message: reminderMessage
+			};
+			addTimer(expireEpoch, 'reminder', timerData);
+			return sendReplyToMessageAuthor(message, member, guild, `Reminder set for ${secondsToString(seconds)}.`);
+		}
+	} else {
+		let currEpoch = (new Date()).getTime();
+		let myReminderStr = [];
+		num = myReminders.length;
+		for (let idx = 0; idx < num; idx++) {
+			let reminder = myReminders[idx];
+			let date = new Date(reminder.timer.epoch);
+			let seconds = Math.round((reminder.timer.epoch - currEpoch) / 1000);
+			myReminderStr.push(`[${reminder.menuOrder}] ${secondsToString(seconds)}: ${reminder.timer.data.message}`);
+		}
+		return sendReplyToMessageAuthor(message, member, guild, {
+			embed: {
+				title: 'Current Reminders',
+				description: myReminderStr.length ? myReminderStr.join("\n") : 'No Reminders Set'
+			}
+		});
+	}
+}
 
 //login command processing
 var loginErrorsByUserID = [];
@@ -2442,29 +2524,36 @@ function commandReload(message, member, cmd, args, guild, perm, permName, isDM) 
 	message.reply('Configuration reloaded');
 }
 
+function secondsToString(seconds) {
+	seconds = Math.round(seconds);
+	let minutes = Math.floor(seconds / 60);
+	seconds -= (minutes * 60);
+	let hours = Math.floor(minutes / 60);
+	minutes -= (hours * 60);
+	let days = Math.floor(hours / 24);
+	hours -= (days * 24);
+	let str = sprintf('%dh %dm %ds', hours, minutes, seconds);
+	if (days) str = `${days}d ` + str;
+	return str;
+}
+
 //status command processing
 function commandStatus(message, member, cmd, args, guild, perm, permName, isDM) {
 	let uptimeSeconds = Math.round(client.uptime / 1000);
-	let uptimeMinutes = Math.floor(uptimeSeconds / 60);
-	uptimeSeconds -= (uptimeMinutes * 60);
-	let uptimeHours = Math.floor(uptimeMinutes / 60);
-	uptimeMinutes -= (uptimeHours * 60);
-	let uptimeDays = Math.floor(uptimeHours / 24);
-	uptimeHours -= (uptimeDays * 24);
-
-	let lastForumSyncDiff = new Date(new Date() - lastForumSync);
-
+	let now = new Date();
+	let lastForumSyncDiff = new Date(now - lastForumSync);
+	let nextTimerSeconds = ((nextSavedTimerEpoch ? nextSavedTimerEpoch : now.getTime()) - now.getTime()) / 1000;
 	let embed = {
 		title: 'Bot Status',
 		fields: [
-			{ name: 'UpTime', value: `${uptimeDays} days, ${uptimeHours} hours, ${uptimeMinutes} minutes, ${uptimeSeconds} seconds` },
+			{ name: 'UpTime', value: secondsToString(uptimeSeconds) },
 			{ name: 'Server Status', value: `${guild.name} has ${guild.members.cache.size} members and ${guild.channels.cache.size} channels` },
 			{ name: 'Server Region', value: `${guild.region}` },
 			{ name: 'Last Forum Sync', value: `${lastForumSyncDiff.getMinutes()} minutes, ${lastForumSyncDiff.getSeconds()} seconds ago` },
 			{ name: 'Average WebSocket Hearbeat Time', value: `${client.ws.ping}ms` },
+			{ name: 'Timers', value: `${savedTimers.length} timers, next timer expires in ${secondsToString(nextTimerSeconds)}` },
 		]
 	};
-
 	message.reply({ embed: embed });
 }
 
@@ -2475,63 +2564,23 @@ function commandQuit(message, member, cmd, args, guild, perm, permName, isDM) {
 	process.exit();
 }
 
-async function commandTest(message, member, cmd, args, guild, perm, permName, isDM) {
-	var reply = "";
+var timeStrRegEx = /^\s*((\d+)d)?((\d+)h)?((\d+)m)?((\d+)s)?\s*$/; //BE CAREFUL OF CAPTURE GROUPS BELOW
+function processTimeStr(string) {
+	let match = timeStrRegEx.exec(string);
+	if (match == null)
+		return -1;
+	let days = (match[2] ? parseInt(match[2]) : 0);
+	let hours = (match[4] ? parseInt(match[4]) : 0);
+	let minutes = (match[6] ? parseInt(match[6]) : 0);
+	let seconds = (match[8] ? parseInt(match[8]) : 0);
+	seconds += (minutes * 60);
+	seconds += (hours * 3600);
+	seconds += (days * 86400);
+	return seconds;
+}
 
-	message.reply(`"${args.join('" "')}"`);
+function commandTest(message, member, cmd, args, guild, perm, permName, isDM) {
 
-	/*
-	guild.channels.cache.forEach(async function (c){
-		if (c.type == 'voice' && c.name.indexOf('temp') >= 0)
-		{
-			reply += `deleted ${c.parent.name} ${c.name}\n`;
-			await c.delete().catch(()=>{});
-		}
-	});
-	message.reply(reply);
-	*/
-
-	/*
-	reply = "";
-	guild.roles.cache.forEach(async function (r){
-		if (r.name.indexOf('Officer') >= 0)
-		{
-			var category = r.name.replace(" Officer", "");
-			const channelCategory = guild.channels.cache.find(c=>{return c.name == category && c.type=='category';});
-			if (channelCategory)
-			{
-				reply += channelCategory.name + "\n";
-				
-				let channelName = category.toLowerCase().replace(/\s/g, '-');
-				channelName += "-member-voip"
-				
-				var defaultDeny = ['VIEW_CHANNEL','CONNECT'];
-				var permissions = getPermissionsForMembers(guild, [], defaultDeny);
-				//add role permissions if necessary
-				permissions = addRoleToPermissions(guild, r, permissions, ['VIEW_CHANNEL','CONNECT','MANAGE_MESSAGES']);
-				
-				await guild.createChannel(channelName, {type: 'voice', name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: "Recreating backup voip"}).catch(e=>{console.log(e)});
-			}
-		}
-	});
-	message.reply(reply);
-	*/
-
-	/*
-	const memberRole = guild.roles.cache.find(r=>{return r.name == config.memberRole;});
-	var db = connectToDB();
-	memberRole.members.cache.forEach(m => {
-		let query = 		
-			`UPDATE ${config.mysql.prefix}userfield ` +
-			`SET field20 = "${m.user.id}" ` +
-			`WHERE field19 LIKE "${convertDiscordTag(m.user.tag)}"`;
-		console.log(query);
-		db.query(query, function(err, rows, fields) {
-			if (err)
-				console.log(err);
-		});
-	});
-	*/
 }
 
 //command definitions
@@ -2579,6 +2628,16 @@ commands = {
 		args: "",
 		helpText: "Flip a coin.",
 		callback: commandFlip,
+		doLog: false
+	},
+	reminder: {
+		minPermission: PERM_MEMBER,
+		args: "[rem <reminder>|<timeout> <message>]",
+		helpText: ["Set a message to receive as a reminder on a specified timeout. If no options are provided, current reminders are show.",
+			"*rem*: Remove and cancel the specified reminder.",
+			"*timeout*: Reminder timeout. Format: #d#h#m#s Ex: 1d30m",
+			"*message*: The message to be send in the reminder."],
+		callback: commandReminder,
 		doLog: false
 	},
 	sub: {
