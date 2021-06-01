@@ -3045,7 +3045,7 @@ function setRolesForMember(member, reason) {
 	getForumGroupsForMember(member)
 		.then(async function(data) {
 			if (data === undefined || data.groups.length === 0) {
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` to associate your Discord user to our fourms (https://www.clanaod.net).`).catch(() => {});
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
 				return;
 			}
 
@@ -3073,7 +3073,7 @@ function setRolesForMember(member, reason) {
 					return;
 				}
 			} else if (!existingRoles.length) {
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` in a DM the to associate your Discord user to our fourms (https://www.clanaod.net). \`${config.prefix}help login\` can provide more details.`).catch(() => {});
+				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` in a DM the to associate your Discord user to our forums (https://www.clanaod.net). \`${config.prefix}help login\` can provide more details.`).catch(() => {});
 				return;
 			}
 
