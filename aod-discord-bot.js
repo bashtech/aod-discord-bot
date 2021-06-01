@@ -1942,11 +1942,13 @@ function setDiscordTagForForumUser(forumUser, guildMember) {
 }
 
 function matchGuildRoleName(guildRole) {
-	return guildRole.name === this;
+	return guildRole.name == this;
 }
 
+
 function matchGuildMemberTag(guildMember) {
-	return guildMember.user.tag === this;
+	
+	return guildMember.user.tag == this;
 }
 
 //do forum sync with discord roles
@@ -2150,6 +2152,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 						if (membersByID[u] === undefined) {
 							let forumUser = usersByIDOrDiscriminator[u];
 							let guildMember = guild.members.resolve(u);
+							
 							if (guildMember === undefined || guildMember === null) {
 								guildMember = guild.members.cache.find(matchGuildMemberTag, u);
 								if (guildMember) {
