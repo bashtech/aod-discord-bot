@@ -15,8 +15,7 @@ const Discord = require('discord.js');
 var request = require('request');
 
 //include entities
-const Entities = require('html-entities').AllHtmlEntities;
-const entities = new Entities();
+const htmlEntitiesDecode = require('html-entities').decode;
 
 const sprintf = require('sprintf-js').sprintf;
 //const vsprintf = require('sprintf-js').vsprintf;
@@ -1836,7 +1835,7 @@ function convertForumDiscordName(discordName) {
 		else
 			return String.fromCharCode(code);
 	});
-	return entities.decode(discordName);
+	return htmlEntitiesDecode(discordName, {level: 'html5'});
 }
 
 //get forum users from forum groups

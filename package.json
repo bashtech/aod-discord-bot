@@ -1,0 +1,36 @@
+{
+  "name": "aod-discord-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "aod-discord-bot.js",
+  "dependencies": {
+    "@discordjs/opus": "^0.5.3",
+    "bufferutil": "^4.0.3",
+    "discord.js": "^12.5.3",
+    "erlpack": "^0.1.3",
+    "html-entities": "^2.3.2",
+    "md5": "^2.3.0",
+    "mysql": "^2.18.1",
+    "request": "^2.88.2",
+    "sodium": "^3.0.2",
+    "sprintf-js": "^1.1.2",
+    "tweetnacl": "^1.0.3",
+    "utf-8-validate": "^5.0.5",
+    "uws": "^100.0.1",
+    "zlib-sync": "^0.1.7"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apschultz/aod_discord_bot.git"
+  },
+  "author": "Adam Schultz",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/apschultz/aod_discord_bot/issues"
+  },
+  "homepage": "https://github.com/apschultz/aod_discord_bot#readme"
+}
