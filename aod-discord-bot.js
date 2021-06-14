@@ -1835,21 +1835,28 @@ function convertForumDiscordName(discordName) {
 		else
 			return String.fromCharCode(code);
 	});
-	return htmlEntitiesDecode(discordName, {level: 'html5'});
+	return htmlEntitiesDecode(discordName, { level: 'html5' });
 }
 
 //get forum users from forum groups
-function getForumUsersForGroups(groups) {
+function getForumUsersForGroups(groups, allowPending) {
 	var promise = new Promise(function(resolve, reject) {
 		let usersByIDOrDiscriminator = {};
 		let db = connectToDB();
 		let groupStr = groups.join(',');
 		let groupRegex = groups.join('|');
 		let query =
-			`SELECT u.userid,u.username,f.field19,f.field20,f.field13 FROM ${config.mysql.prefix}user AS u ` +
+			`SELECT u.userid,u.username,f.field19,f.field20,f.field13, ` +
+			`(CASE WHEN (r.requester_id IS NOT NULL AND r.approver_id IS NULL) THEN 1 ELSE 0 END) AS pending ` +
+			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
-			`WHERE (u.usergroupid IN (${groupStr}) OR u.membergroupids REGEXP '(^|,)(${groupRegex})(,|$)') ` +
-			`AND ((f.field19 IS NOT NULL AND f.field19 <> '') OR (f.field20 IS NOT NULL AND f.field20 <> '')) ` +
+			`LEFT JOIN  ${config.mysql.trackerPrefix}member_requests AS r ON u.userid=r.member_id AND r.approver_id IS NULL ` +
+			`WHERE (u.usergroupid IN (${groupStr}) OR u.membergroupids REGEXP '(^|,)(${groupRegex})(,|$)' `;
+		if (allowPending === true)
+			query +=
+			`OR r.requester_id IS NOT NULL `;
+		query +=
+			`) AND ((f.field19 IS NOT NULL AND f.field19 <> '') OR (f.field20 IS NOT NULL AND f.field20 <> '')) ` +
 			`ORDER BY f.field13,u.username`;
 		let queryError = false;
 		db.query(query)
@@ -1875,7 +1882,8 @@ function getForumUsersForGroups(groups) {
 						id: row.userid,
 						division: row.field13,
 						discordid: discordid,
-						discordtag: discordtag
+						discordtag: discordtag,
+						pending: row.pending
 					};
 				}
 			})
@@ -1946,7 +1954,7 @@ function matchGuildRoleName(guildRole) {
 
 
 function matchGuildMemberTag(guildMember) {
-	
+
 	return guildMember.user.tag == this;
 }
 
@@ -2027,7 +2035,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 			if (role) {
 				let usersByIDOrDiscriminator;
 				try {
-					usersByIDOrDiscriminator = await getForumUsersForGroups(groupMap.forumGroups);
+					usersByIDOrDiscriminator = await getForumUsersForGroups(groupMap.forumGroups, (role.id === memberRole.id));
 				} catch (error) {
 					notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
 					continue;
@@ -2151,7 +2159,11 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 						if (membersByID[u] === undefined) {
 							let forumUser = usersByIDOrDiscriminator[u];
 							let guildMember = guild.members.resolve(u);
-							
+
+							//don't add members who are pending
+							if (forumUser.pending)
+								continue;
+
 							if (guildMember === undefined || guildMember === null) {
 								guildMember = guild.members.cache.find(matchGuildMemberTag, u);
 								if (guildMember) {
