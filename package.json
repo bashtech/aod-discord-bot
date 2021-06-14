@@ -25,12 +25,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/apschultz/aod_discord_bot.git"
+    "url": "git+https://github.com/ClanAODDev/aod-discord-bot.git"
   },
   "author": "Adam Schultz",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/apschultz/aod_discord_bot/issues"
+    "url": "https://github.com/ClanAODDev/aod-discord-bot/issues"
   },
-  "homepage": "https://github.com/apschultz/aod_discord_bot#readme"
+  "homepage": "https://github.com/ClanAODDev/aod-discord-bot/blob/master/README.md"
 }
