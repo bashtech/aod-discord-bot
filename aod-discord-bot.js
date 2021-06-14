@@ -2607,6 +2607,7 @@ commands = {
 		callback: function(message, cmd, args, guild, perm, permName, isDM)
 		dmOnly: optional boolean (default false)
 		doLog: optional boolean (default true)
+		logArgs: optional boolean (default true)
 	},
 	*/
 	help: {
@@ -2621,7 +2622,8 @@ commands = {
 		args: ["\"<username|email>\"", "\"<password>\""],
 		helpText: "Associate discord user to AOD forum account.\nWARNING: This command may only be used in a DM to the discord bot.",
 		callback: commandLogin,
-		dmOnly: true
+		dmOnly: true,
+		logArgs: false
 	},
 	ping: {
 		minPermission: PERM_GUEST,
@@ -2924,10 +2926,10 @@ function processCommand(message, member, cmd, arg_string, guild, perm, permName,
 		if (commandObj.minPermission <= perm) {
 			var args = getParams(arg_string);
 			if (commandObj.doLog !== false) {
-				if (cmd == 'login')
-					console.log(`${getNameFromMessage(message)} executed: ${cmd}`);
-				else
+				if (commandObj.logArgs !== false)
 					console.log(`${getNameFromMessage(message)} executed: ${cmd} "${args.join('" "')}"`);
+				else
+					console.log(`${getNameFromMessage(message)} executed: ${cmd}`);
 			}
 			//if (commandObj.dmOnly === true && !isDM)
 			//do nothing for now...
