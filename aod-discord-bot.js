@@ -2048,6 +2048,8 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 					fields: []
 				};
 
+				//console.log(`${date.toISOString()} Start processing ${role.name} role members`);
+
 				//for each guild member with the role
 				//   track them by tag so we can easily access them again later
 				//   if their tags aren't configured on the forums, mark for removal
@@ -2147,6 +2149,9 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 					}
 				}
 
+				//date = new Date();
+				//console.log(`${date.toISOString()} Start processing ${role.name} forum members`);
+
 				//for each forum member mapped to the role
 				//   if we haven't already seen the guild member
 				//       if there is a guild member record, at them to the role and make sure the nickname is valid
@@ -2158,13 +2163,12 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 					if (usersByIDOrDiscriminator.hasOwnProperty(u)) {
 						if (membersByID[u] === undefined) {
 							let forumUser = usersByIDOrDiscriminator[u];
-							let guildMember = guild.members.resolve(u);
-
 							//don't add members who are pending
 							if (forumUser.pending)
 								continue;
 
-							if (guildMember === undefined || guildMember === null) {
+							let guildMember = guild.members.resolve(u);
+							if ((guildMember === undefined || guildMember === null) && !forumUser.indexIsId) {
 								guildMember = guild.members.cache.find(matchGuildMemberTag, u);
 								if (guildMember) {
 									//don't update the list, we're done processing and don't want to interrupt processing							
@@ -2217,6 +2221,9 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 						}
 					}
 				}
+
+				//date = new Date();
+				//console.log(`${date.toISOString()} Done processing ${role.name}`);
 
 				if (role.id !== guestRole.id) {
 					let sendMessage = false;
