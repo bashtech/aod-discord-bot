@@ -1948,6 +1948,13 @@ function setDiscordTagForForumUser(forumUser, guildMember) {
 	forumUser.discordtag = guildMember.user.tag;
 }
 
+function clearDiscordDataForForumUser(forumUser) {
+	console.log(`Clearing Discord data for ${forumUser.name} (${forumUser.id})`);
+	let db = connectToDB();
+	let query = `UPDATE ${config.mysql.prefix}userfield SET field19='', field20='' WHERE userid=${forumUser.id}`;
+	db.query(query, function(err, rows, fields) {});
+}
+
 function matchGuildRoleName(guildRole) {
 	return guildRole.name == this;
 }
@@ -2078,7 +2085,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 							if (!checkOnly) {
 								try {
 									await roleMember.roles.remove(role, reason);
-									if (role.name === config.memberRole) {
+									if (role.id === memberRole.id) {
 										//we're removing them from AOD, clear the name set from the forums
 										await roleMember.setNickname('', reason);
 										//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
@@ -2171,7 +2178,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 							if ((guildMember === undefined || guildMember === null) && !forumUser.indexIsId) {
 								guildMember = guild.members.cache.find(matchGuildMemberTag, u);
 								if (guildMember) {
-									//don't update the list, we're done processing and don't want to interrupt processing							
+									//don't update the list, we're done processing
 									setDiscordIDForForumUser(forumUser, guildMember);
 								}
 							}
@@ -2216,6 +2223,9 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 										misses++;
 										noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
 									}
+								} else if (role.id === guestRole.id) {
+									//We don't need to constantly reprocess old AOD members who have left or forum guests who visited discord once
+									clearDiscordDataForForumUser(forumUser);
 								}
 							}
 						}
