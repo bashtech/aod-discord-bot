@@ -9,7 +9,8 @@
 /* jshint esversion: 8 */
 
 //include discord.js
-const Discord = require('discord.js');
+const { Client, Intents } = require('discord.js');
+//const Discord = require('discord.js');
 
 //include request
 var request = require('request');
@@ -75,7 +76,25 @@ var undefined;
 var lastForumSync;
 
 //initialize client
-const client = new Discord.Client({});
+const intents = new Intents();
+intents.add(
+	Intents.FLAGS.GUILDS,
+	Intents.FLAGS.GUILD_MEMBERS,
+	Intents.FLAGS.GUILD_BANS,
+	Intents.FLAGS.GUILD_EMOJIS_AND_STICKERS,
+	Intents.FLAGS.GUILD_INTEGRATIONS,
+	Intents.FLAGS.GUILD_WEBHOOKS,
+	Intents.FLAGS.GUILD_INVITES,
+	Intents.FLAGS.GUILD_VOICE_STATES,
+	Intents.FLAGS.GUILD_PRESENCES,
+	Intents.FLAGS.GUILD_MESSAGES,
+	Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
+	Intents.FLAGS.GUILD_MESSAGE_TYPING,
+	Intents.FLAGS.DIRECT_MESSAGES,
+	Intents.FLAGS.DIRECT_MESSAGE_REACTIONS,
+	Intents.FLAGS.DIRECT_MESSAGE_TYPING);
+
+const client = new Client({intents: intents, partials: ['MESSAGE', 'CHANNEL']});
 
 
 /*************************************
@@ -249,7 +268,7 @@ function getStringForPermission(perm) {
 function getPermissionLevelForMember(member) {
 	let perm = PERM_NONE;
 	const r = member.roles.highest;
-	if (member.permissions.bitfield & 0x00000008)
+	if (member.permissions.bitfield & BigInt(0x00000008))
 		perm = PERM_OWNER;
 	else if (r) {
 		if (config.adminRoles.includes(r.name))
@@ -409,7 +428,7 @@ startNextSavedTimer = function() {
 		if (delta <= 0) {
 			savedTimerExpired();
 		} else {
-			nextSavedTimer = client.setTimeout(savedTimerExpired, delta);
+			nextSavedTimer = setTimeout(savedTimerExpired, delta);
 			nextSavedTimerEpoch = firstTimer.epoch;
 		}
 	}
@@ -545,7 +564,7 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 					name: `${filter} ${commandArgsText}`,
 					value: commandHelpText
 				});
-			sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+			sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 		} else {
 			sendReplyToMessageAuthor(message, member, guild, "Unknown command.");
 		}
@@ -579,7 +598,7 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 					if (embed.description.length + line.length < 2048) {
 						embed.description = embed.description + line;
 					} else {
-						sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+						sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 						embed = {
 							title: `Continued...`,
 							description: "",
@@ -591,7 +610,7 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 			}
 		}
 		if (embed.description.length)
-			sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+			sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 	}
 }
 
@@ -711,10 +730,10 @@ function commandReminder(message, member, cmd, args, guild, perm, permName, isDM
 			myReminderStr.push(`[${reminder.menuOrder}] ${secondsToString(seconds)}: ${reminder.timer.data.message}`);
 		}
 		return sendReplyToMessageAuthor(message, member, guild, {
-			embed: {
+			embeds: [{
 				title: 'Current Reminders',
 				description: myReminderStr.length ? myReminderStr.join("\n") : 'No Reminders Set'
-			}
+			}]
 		});
 	}
 }
@@ -939,14 +958,14 @@ function getChannelPermissions(guild, perm, level, type, divisionRole) {
 
 //voice command processing
 function commandAddChannel(message, member, cmd, args, guild, perm, permName, isDM) {
-	var temp = true;
-	var channelCategory;
-	var divisionRole;
+	let temp = true;
+	let channelCategory;
+	let divisionRole;
 
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
 
-	if ((channelCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == args[0].toLowerCase() && c.type == 'category'); }))) {
+	if ((channelCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == args[0].toLowerCase() && c.type == 'GUILD_CATEGORY'); }))) {
 		//check if this category has an associated officer role
 		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
 		divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
@@ -955,7 +974,7 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 			return message.reply("You may not create a permanent channel");
 		if (perm == PERM_DIVISION_COMMANDER && (!divisionRole || !member.roles.cache.get(divisionRole.id)))
 			return message.reply("You may only add channels to a division you command");
-		if (channelCategory.type != 'category')
+		if (channelCategory.type != 'GUILD_CATEGORY')
 			return message.reply("Mentioned channel must be a category");
 		if (perm < PERM_ADMIN && channelCategory.children.size >= config.maxChannelsPerCategory)
 			return message.reply("Category is full");
@@ -974,7 +993,8 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 		return message.reply("Invalid parameters");
 
 	//process level argument if present
-	var level = "member";
+	let level = 'member';
+	let type = 'GUILD_TEXT';
 	if (channelPermissionLevels.includes(args[0])) {
 		level = args[0];
 		args.shift();
@@ -993,27 +1013,31 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 	if (channelName === undefined || channelName == '')
 		return message.reply("A name must be provided");
 
-	var existingChannel = guild.channels.cache.find(c => { return c.name == channelName; });
+	let existingChannel = guild.channels.cache.find(c => { return c.name == channelName; });
 	if (existingChannel)
 		return message.reply("Channel already exists");
 
 	//get channel permissions
-	var permissions = getChannelPermissions(guild, perm, level, cmd, divisionRole);
+	let permissions = getChannelPermissions(guild, perm, level, cmd, divisionRole);
 	if (!permissions)
 		return;
 
-	if (cmd === 'ptt') {
+	if (cmd === 'voice') {
+		type = 'GUILD_VOICE';
+	} 
+	else if (cmd === 'ptt') {
 		channelName += '-ptt';
 		cmd = 'voice';
+		type = 'GUILD_VOICE';
 	}
 
 	//create channel
-	return guild.channels.create(channelName, { type: cmd, name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
+	return guild.channels.create(channelName, { type: type, name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
 		.then(c => {
 			if (cmd === 'voice') {
 				//make sure someone gets into the channel
 				if (temp)
-					client.setTimeout(function() {
+					setTimeout(function() {
 						if (c.members.size === 0)
 							c.delete()
 							.catch(e => {}); //probably removed already
@@ -1051,7 +1075,7 @@ function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM
 		return message.reply(`${channelName} is a protected channel.`);
 
 	var existingChannel = guild.channels.cache.find(c => { return c.name == channelName; });
-	if (!existingChannel || (existingChannel.type !== 'text' && existingChannel.type !== 'voice'))
+	if (!existingChannel || (existingChannel.type !== 'GUILD_TEXT' && existingChannel.type !== 'GUILD_VOICE'))
 		return message.reply("Channel not found");
 
 	//check if we're in a category and get the proper division role
@@ -1087,7 +1111,7 @@ function commandRemChannel(message, member, cmd, args, guild, perm, permName, is
 		return message.reply(`${channelName} is a protected channel.`);
 
 	var existingChannel = guild.channels.cache.find(c => { return c.name == channelName; });
-	if (!existingChannel || existingChannel.type === 'category')
+	if (!existingChannel || existingChannel.type === 'GUILD_CATEGORY')
 		return message.reply("Channel not found");
 
 	if (perm < PERM_DIVISION_COMMANDER)
@@ -1110,7 +1134,7 @@ function commandRemChannel(message, member, cmd, args, guild, perm, permName, is
 
 function commandTopic(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (args.length <= 0)
-		return message.reply("A topic must be provided");
+		return message.channel.setTopic('', `Requested by ${getNameFromMessage(message)}`);
 
 	let channelName = args[0].toLowerCase();
 	if (config.protectedChannels.includes(channelName) && perm < PERM_STAFF)
@@ -1119,17 +1143,20 @@ function commandTopic(message, member, cmd, args, guild, perm, permName, isDM) {
 	let channel = guild.channels.cache.find(c => { return (c.name.toLowerCase() == channelName); });
 	if (channel)
 		args.shift();
-	else if (message.channel.type === 'text')
+	else if (message.channel.type === 'GUILD_TEXT')
 		channel = message.channel;
 
-	if (args.length <= 0)
-		return message.reply("A topic must be provided");
-
 	if (channel)
-		channel.setTopic(args.join(' '), `Requested by ${getNameFromMessage(message)}`)
-		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
-	else
+		if (args.length <= 0) {
+			return channel.setTopic('', `Requested by ${getNameFromMessage(message)}`);
+		}
+		else {
+			channel.setTopic(args.join(' '), `Requested by ${getNameFromMessage(message)}`)
+				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+		}
+	else {
 		return message.reply("Channel not found");
+	}
 }
 
 //move channel command processing
@@ -1193,7 +1220,7 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 	let divisionPublicChannel = simpleName + '-public';
 	let divisionMemberVoiceChannel = simpleName + '-member-voip';
 
-	var divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == 'category'); });
+	var divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == 'GUILD_CATEGORY'); });
 	if (divisionCategory)
 		return message.reply("Division already exists.").catch(() => {});
 	var divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
@@ -1202,33 +1229,33 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 
 	try {
 		//create officers role
-		divisionRole = await guild.roles.create({ data: { name: roleName, permissions: 0, mentionable: true }, reason: `Requested by ${getNameFromMessage(message)}` });
+		divisionRole = await guild.roles.create({ name: roleName, permissions: 0, mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
 		const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
 		await divisionRole.setPosition(memberRole.position + 1).catch(e => { console.log(e); });
 
 		//add category for division
 		let permissions = getPermissionsForEveryone(guild);
-		divisionCategory = await guild.channels.create(divisionName, { type: 'category', name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		divisionCategory = await guild.channels.create(divisionName, { type: 'GUILD_CATEGORY', name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create members channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
-		let membersChannel = await guild.channels.create(divisionMembersChannel, { type: 'text', name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		let membersChannel = await guild.channels.create(divisionMembersChannel, { type: 'GUILD_TEXT', name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create officers channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForModerators(guild), ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
-		let officersChannel = await guild.channels.create(divisionOfficersChannel, { type: 'text', name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		let officersChannel = await guild.channels.create(divisionOfficersChannel, { type: 'GUILD_TEXT', name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create public channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForEveryone(guild), ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
-		let publicChannel = await guild.channels.create(divisionPublicChannel, { type: 'text', name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		let publicChannel = await guild.channels.create(divisionPublicChannel, { type: 'GUILD_TEXT', name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create member voice channel
 		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
-		let memberVoipChannel = await guild.channels.create(divisionMemberVoiceChannel, { type: 'voice', name: divisionMemberVoiceChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		let memberVoipChannel = await guild.channels.create(divisionMemberVoiceChannel, { type: 'GUILD_VOICE', name: divisionMemberVoiceChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		return message.reply(`${divisionName} division added`).catch(() => {});
@@ -1245,7 +1272,7 @@ async function commandRemDivision(message, member, cmd, args, guild, perm, permN
 		return message.reply("A name must be provided");
 	let roleName = divisionName + ' ' + config.discordOfficerSuffix;
 
-	const divisionCategory = guild.channels.cache.find(c => { return (c.name == divisionName && c.type === 'category'); });
+	const divisionCategory = guild.channels.cache.find(c => { return (c.name == divisionName && c.type === 'GUILD_CATEGORY'); });
 	if (divisionCategory) {
 		if (config.protectedCategories.includes(divisionCategory.name))
 			return message.reply(`${divisionName} is a protected category.`);
@@ -1371,7 +1398,7 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 						if (embed.description.length + line.length < 2048) {
 							embed.description = embed.description + line;
 						} else {
-							sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+							sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 							embed = {
 								title: `Continued...`,
 								description: "",
@@ -1379,7 +1406,7 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 						}
 					}
 					if (embed.description.length)
-						return sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+						return sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 				} else {
 					return message.reply(`Role ${roleName} does not exist`);
 				}
@@ -1419,16 +1446,16 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 							{ name: 'Available Roles', value: availRoles.length ? availRoles.join("\n") : '*No Roles Available*' },
 						]
 					};
-					return sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+					return sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 				} else {
 					return sendReplyToMessageAuthor(message, member, guild, {
-						embed: {
+						embeds: [{
 							title: 'Role Subscriptions',
 							fields: [
 								{ name: 'Subscribed Roles', value: subedRoles.length ? subedRoles.join("\n") : '*No Roles Subscribed*' },
 								{ name: 'Available Roles', value: availRoles.length ? availRoles.join("\n") : '*No Roles Available*' },
 							]
-						}
+						}]
 					});
 				}
 			}
@@ -1567,7 +1594,7 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 
 			let newRole;
 			try {
-				newRole = await guild.roles.create({ data: { name: roleName, permissions: 0, mentionable: true }, reason: `Requested by ${getNameFromMessage(message)}` });
+				newRole = await guild.roles.create({ name: roleName, permissions: 0, mentionable: true , reason: `Requested by ${getNameFromMessage(message)}` });
 			} catch (error) {
 				return notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
 			}
@@ -1612,13 +1639,13 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			subRoles.sort();
 			assignRoles.sort();
 			return sendReplyToMessageAuthor(message, member, guild, {
-				embed: {
+				embeds: [{
 					fields: [
 						{ name: "Subscribable Roles", value: subRoles.length ? subRoles.join("\n") : '*No roles configuerd*' },
 						{ name: "Assignable Roles", value: assignRoles.length ? assignRoles.join("\n") : '*No roles configuerd*' }
 					],
 					footer: { text: '* indicates roles that would be deleted upon removal' }
-				}
+				}]
 			});
 		}
 		case 'prune': {
@@ -1646,13 +1673,13 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			if (subRoles.length || assignRoles.length)
 				saveRolesConfigFile();
 			return sendReplyToMessageAuthor(message, member, guild, {
-				embed: {
+				embeds: [{
 					title: "Roles Pruned",
 					fields: [
 						{ name: "Subscribable Roles", value: subRoles.length ? subRoles.join("\n") : '*None*' },
 						{ name: "Assignable Roles", value: assignRoles.length ? assignRoles.join("\n") : '*None*' }
 					]
-				}
+				}]
 			});
 		}
 	}
@@ -1770,7 +1797,7 @@ function commandBan(message, member, cmd, args, guild, perm, permName, isDM) {
 	let reason = args.join(' ');
 	if (!reason || reason == '') reason = "No reason provided";
 
-	targetMember.ban(targetMember)
+	targetMember.ban({ reason: reason })
 		.catch(error => message.reply(`Sorry ${message.author} I couldn't ban because of : ${error}`));
 	message.reply(`${tag} has been banned by ${message.author.tag} because: ${reason}`);
 }
@@ -1796,7 +1823,7 @@ function commandTracker(message, member, cmd, args, guild, perm, permName, isDM)
 			return message.reply('There was an error processing the request');
 
 		if (body.embed)
-			return message.reply({ embed: body.embed });
+			return message.reply({ embeds: [body.embed] });
 		else if (body.text)
 			return message.reply(body.text);
 		return message.reply('There was an error processing the request');
@@ -1807,7 +1834,7 @@ function commandTracker(message, member, cmd, args, guild, perm, permName, isDM)
 function getForumGroups() {
 	var promise = new Promise(function(resolve, reject) {
 		let db = connectToDB();
-		let query = `SELECT usergroupid AS id,title AS name FROM ${config.mysql.prefix}usergroup`; //WHERE title LIKE "AOD%" OR title LIKE "%Officers"
+		let query = `SELECT usergroupid AS id,title AS name FROM ${config.mysql.prefix}usergroup WHERE title LIKE "AOD%" OR title LIKE "%Officers"`;
 		db.query(query, function(err, rows, fields) {
 			if (err)
 				return reject(err);
@@ -1874,7 +1901,7 @@ function getForumUsersForGroups(groups, allowPending) {
 					indexIsId = true;
 				}
 				if (usersByIDOrDiscriminator[index] !== undefined) {
-					console.log(`Found duplicate tag ${usersByIDOrDiscriminator[index].discordtag} for forum user ${row.username} first seen for forum user ${usersByIDOrDiscriminator[index].name}`);
+					console.log(`Found duplicate tag ${usersByIDOrDiscriminator[index].discordtag} (${usersByIDOrDiscriminator[index].discordId}) for forum user ${row.username} first seen for forum user ${usersByIDOrDiscriminator[index].name}`);
 				} else {
 					usersByIDOrDiscriminator[index] = {
 						indexIsId: indexIsId,
@@ -2004,18 +2031,22 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 	await guild.members.fetch()
 		.catch(error => { console.log(error); });
 	guild.members.cache.forEach(function(m) {
-		switch (m.presence.status) {
-			case 'idle':
-				idle++;
-				break;
-			case 'offline':
-				offline++;
-				break;
-			case 'dnd':
-				dnd++;
-				break;
-			default:
-				online++;
+		if (!m.presence) {
+			online++
+		} else {
+			switch (m.presence.status) {
+				case 'idle':
+					idle++;
+					break;
+				case 'offline':
+					offline++;
+					break;
+				case 'dnd':
+					dnd++;
+					break;
+				default:
+					online++;
+			}
 		}
 		total++;
 	});
@@ -2298,7 +2329,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 							});
 					}
 					if (message && sendMessage) {
-						sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+						sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 					}
 				}
 			}
@@ -2340,13 +2371,13 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 							value: groupMap.forumGroups.map(groupID => `${forumGroups[groupID]} (${groupID})`).join(', ')
 						});
 						if (fields.length >= 25) {
-							sendReplyToMessageAuthor(message, member, guild, { embed: { title: 'Configured Group Maps', fields: fields } });
+							sendReplyToMessageAuthor(message, member, guild, { embeds: [{ title: 'Configured Group Maps', fields: fields }] });
 							fields = [];
 						}
 					});
 
 					if (fields.length > 0) {
-						sendReplyToMessageAuthor(message, member, guild, { embed: { title: 'Configured Group Maps', fields: fields } });
+						sendReplyToMessageAuthor(message, member, guild, { embeds: [{ title: 'Configured Group Maps', fields: fields }] });
 					}
 				})
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
@@ -2360,7 +2391,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 					value: guild.roles.cache.array().filter(r => r.name.endsWith(config.discordOfficerSuffix)).map(r => r.name).sort().join("\n")
 				}]
 			};
-			sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+			sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 			break;
 		}
 		case 'showforumgroups': {
@@ -2377,7 +2408,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 								value: chunk.join("\n")
 							}]
 						};
-						sendReplyToMessageAuthor(message, member, guild, { embed: embed });
+						sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 					}
 				})
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
@@ -2493,7 +2524,7 @@ function sendMessageToChannel(channel, content) {
 
 	if (json !== undefined) {
 		if (json.embed)
-			return channel.send({ embed: json.embed });
+			return channel.send({ embeds: [json.embed] });
 		else if (json.text)
 			return channel.send(json.text);
 	} else
@@ -2514,7 +2545,7 @@ function commandRelay(message, member, cmd, args, guild, perm, permName, isDM) {
 	else
 		channel = message.channel;
 
-	if (channel.type !== 'text')
+	if (channel.type !== 'GUILD_TEXT')
 		return;
 
 	let content = args.join(' ');
@@ -2579,13 +2610,12 @@ function commandStatus(message, member, cmd, args, guild, perm, permName, isDM) 
 		fields: [
 			{ name: 'UpTime', value: secondsToString(uptimeSeconds) },
 			{ name: 'Server Status', value: `${guild.name} has ${guild.members.cache.size} members and ${guild.channels.cache.size} channels` },
-			{ name: 'Server Region', value: `${guild.region}` },
 			{ name: 'Last Forum Sync', value: `${lastForumSyncDiff.getMinutes()} minutes, ${lastForumSyncDiff.getSeconds()} seconds ago` },
 			{ name: 'Average WebSocket Hearbeat Time', value: `${client.ws.ping}ms` },
 			{ name: 'Timers', value: `${savedTimers.length} timers, next timer expires in ${secondsToString(nextTimerSeconds)}` },
 		]
 	};
-	message.reply({ embed: embed });
+	message.reply({ embeds: [embed] });
 }
 
 //quit command processing
@@ -2956,7 +2986,7 @@ function processCommand(message, member, cmd, arg_string, guild, perm, permName,
 }
 
 //message event handler -- triggered when client receives a message from a text channel or DM
-client.on("message", message => {
+client.on("messageCreate", message => {
 	//check for prefix
 	if (!message.content.startsWith(config.prefix)) return;
 
@@ -2966,10 +2996,10 @@ client.on("message", message => {
 	var member = message.member;
 	if (!member) {
 		if (message.author.bot) {
-			if (!message.webhookID || message.webhookID === '' || message.webhookID !== message.author.id)
+			if (!message.webhookId || message.webhookId === '' || message.webhookId !== message.author.id)
 				return; //ignore messages from bots that are not from authorized webhooks
 
-			let webhookPerms = config.webHookPerms[message.webhookID];
+			let webhookPerms = config.webHookPerms[message.webhookId];
 			if (webhookPerms === undefined)
 				return; //this bot is not allowed
 			[perm, permName] = webhookPerms;
@@ -3022,13 +3052,13 @@ client.on("message", message => {
 //voiceStateUpdate event handler -- triggered when a user joins or leaves a channel or their status in the channel changes
 client.on('voiceStateUpdate', (oldMember, newMember) => {
 	//if the user left the channel, check if we should delete it
-	if (oldMember.voiceChannelID != newMember.voiceChannelID) {
-		if (oldMember.voiceChannel) {
+	if (oldMember.channelId != newMember.channelId) {
+		if (oldMember.channel) {
 			const guild = client.guilds.resolve(config.guildId);
-			const oldCategory = guild.channels.resolve(oldMember.voiceChannel.parentID);
+			const oldCategory = guild.channels.resolve(oldMember.channel.parentId);
 			if (oldCategory && oldCategory.name === config.tempChannelCategory) {
-				if (oldMember.voiceChannel.members.size === 0) {
-					oldMember.voiceChannel.delete();
+				if (oldMember.channel.members.size === 0) {
+					oldMember.channel.delete();
 				}
 			}
 		}
@@ -3193,7 +3223,7 @@ client.on("ready", async function() {
 	const tempChannelCategory = guild.channels.cache.find(c => { return c.name === config.tempChannelCategory; });
 	if (tempChannelCategory && tempChannelCategory.children && tempChannelCategory.children.size) {
 		tempChannelCategory.children.forEach(function(c) {
-			if (c.type == 'voice') {
+			if (c.type == 'GUILD_VOICE') {
 				if (c.members.size === 0)
 					c.delete();
 			}
@@ -3201,7 +3231,7 @@ client.on("ready", async function() {
 	}
 
 	forumSyncTimerCallback(); //prime the date and do initial adds
-	forumSyncTimer = client.setInterval(forumSyncTimerCallback, config.forumSyncIntervalMS);
+	forumSyncTimer = setInterval(forumSyncTimerCallback, config.forumSyncIntervalMS);
 
 	startNextSavedTimer();
 });
