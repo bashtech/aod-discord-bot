@@ -1024,8 +1024,7 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 
 	if (cmd === 'voice') {
 		type = 'GUILD_VOICE';
-	} 
-	else if (cmd === 'ptt') {
+	} else if (cmd === 'ptt') {
 		channelName += '-ptt';
 		cmd = 'voice';
 		type = 'GUILD_VOICE';
@@ -1146,15 +1145,14 @@ function commandTopic(message, member, cmd, args, guild, perm, permName, isDM) {
 	else if (message.channel.type === 'GUILD_TEXT')
 		channel = message.channel;
 
-	if (channel)
+	if (channel) {
 		if (args.length <= 0) {
 			return channel.setTopic('', `Requested by ${getNameFromMessage(message)}`);
-		}
-		else {
+		} else {
 			channel.setTopic(args.join(' '), `Requested by ${getNameFromMessage(message)}`)
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
 		}
-	else {
+	} else {
 		return message.reply("Channel not found");
 	}
 }
@@ -2032,7 +2030,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 		.catch(error => { console.log(error); });
 	guild.members.cache.forEach(function(m) {
 		if (!m.presence) {
-			online++
+			offline++
 		} else {
 			switch (m.presence.status) {
 				case 'idle':
