@@ -94,7 +94,7 @@ intents.add(
 	Intents.FLAGS.DIRECT_MESSAGE_REACTIONS,
 	Intents.FLAGS.DIRECT_MESSAGE_TYPING);
 
-const client = new Client({intents: intents, partials: ['MESSAGE', 'CHANNEL']});
+const client = new Client({ intents: intents, partials: ['MESSAGE', 'CHANNEL'] });
 
 
 /*************************************
@@ -1592,7 +1592,7 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 
 			let newRole;
 			try {
-				newRole = await guild.roles.create({ name: roleName, permissions: 0, mentionable: true , reason: `Requested by ${getNameFromMessage(message)}` });
+				newRole = await guild.roles.create({ name: roleName, permissions: 0, mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
 			} catch (error) {
 				return notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
 			}
@@ -2030,7 +2030,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 		.catch(error => { console.log(error); });
 	guild.members.cache.forEach(function(m) {
 		if (!m.presence) {
-			offline++
+			offline++;
 		} else {
 			switch (m.presence.status) {
 				case 'idle':
@@ -2551,6 +2551,12 @@ function commandRelay(message, member, cmd, args, guild, perm, permName, isDM) {
 		return;
 
 	sendMessageToChannel(channel, content)
+		.then((relayed) => {
+			if (message.author.bot && message.webhookId && message.webhookId === message.author.id) {
+				//approved bot, log message IDs
+				console.log(`Webhook message ${message.id} relayed to ${channelName} as ${relayed.id}`);
+			}
+		})
 		.finally(() => { if (!isDM) message.delete(); })
 		.catch(error => { notifyRequestError(message, member, guild, error, PERM_NONE); });
 }
