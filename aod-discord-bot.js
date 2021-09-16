@@ -867,7 +867,7 @@ function commandPurge(message, member, cmd, args, guild, perm, permName, isDM) {
 
 var channelPermissionLevels = ['feed', 'guest', 'member', 'officer', 'mod', 'staff', 'admin'];
 
-function getChannelPermissions(guild, perm, level, type, divisionRole) {
+function getChannelPermissions(guild, message, perm, level, type, divisionRole) {
 	//get permissions based on type
 	var defaultDeny;
 	if (type == 'ptt')
@@ -1018,7 +1018,7 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 		return message.reply("Channel already exists");
 
 	//get channel permissions
-	let permissions = getChannelPermissions(guild, perm, level, cmd, divisionRole);
+	let permissions = getChannelPermissions(guild, message, perm, level, cmd, divisionRole);
 	if (!permissions)
 		return;
 
@@ -1086,7 +1086,7 @@ function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM
 	}
 
 	//get channel permissions //FIXME: support PTT?
-	var permissions = getChannelPermissions(guild, perm, level, existingChannel.type, divisionRole);
+	var permissions = getChannelPermissions(guild, message, perm, level, existingChannel.type, divisionRole);
 	if (!permissions)
 		return;
 
@@ -1227,7 +1227,8 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 
 	try {
 		//create officers role
-		divisionRole = await guild.roles.create({ name: roleName, permissions: 0, mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
+		//divisionRole = await guild.roles.create({ name: roleName, permissions: 0, mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
+		divisionRole = await guild.roles.create({ name: roleName, permissions: [], mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
 		const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
 		await divisionRole.setPosition(memberRole.position + 1).catch(e => { console.log(e); });
 
@@ -1592,14 +1593,13 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 
 			let newRole;
 			try {
-				newRole = await guild.roles.create({ name: roleName, permissions: 0, mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
+				newRole = await guild.roles.create({ name: roleName, permissions: [], mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
 			} catch (error) {
 				return notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
 			}
 			roleName = newRole.name; //in case discord alters
 			//FIXME: do we need to set the position?
 
-			console.log(rolesConfig);
 			if (rolesConfig[roleName] === undefined) {
 				rolesConfig[roleName] = {
 					roleID: newRole.id,
@@ -2386,7 +2386,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 				title: '',
 				fields: [{
 					name: 'Discord Officer Roles',
-					value: guild.roles.cache.array().filter(r => r.name.endsWith(config.discordOfficerSuffix)).map(r => r.name).sort().join("\n")
+					value: guild.roles.cache.filter(r => r.name.endsWith(config.discordOfficerSuffix)).map(r => r.name).sort().join("\n")
 				}]
 			};
 			sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
@@ -2642,6 +2642,21 @@ function processTimeStr(string) {
 	seconds += (hours * 3600);
 	seconds += (days * 86400);
 	return seconds;
+}
+
+function commandSlap(message, member, cmd, args, guild, perm, permName, isDM) {
+	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
+	let tag;
+	if (isDM) {
+		return message.reply(`You can only slap people in text channels`);
+	}
+	if (!targetMember) {
+		return message.reply("Please mention a valid member of this server");
+	}
+
+	return message.channel.send(`_${member} slaps ${targetMember} around a bit with a large trout._`)
+		.then(message.delete())
+		.catch(() => {});
 }
 
 function commandTest(message, member, cmd, args, guild, perm, permName, isDM) {
@@ -2955,6 +2970,13 @@ commands = {
 		callback: commandStatus,
 		dmOnly: true
 	},
+	slap: {
+		minPermission: PERM_GUEST,
+		args: ["[<@mention|tag|snowflake>]"],
+		helpText: "Slap someone with a trout",
+		callback: commandSlap,
+		doLog: false
+	},
 	quit: {
 		minPermission: PERM_OWNER,
 		args: "",
@@ -3050,7 +3072,9 @@ client.on("messageCreate", message => {
 
 	try {
 		return processCommand(message, member, command, arg_string, guild, perm, permName, isDM);
-	} catch (error) { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); } //don't let user input crash the bot
+	} catch (error) {
+		notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+	} //don't let user input crash the bot
 });
 
 //voiceStateUpdate event handler -- triggered when a user joins or leaves a channel or their status in the channel changes
@@ -3208,7 +3232,7 @@ function forumSyncTimerCallback() {
 
 //messageDelete handler
 client.on("messageDelete", (message) => {
-	if (message.channel && !message.content.startsWith(config.prefix + 'relay ') && !message.content.startsWith(config.prefix + 'login '))
+	if (message.guildId && message.channel && !message.content.startsWith(config.prefix + 'relay ') && !message.content.startsWith(config.prefix + 'login '))
 		console.log(`Deleted message from ${message.author.tag} in #${message.channel.name}: ${message.content}`);
 });
 
