@@ -9,7 +9,7 @@
 /* jshint esversion: 8 */
 
 //include discord.js
-const { Client, Intents } = require('discord.js');
+const { Client, Collection, Intents } = require('discord.js');
 //const Discord = require('discord.js');
 
 //include request
@@ -81,7 +81,7 @@ intents.add(
 	Intents.FLAGS.GUILDS,
 	Intents.FLAGS.GUILD_MEMBERS,
 	Intents.FLAGS.GUILD_BANS,
-	Intents.FLAGS.GUILD_EMOJIS_AND_STICKERS,
+	//Intents.FLAGS.GUILD_EMOJIS_AND_STICKERS,
 	Intents.FLAGS.GUILD_INTEGRATIONS,
 	Intents.FLAGS.GUILD_WEBHOOKS,
 	Intents.FLAGS.GUILD_INVITES,
@@ -89,10 +89,10 @@ intents.add(
 	Intents.FLAGS.GUILD_PRESENCES,
 	Intents.FLAGS.GUILD_MESSAGES,
 	Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
-	Intents.FLAGS.GUILD_MESSAGE_TYPING,
 	Intents.FLAGS.DIRECT_MESSAGES,
 	Intents.FLAGS.DIRECT_MESSAGE_REACTIONS,
-	Intents.FLAGS.DIRECT_MESSAGE_TYPING);
+	//Intents.FLAGS.DIRECT_MESSAGE_TYPING,
+);
 
 const client = new Client({ intents: intents, partials: ['MESSAGE', 'CHANNEL'] });
 
@@ -288,6 +288,7 @@ function getPermissionLevelForMember(member) {
 	}
 	return [perm, getStringForPermission(perm)];
 }
+global.getPermissionLevelForMember = getPermissionLevelForMember;
 
 //add view to the permissions list of a role in the server
 function addRoleToPermissions(guild, role, permissions, allow, deny) {
@@ -527,12 +528,42 @@ function sendMessageToMember(member, data) {
 
 //send a reply as DM to the author of a message (if available) and return a promise
 function sendReplyToMessageAuthor(message, member, guild, data) {
+	//if (message && message.isInteraction)
+	//	return message.reply({ content: data, ephemeral: true });
 	if (message && member)
 		return sendMessageToMember(member, data);
 	var promise = new Promise(function(resolve, reject) {
 		reject();
 	});
 	return promise;
+}
+
+//send a list of items as DM to the author of a message
+function sendListToMessageAuthor(message, member, guild, title, list, footer, formatter) {
+	let embed = {
+		title: title,
+		description: "",
+	};
+	if (footer)
+		embed.footer = { text: footer };
+	for (let desc of list) {
+		if (formatter)
+			desc = formatter(desc);
+		desc += "\n";
+		if (embed.description.length + desc.length < 2048) {
+			embed.description = embed.description + desc;
+		} else {
+			sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+			embed = {
+				title: `Continued...`,
+				description: "",
+			};
+			if (footer)
+				embed.footer = { text: footer };
+		}
+	}
+	if (embed.description.length)
+		sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 }
 
 //help command processing
@@ -1091,7 +1122,7 @@ function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM
 		return;
 
 	//replace channel permission overrides
-	existingChannel.overwritePermissions(permissions, `Requested by ${getNameFromMessage(message)}`)
+	existingChannel.permissionOverwrites.set(permissions, `Requested by ${getNameFromMessage(message)}`)
 		.then(() => { message.reply(`Channel ${channelName} permissions updated`); })
 		.catch(error => {
 			message.reply(`Failed to update channel ${channelName} permissions`);
@@ -1322,6 +1353,10 @@ function escapeNameForOutput(name) {
 	return name.replace(/[*_]/g, escapeNameCharacter);
 }
 
+function escapeDisplayNameForOutput(member) {
+	return member.displayName.replace(/[*_]/g, escapeNameCharacter);
+}
+
 //sub/unsub/list command processing
 function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
@@ -1387,25 +1422,9 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 					if (role.members.size > 256) {
 						return message.reply(`Role ${roleName} has more than 256 members.`);
 					}
-					let embed = {
-						title: `Members of ${roleName} (${role.members.size})`,
-						description: ''
-					};
-					for (let roleMember of role.members.sort((a, b) => a.displayName.localeCompare(b.displayName)).values()) {
-						let displayName = escapeNameForOutput(`${roleMember.displayName} (${roleMember.user.tag})`);
-						let line = `${displayName}\n`;
-						if (embed.description.length + line.length < 2048) {
-							embed.description = embed.description + line;
-						} else {
-							sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
-							embed = {
-								title: `Continued...`,
-								description: "",
-							};
-						}
-					}
-					if (embed.description.length)
-						return sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+					sendListToMessageAuthor(message, member, guild, `Members of ${roleName} (${role.members.size})`,
+						role.members.sort((a, b) => a.displayName.localeCompare(b.displayName)).values(), "", escapeDisplayNameForOutput);
+					return;
 				} else {
 					return message.reply(`Role ${roleName} does not exist`);
 				}
@@ -1436,26 +1455,13 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 					}
 				}
 				if (assign) {
-					let displayName = escapeNameForOutput(targetMember.displayName);
-					let embed = {
-						title: `Roles for ${displayName}`,
-						fields: [
-							{ name: 'Subscribed Roles', value: subedRoles.length ? subedRoles.join("\n") : '*No Roles Subscribed*' },
-							{ name: 'Assigned Roles', value: assignedRoles.length ? assignedRoles.join("\n") : '*No Roles Assigned*' },
-							{ name: 'Available Roles', value: availRoles.length ? availRoles.join("\n") : '*No Roles Available*' },
-						]
-					};
-					return sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+					let displayName = escapeDisplayNameForOutput(targetMember);
+					sendListToMessageAuthor(message, member, guild, `Subscribed Roles for ${displayName}`, subedRoles);
+					sendListToMessageAuthor(message, member, guild, `Assigned Roles for ${displayName}`, assignedRoles);
+					sendListToMessageAuthor(message, member, guild, `Available Roles for ${displayName}`, availRoles);
 				} else {
-					return sendReplyToMessageAuthor(message, member, guild, {
-						embeds: [{
-							title: 'Role Subscriptions',
-							fields: [
-								{ name: 'Subscribed Roles', value: subedRoles.length ? subedRoles.join("\n") : '*No Roles Subscribed*' },
-								{ name: 'Available Roles', value: availRoles.length ? availRoles.join("\n") : '*No Roles Available*' },
-							]
-						}]
-					});
+					sendListToMessageAuthor(message, member, guild, `Subscribed Roles`, subedRoles);
+					sendListToMessageAuthor(message, member, guild, `Available Roles`, availRoles);
 				}
 			}
 		}
@@ -1636,15 +1642,12 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			}
 			subRoles.sort();
 			assignRoles.sort();
-			return sendReplyToMessageAuthor(message, member, guild, {
-				embeds: [{
-					fields: [
-						{ name: "Subscribable Roles", value: subRoles.length ? subRoles.join("\n") : '*No roles configuerd*' },
-						{ name: "Assignable Roles", value: assignRoles.length ? assignRoles.join("\n") : '*No roles configuerd*' }
-					],
-					footer: { text: '* indicates roles that would be deleted upon removal' }
-				}]
-			});
+
+			sendListToMessageAuthor(message, member, guild, `Subscribable Roles`, subRoles,
+				'* indicates roles that would be deleted upon removal');
+			sendListToMessageAuthor(message, member, guild, `Assignable Roles`, assignRoles,
+				'* indicates roles that would be deleted upon removal');
+			break;
 		}
 		case 'prune': {
 			let subRoles = [];
@@ -2653,8 +2656,14 @@ function commandSlap(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (!targetMember) {
 		return message.reply("Please mention a valid member of this server");
 	}
-
-	return message.channel.send(`_${member} slaps ${targetMember} around a bit with a large trout._`)
+	let object;
+	if (args.length > 0)
+		args.shift();
+	if (args.length)
+		object = args.join(' ');
+	else
+		object = 'a large trout';
+	return message.channel.send(`_${member} slaps ${targetMember} around a bit with ${object}._`)
 		.then(message.delete())
 		.catch(() => {});
 }
@@ -2972,8 +2981,8 @@ commands = {
 	},
 	slap: {
 		minPermission: PERM_GUEST,
-		args: ["[<@mention|tag|snowflake>]"],
-		helpText: "Slap someone with a trout",
+		args: ["<@mention|tag|snowflake>", "[\"<object>\"]"],
+		helpText: "Slap someone with a trout or optional object",
 		callback: commandSlap,
 		doLog: false
 	},
@@ -3010,6 +3019,7 @@ function processCommand(message, member, cmd, arg_string, guild, perm, permName,
 		}
 	}
 }
+global.processCommand = processCommand;
 
 //message event handler -- triggered when client receives a message from a text channel or DM
 client.on("messageCreate", message => {
@@ -3075,6 +3085,29 @@ client.on("messageCreate", message => {
 	} catch (error) {
 		notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
 	} //don't let user input crash the bot
+});
+
+//Slash Command Processing
+client.commands = new Collection();
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+for (const file of commandFiles) {
+	const command = require(`./commands/${file}`);
+	client.commands.set(command.data.name, command);
+}
+client.on('interactionCreate', async interaction => {
+	if (!interaction.isCommand())
+		return;
+	const command = client.commands.get(interaction.commandName);
+	if (!command) return;
+
+	//console.log([interaction, command]);
+	interaction.isInteraction = true;
+	try {
+		await command.execute(interaction);
+	} catch (error) {
+		console.error(error);
+		await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+	}
 });
 
 //voiceStateUpdate event handler -- triggered when a user joins or leaves a channel or their status in the channel changes
