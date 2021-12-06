@@ -1683,6 +1683,9 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 				}]
 			});
 		}
+		default: {
+			return message.reply(`Unknown command: ${subcmd}`);
+		}
 	}
 }
 
@@ -1835,7 +1838,7 @@ function commandTracker(message, member, cmd, args, guild, perm, permName, isDM)
 function getForumGroups() {
 	var promise = new Promise(function(resolve, reject) {
 		let db = connectToDB();
-		let query = `SELECT usergroupid AS id,title AS name FROM ${config.mysql.prefix}usergroup WHERE title LIKE "AOD%" OR title LIKE "%Officers"`;
+		let query = `SELECT usergroupid AS id,title AS name FROM ${config.mysql.prefix}usergroup WHERE title LIKE "AOD%" OR title LIKE "%Officers" OR title LIKE "Division CO" or title LIKE "Division XO"`;
 		db.query(query, function(err, rows, fields) {
 			if (err)
 				return reject(err);
@@ -2514,6 +2517,29 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 					}
 				})
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+			break;
+		}
+		case 'prune': {
+			let doWrite = false;
+			let reply = "";
+			Object.keys(forumIntegrationConfig).forEach(roleName => {
+				const role = guild.roles.cache.find(r => { return r.name == roleName; });
+				if (!role) {
+					reply += `Remove map for deleted role ${roleName}\n`;
+					delete forumIntegrationConfig[roleName];
+					doWrite = true;
+				}
+			});
+			if (doWrite) {
+				fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
+				getRolesByForumGroup(guild, true);
+			}
+			reply += "Prune complete.";
+			sendReplyToMessageAuthor(message, member, guild, reply);
+			break;
+		}
+		default: {
+			return message.reply(`Unknown command: ${subCmd}`);
 		}
 	}
 }
@@ -2931,7 +2957,8 @@ commands = {
 			"*check*: Checks for exceptions between forum groups and mapped discord roles",
 			"*sync*: Adds and removes members from discord roles based on forum groups",
 			"*add \"<role>\" \"<group>\"*: Maps the forum <group> to the discord <role>",
-			"*rem \"<role>\" \"<group>\"*: Removes the forum group from the map for the discord <role>"
+			"*rem \"<role>\" \"<group>\"*: Removes the forum group from the map for the discord <role>",
+			"*prune*: Remove invalid map entries"
 		],
 		callback: commandForumSync
 	},
