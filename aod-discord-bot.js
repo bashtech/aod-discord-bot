@@ -9,8 +9,7 @@
 /* jshint esversion: 8 */
 
 //include discord.js
-const { Client, Collection, Intents } = require('discord.js');
-//const Discord = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ChannelType, PermissionsBitField, Collection } = require('discord.js');
 
 //include request
 var request = require('request');
@@ -57,6 +56,14 @@ try {
 	managedRoles = { subscribable: {}, assignable: {}, menuOrder: [] };
 }
 
+//include dependentRoles
+var dependentRoles;
+try {
+	dependentRoles = require(config.dependentRoles);
+} catch (error) {
+	console.log(error);
+	dependentRoles = { requires: {}, requiredFor: {} };
+}
 
 //permission levels
 const PERM_OWNER = 8;
@@ -75,26 +82,29 @@ var undefined;
 //other globals
 var lastForumSync;
 
-//initialize client
-const intents = new Intents();
-intents.add(
-	Intents.FLAGS.GUILDS,
-	Intents.FLAGS.GUILD_MEMBERS,
-	Intents.FLAGS.GUILD_BANS,
-	//Intents.FLAGS.GUILD_EMOJIS_AND_STICKERS,
-	Intents.FLAGS.GUILD_INTEGRATIONS,
-	Intents.FLAGS.GUILD_WEBHOOKS,
-	Intents.FLAGS.GUILD_INVITES,
-	Intents.FLAGS.GUILD_VOICE_STATES,
-	Intents.FLAGS.GUILD_PRESENCES,
-	Intents.FLAGS.GUILD_MESSAGES,
-	Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
-	Intents.FLAGS.DIRECT_MESSAGES,
-	Intents.FLAGS.DIRECT_MESSAGE_REACTIONS,
-	//Intents.FLAGS.DIRECT_MESSAGE_TYPING,
-);
-
-const client = new Client({ intents: intents, partials: ['MESSAGE', 'CHANNEL'] });
+const client = new Client({
+	intents: [
+		GatewayIntentBits.DirectMessageReactions,
+		GatewayIntentBits.DirectMessageTyping,
+		GatewayIntentBits.DirectMessages,
+		GatewayIntentBits.GuildBans,
+		GatewayIntentBits.GuildEmojisAndStickers,
+		GatewayIntentBits.GuildIntegrations,
+		GatewayIntentBits.GuildInvites,
+		GatewayIntentBits.GuildMembers,
+		GatewayIntentBits.GuildMessageReactions,
+		GatewayIntentBits.GuildMessageTyping,
+		GatewayIntentBits.GuildMessages,
+		GatewayIntentBits.GuildPresences,
+		GatewayIntentBits.GuildScheduledEvents,
+		GatewayIntentBits.GuildVoiceStates,
+		GatewayIntentBits.GuildWebhooks,
+		GatewayIntentBits.Guilds,
+		GatewayIntentBits.MessageContent],
+	partials: [
+		Partials.Message,
+		Partials.Channel]
+});
 
 
 /*************************************
@@ -218,27 +228,36 @@ function getMemberFromMessageOrArgs(guild, message, args) {
 	return member;
 }
 
+function returnMessage(message, msg) {
+	if (message)
+		return message.reply(msg);
+	let promise = new Promise(function(resolve, reject) {
+		resolve();
+	});
+	return promise;
+}
+
 //add or remove a role from a guildMember
 function addRemoveRole(message, guild, add, roleName, isID, member) {
 	if (!guild)
-		return message.reply("Invalid Guild");
+		return returnMessage(message, "Invalid Guild");
 	var role;
 	if (isID === true)
 		role = guild.roles.resolve(roleName);
 	else
 		role = guild.roles.cache.find(r => { return r.name == roleName; });
 	if (!role)
-		return message.reply("Invalid Role");
+		return returnMessage(message, "Invalid Role");
 	if (!member)
-		return message.reply("Please mention a valid member of this server");
+		return returnMessage(message, "Please mention a valid member of this server");
 
 	if (add)
-		member.roles.add(role, `Requested by ${getNameFromMessage(message)}`)
-		.then(message.reply("Added " + role.name + " to " + member.user.tag))
+		member.roles.add(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
+		.then(returnMessage(message, "Added " + role.name + " to " + member.user.tag))
 		.catch(error => { notifyRequestError(null, null, guild, error, false); });
 	else
-		member.roles.remove(role, `Requested by ${getNameFromMessage(message)}`)
-		.then(message.reply("Removed " + role.name + " from " + member.user.tag))
+		member.roles.remove(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
+		.then(returnMessage(message, "Removed " + role.name + " from " + member.user.tag))
 		.catch(error => { notifyRequestError(null, null, guild, error, false); });
 }
 
@@ -298,24 +317,25 @@ function addRoleToPermissions(guild, role, permissions, allow, deny) {
 	permissions.push({
 		type: 'role',
 		id: role.id,
-		allow: (Array.isArray(allow) ? allow : ['VIEW_CHANNEL', 'CONNECT']),
+		allow: (Array.isArray(allow) ? allow : [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]),
 		deny: (Array.isArray(deny) ? deny : []),
 	});
 
 	return permissions;
 }
+
 //build a list of permissions for admin
 function getPermissionsForAdmin(guild, defaultAllow, defaultDeny, allow, deny) {
 	let permissions = [{
 		id: guild.id,
 		allow: (Array.isArray(defaultAllow) ? defaultAllow : []),
-		deny: (Array.isArray(defaultDeny) ? defaultDeny : ['VIEW_CHANNEL', 'CONNECT'])
+		deny: (Array.isArray(defaultDeny) ? defaultDeny : [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect])
 	}];
 
 	const muteRole = guild.roles.cache.find(r => { return r.name == config.muteRole; });
-	permissions = addRoleToPermissions(guild, muteRole, permissions, [], ['SEND_MESSAGES', 'SEND_TTS_MESSAGES', 'SPEAK']);
+	permissions = addRoleToPermissions(guild, muteRole, permissions, [], [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.SendTTSMessages, PermissionsBitField.Flags.Speak]);
 	const pttRole = guild.roles.cache.find(r => { return r.name == config.pttRole; });
-	permissions = addRoleToPermissions(guild, pttRole, permissions, [], ['USE_VAD']);
+	permissions = addRoleToPermissions(guild, pttRole, permissions, [], [PermissionsBitField.Flags.UseVAD]);
 
 	// add admin
 	config.adminRoles.forEach(n => {
@@ -479,6 +499,17 @@ var paramsRegEx = /([^\s"'\u201C]+)|"(((\\")|([^"]))*)"|'(((\\')|([^']))*)'|\u20
 const paramsReplaceEscapedSingleRegEx = /\\'/g;
 const paramsReplaceExcapedDoubleRegEx = /\\"/g;
 
+var mentionRegEx = /<@([0-9]+)>/;
+
+function filterParam(param) {
+	mentionRegEx.lastIndex = 0;
+	let match = mentionRegEx.exec(param);
+	let str = param;
+	if (match != null && match[1])
+		str = match[1];
+	return str;
+}
+
 function getParams(string) {
 	paramsRegEx.lastIndex = 0;
 	var params = [];
@@ -499,7 +530,7 @@ function getParams(string) {
 				param = match[10];
 			else
 				param = match[0];
-			params.push(param);
+			params.push(filterParam(param));
 		}
 	} while (match != null);
 	return params;
@@ -902,9 +933,9 @@ function getChannelPermissions(guild, message, perm, level, type, divisionRole) 
 	//get permissions based on type
 	var defaultDeny;
 	if (type == 'ptt')
-		defaultDeny = ['VIEW_CHANNEL', 'CONNECT', 'USE_VAD'];
+		defaultDeny = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.UseVAD];
 	else
-		defaultDeny = ['VIEW_CHANNEL', 'CONNECT'];
+		defaultDeny = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect];
 
 	var permissions;
 	switch (level) {
@@ -916,7 +947,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionRole) 
 			permissions = getPermissionsForEveryone(guild, [], defaultDeny);
 			//add role permissions if necessary
 			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
 			break;
 		case 'mod':
 			if (perm < PERM_MOD) {
@@ -935,7 +966,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionRole) 
 				return null;
 			}
 			permissions = getPermissionsForModerators(guild, [], defaultDeny);
-			permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT']);
+			permissions = addRoleToPermissions(guild, divisionRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
 			break;
 		case 'staff':
 			if (perm < PERM_STAFF) {
@@ -961,27 +992,27 @@ function getChannelPermissions(guild, message, perm, level, type, divisionRole) 
 				return null;
 			}
 			//get permissions for staff -- add manage webhooks
-			permissions = getPermissionsForStaff(guild, [], defaultDeny, ['VIEW_CHANNEL', 'CONNECT', 'SEND_MESSAGES', 'MANAGE_WEBHOOKS']);
+			permissions = getPermissionsForStaff(guild, [], defaultDeny, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageWebhooks]);
 			//add moderators
 			config.modRoles.forEach(n => {
 				const role = guild.roles.cache.find(r => { return r.name == n; });
 				if (role)
-					permissions = addRoleToPermissions(guild, role, permissions, ['VIEW_CHANNEL', 'CONNECT', 'SEND_MESSAGES']);
+					permissions = addRoleToPermissions(guild, role, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages]);
 			});
 			//add member/guest as read only
 			const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
-			permissions = addRoleToPermissions(guild, memberRole, permissions, ['VIEW_CHANNEL'], ['SEND_MESSAGES', 'SEND_TTS_MESSAGES', 'SPEAK']);
+			permissions = addRoleToPermissions(guild, memberRole, permissions, [PermissionsBitField.Flags.ViewChannel], [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.SendTTSMessages, PermissionsBitField.Flags.Speak]);
 			const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
-			permissions = addRoleToPermissions(guild, guestRole, permissions, ['VIEW_CHANNEL'], ['SEND_MESSAGES', 'SEND_TTS_MESSAGES', 'SPEAK']);
+			permissions = addRoleToPermissions(guild, guestRole, permissions, [PermissionsBitField.Flags.ViewChannel], [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.SendTTSMessages, PermissionsBitField.Flags.Speak]);
 			//add role permissions if necessary
 			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT', 'SEND_MESSAGES', 'MANAGE_MESSAGES']);
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
 			break;
 		default: //member
 			permissions = getPermissionsForMembers(guild, [], defaultDeny);
 			//add role permissions if necessary
 			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, ['VIEW_CHANNEL', 'CONNECT', 'SEND_MESSAGES', 'MANAGE_MESSAGES']);
+				permissions = addRoleToPermissions(guild, divisionRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
 			break;
 	}
 	return permissions;
@@ -996,7 +1027,7 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
 
-	if ((channelCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == args[0].toLowerCase() && c.type == 'GUILD_CATEGORY'); }))) {
+	if ((channelCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == args[0].toLowerCase() && c.type == ChannelType.GuildCategory); }))) {
 		//check if this category has an associated officer role
 		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
 		divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
@@ -1005,7 +1036,7 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 			return message.reply("You may not create a permanent channel");
 		if (perm == PERM_DIVISION_COMMANDER && (!divisionRole || !member.roles.cache.get(divisionRole.id)))
 			return message.reply("You may only add channels to a division you command");
-		if (channelCategory.type != 'GUILD_CATEGORY')
+		if (channelCategory.type != ChannelType.GuildCategory)
 			return message.reply("Mentioned channel must be a category");
 		if (perm < PERM_ADMIN && channelCategory.children.size >= config.maxChannelsPerCategory)
 			return message.reply("Category is full");
@@ -1025,7 +1056,7 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 
 	//process level argument if present
 	let level = 'member';
-	let type = 'GUILD_TEXT';
+	let type = ChannelType.GuildText;
 	if (channelPermissionLevels.includes(args[0])) {
 		level = args[0];
 		args.shift();
@@ -1054,15 +1085,15 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 		return;
 
 	if (cmd === 'voice') {
-		type = 'GUILD_VOICE';
+		type = ChannelType.GuildVoice;
 	} else if (cmd === 'ptt') {
 		channelName += '-ptt';
 		cmd = 'voice';
-		type = 'GUILD_VOICE';
+		type = ChannelType.GuildVoice;
 	}
 
 	//create channel
-	return guild.channels.create(channelName, { type: type, name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
+	return guild.channels.create({ type: type, name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
 		.then(c => {
 			if (cmd === 'voice') {
 				//make sure someone gets into the channel
@@ -1105,7 +1136,7 @@ function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM
 		return message.reply(`${channelName} is a protected channel.`);
 
 	var existingChannel = guild.channels.cache.find(c => { return c.name == channelName; });
-	if (!existingChannel || (existingChannel.type !== 'GUILD_TEXT' && existingChannel.type !== 'GUILD_VOICE'))
+	if (!existingChannel || (existingChannel.type !== ChannelType.GuildText && existingChannel.type !== ChannelType.GuildVoice))
 		return message.reply("Channel not found");
 
 	//check if we're in a category and get the proper division role
@@ -1141,7 +1172,7 @@ function commandRemChannel(message, member, cmd, args, guild, perm, permName, is
 		return message.reply(`${channelName} is a protected channel.`);
 
 	var existingChannel = guild.channels.cache.find(c => { return c.name == channelName; });
-	if (!existingChannel || existingChannel.type === 'GUILD_CATEGORY')
+	if (!existingChannel || existingChannel.type === ChannelType.GuildCategory)
 		return message.reply("Channel not found");
 
 	if (perm < PERM_DIVISION_COMMANDER)
@@ -1162,6 +1193,53 @@ function commandRemChannel(message, member, cmd, args, guild, perm, permName, is
 		.then(() => { message.reply(`Channel ${channelName} removed`); });
 }
 
+//rename channel command processing
+function commandRenameChannel(message, member, cmd, args, guild, perm, permName, isDM) {
+	if (args.length <= 0)
+		return message.reply("A name must be provided");
+
+	let channelName;
+	if (args.length == 1) {
+		//one argument, rename the channel the command was received in
+		if (isDM)
+			return message.reply("A new name must be provided");
+		channelName = message.channel.name;
+	} else {
+		channelName = args[0];
+		args.shift();
+	}
+	channelName = channelName.toLowerCase().replace(/\s/g, '-');
+
+	let newName = args[0].toLowerCase().replace(/\s/g, '-');
+
+	if (config.protectedChannels.includes(channelName))
+		return message.reply(`${channelName} is a protected channel.`);
+
+	var existingChannel = guild.channels.cache.find(c => { return c.name == channelName; });
+	if (!existingChannel || existingChannel.type === ChannelType.GuildCategory)
+		return message.reply("Channel not found");
+
+	if (perm < PERM_DIVISION_COMMANDER)
+		return message.reply("You may not rename this channel");
+
+	var channelCategory = existingChannel.parent;
+	if (channelCategory) {
+		//check if this category has an associated officer role
+		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
+		divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
+		if (perm == PERM_DIVISION_COMMANDER && (!divisionRole || !member.roles.cache.get(divisionRole.id)))
+			return message.reply("You may only rename channels from a division you command");
+		let divisionPrefix = channelCategory.name.toLowerCase().replace(/\s/g, '-');
+		if (!newName.startsWith(divisionPrefix))
+			newName = divisionPrefix + '-' + newName;
+	} else {
+		if (perm < PERM_STAFF)
+			return message.reply("You may not rename this channel");
+	}
+	existingChannel.setName(newName, `Requested by ${getNameFromMessage(message)}`)
+		.then(() => { message.reply(`Channel ${channelName} renamed to ${newName}`); });
+}
+
 function commandTopic(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (args.length <= 0)
 		return message.channel.setTopic('', `Requested by ${getNameFromMessage(message)}`);
@@ -1173,7 +1251,7 @@ function commandTopic(message, member, cmd, args, guild, perm, permName, isDM) {
 	let channel = guild.channels.cache.find(c => { return (c.name.toLowerCase() == channelName); });
 	if (channel)
 		args.shift();
-	else if (message.channel.type === 'GUILD_TEXT')
+	else if (message.channel.type === ChannelType.GuildText)
 		channel = message.channel;
 
 	if (channel) {
@@ -1249,7 +1327,7 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 	let divisionPublicChannel = simpleName + '-public';
 	let divisionMemberVoiceChannel = simpleName + '-member-voip';
 
-	var divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == 'GUILD_CATEGORY'); });
+	var divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == ChannelType.GuildCategory); });
 	if (divisionCategory)
 		return message.reply("Division already exists.").catch(() => {});
 	var divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
@@ -1265,28 +1343,30 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 
 		//add category for division
 		let permissions = getPermissionsForEveryone(guild);
-		divisionCategory = await guild.channels.create(divisionName, { type: 'GUILD_CATEGORY', name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		divisionCategory = await guild.channels.create({ type: ChannelType.GuildCategory, name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create members channel
-		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
-		let membersChannel = await guild.channels.create(divisionMembersChannel, { type: 'GUILD_TEXT', name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+		let membersChannel = await guild.channels.create({ type: ChannelType.GuildText, name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create officers channel
-		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForModerators(guild), ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
-		let officersChannel = await guild.channels.create(divisionOfficersChannel, { type: 'GUILD_TEXT', name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForModerators(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+		let officersChannel = await guild.channels.create({ type: ChannelType.GuildText, name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create public channel
-		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForEveryone(guild), ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
-		let publicChannel = await guild.channels.create(divisionPublicChannel, { type: 'GUILD_TEXT', name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForEveryone(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+		let publicChannel = await guild.channels.create({ type: ChannelType.GuildText, name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create member voice channel
-		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), ['VIEW_CHANNEL', 'CONNECT', 'MANAGE_MESSAGES']);
-		let memberVoipChannel = await guild.channels.create(divisionMemberVoiceChannel, { type: 'GUILD_VOICE', name: divisionMemberVoiceChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
+		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+		let memberVoipChannel = await guild.channels.create({ type: ChannelType.GuildVoice, name: divisionMemberVoiceChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
+
+		addForumSyncMap(message, guild, roleName, divisionName + ' ' + config.forumOfficerSuffix);
 
 		return message.reply(`${divisionName} division added`).catch(() => {});
 	} catch (error) {
@@ -1302,13 +1382,13 @@ async function commandRemDivision(message, member, cmd, args, guild, perm, permN
 		return message.reply("A name must be provided");
 	let roleName = divisionName + ' ' + config.discordOfficerSuffix;
 
-	const divisionCategory = guild.channels.cache.find(c => { return (c.name == divisionName && c.type === 'GUILD_CATEGORY'); });
+	const divisionCategory = guild.channels.cache.find(c => { return (c.name == divisionName && c.type === ChannelType.GuildCategory); });
 	if (divisionCategory) {
 		if (config.protectedCategories.includes(divisionCategory.name))
 			return message.reply(`${divisionName} is a protected category.`);
 
 		//remove channels in category
-		for (var c of divisionCategory.children.values()) {
+		for (var c of divisionCategory.children.cache.values()) {
 			try {
 				await c.setParent(null, `Requested by ${getNameFromMessage(message)}`);
 				await c.delete(`Requested by ${getNameFromMessage(message)}`);
@@ -1682,6 +1762,145 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 					]
 				}]
 			});
+		}
+		default: {
+			return message.reply(`Unknown command: ${subcmd}`);
+		}
+	}
+}
+
+/*
+dependentRoles = {
+	requires: {
+		roleID1: [ roleID2, roleID3 ]
+	}
+	requiredFor: {
+		roleID2: [ roleID1 ],
+		roleID3: [ roleID1 ]
+	},
+}
+*/
+
+function setDependentRole(guild, dependentRole, requiredRole, skipVerifyMembers) {
+	let dependentRoleId = '' + dependentRole.id;
+	let requiredRoleId = '' + requiredRole.id;
+	let verifyMembers = false;
+	
+	if (dependentRoles.requires[dependentRoleId] === undefined) {
+		dependentRoles.requires[dependentRoleId] = [requiredRoleId];
+		verifyMembers = true;
+	} else {
+		if (!dependentRoles.requires[dependentRoleId].includes(requiredRoleId)) {
+			dependentRoles.requires[dependentRoleId].push(requiredRoleId);
+			verifyMembers = true;
+		}
+	}
+	
+	if (dependentRoles.requiredFor[requiredRoleId] === undefined) {
+		dependentRoles.requiredFor[requiredRoleId] = [dependentRoleId];
+	} else {
+		if (!dependentRoles.requiredFor[requiredRoleId].includes(dependentRoleId)) {
+			dependentRoles.requiredFor[requiredRoleId].push(dependentRoleId);
+		}
+	}
+	
+	fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
+	
+	if (verifyMembers && !skipVerifyMembers) {
+		dependentRole.members.cache.each(m => {
+			if (!m.roles.resolve(requiredRole)) {
+				console.log(`Removed ${dependentRole.name} from ${m.user.tag}; missing required role ${requiredRole.name}`);
+				m.roles.remove(dependentRole);
+			}
+		});
+	}
+}
+
+async function unsetDependentRole(guild, dependentRole, requiredRole) {
+	let dependentRoleId = '' + dependentRole.id;
+	let requiredRoleId = '' + requiredRole.id;
+
+	if (dependentRoles.requires[dependentRoleId] !== undefined) {
+		if (dependentRoles.requires[dependentRoleId].includes(requiredRoleId)) {
+			delete dependentRoles.requires[dependentRoleId][requiredRoleId];
+		}
+		if (dependentRoles.requires[dependentRoleId].length == 0) {
+			delete dependentRoles.requires[dependentRoleId];
+		}
+	}
+	
+	if (dependentRoles.requiredFor[requiredRoleId] !== undefined) {
+		if (dependentRoles.requiredFor[requiredRoleId].includes(dependentRoleId)) {
+			delete dependentRoles.requiredFor[requiredRoleId][dependentRoleId];
+		}
+		if (dependentRoles.requiredFor[requiredRoleId].length == 0) {
+			delete dependentRoles.requiredFor[requiredRoleId];
+		}
+	}
+	
+	fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
+}
+
+//subrole command processing
+async function commandDependentRoles(message, member, cmd, args, guild, perm, permName, isDM) {
+	if (args.length <= 0)
+		return message.reply('No parameters provided');
+
+	let subcmd = args.shift();
+	switch (subcmd) {
+		case 'set':
+		case 'unset': {
+			if (args.length < 2)
+				return message.reply('Dependent and Required Roles must be provided');
+			
+			let dependentRoleName = args.shift();
+			const dependentRole = guild.roles.cache.find(r => { return r.name == dependentRoleName; });
+			if (!dependentRole)
+				return message.reply(`Role ${dependentRoleName} not found`);
+			
+			let requiredRoleName = args.shift();
+			const requiredRole = guild.roles.cache.find(r => { return r.name == requiredRoleName; });
+			if (!requiredRole)
+				return message.reply(`Role ${requiredRoleName} not found`);
+
+			if (subcmd === 'set') {
+				setDependentRole(guild, dependentRole, requiredRole, false);
+				return message.reply(`Added required role ${requiredRoleName} to dependent role ${dependentRoleName}`);
+			} else {			
+				unsetDependentRole(guild, dependentRole, requiredRole, false);
+				return message.reply(`Removed required role ${requiredRoleName} from dependent role ${dependentRoleName}`);
+			}
+			break;
+		}
+		case 'list': {
+			let embed = {
+				title: "Dependent Roles",
+				fields: []
+			};
+			
+			for (var dependentRoleId in dependentRoles.requires) {
+				if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
+					let dependentRole = guild.roles.resolve(dependentRoleId);
+					if (dependentRole) {
+						let requiredRoles = dependentRoles.requires[dependentRoleId];
+						let requiredRoleNames = [];
+						for (let i = 0; i < requiredRoles.length; i++) {
+							let requiredRoleId = requiredRoles[i];
+							let requiredRole = guild.roles.resolve(requiredRoleId);
+							if (requiredRole)
+								requiredRoleNames.push(requiredRole.name);
+						}
+						
+						let field = { name: dependentRole.name, value: requiredRoleNames.length ? requiredRoleNames.join("\n") : "*None*" };
+						embed.fields.push(field);
+					}
+				}
+			}
+			return sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+		}
+		case 'prune': {
+			//FIXME
+			return message.reply('Not implemented');
 		}
 		default: {
 			return message.reply(`Unknown command: ${subcmd}`);
@@ -2357,6 +2576,86 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 	fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  ${msg}\n`, 'utf8');
 }
 
+
+function addForumSyncMap(message, guild, roleName, groupName) {
+	const role = guild.roles.cache.find(r => { return r.name == roleName; });
+	if (!role)
+		return message.reply(`${roleName} role not found`);
+	let map = forumIntegrationConfig[role.name];
+	if (map && map.permanent)
+		return message.reply(`${roleName} can not be edited`);
+
+	getForumGroups()
+		.then(forumGroups => {
+			var forumGroupId = parseInt(Object.keys(forumGroups).find(k => {
+				if (forumGroups[k] !== groupName)
+					return false;
+				return true;
+			}), 10);
+			if (forumGroupId !== undefined && !isNaN(forumGroupId)) {
+				//don't use the version from our closure to prevent asynchronous stuff from causing problems
+				let map = forumIntegrationConfig[role.name];
+				if (map === undefined) {
+					forumIntegrationConfig[role.name] = {
+						permanent: false,
+						forumGroups: [forumGroupId],
+						roleID: `${role.id}`
+					};
+					fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
+					getRolesByForumGroup(guild, true);
+					return message.reply(`Mapped group ${groupName} to role ${role.name}`);
+				} else {
+					let index = map.forumGroups.indexOf(forumGroupId);
+					if (index < 0) {
+						map.forumGroups.push(forumGroupId);
+						fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
+						getRolesByForumGroup(guild, true);
+						return message.reply(`Mapped group ${groupName} to role ${role.name}`);
+					} else {
+						return message.reply('Map already exists');
+					}
+				}
+			} else {
+				return message.reply(`${groupName} group not found`);
+			}
+		})
+		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+}
+
+function removeForumSyncMap(message, guild, roleName, groupName) {
+	const role = guild.roles.cache.find(r => { return r.name == roleName; });
+	if (!role)
+		return message.reply(`${roleName} role not found`);
+	let map = forumIntegrationConfig[role.name];
+	if (!map)
+		return message.reply('Map does not exist');
+	if (map.permanent)
+		return message.reply(`${roleName} can not be edited`);
+
+	getForumGroups()
+		.then(forumGroups => {
+			var forumGroupId = parseInt(Object.keys(forumGroups).find(k => {
+				if (forumGroups[k] !== groupName)
+					return false;
+				return true;
+			}), 10);
+
+			let map = forumIntegrationConfig[role.name];
+			let index = map.forumGroups.indexOf(forumGroupId);
+			if (index < 0) {
+				return message.reply('Map does not exist');
+			} else {
+				map.forumGroups.splice(index, 1);
+				if (map.forumGroups.length === 0)
+					delete forumIntegrationConfig[role.name];
+				fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
+				getRolesByForumGroup(guild, true);
+				return message.reply(`Removed map of group ${groupName} to role ${role.name}`);
+			}
+		})
+		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+}
+
 //forum sync command processing
 function commandForumSync(message, member, cmd, args, guild, perm, permName, isDM) {
 	let subCmd = args.shift();
@@ -2433,48 +2732,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 			if (!groupName.endsWith(config.forumOfficerSuffix))
 				return message.reply('Only Officer Groups may be mapped');
 
-			const role = guild.roles.cache.find(r => { return r.name == roleName; });
-			if (!role)
-				return message.reply(`${roleName} role not found`);
-			let map = forumIntegrationConfig[role.name];
-			if (map && map.permanent)
-				return message.reply(`${roleName} can not be edited`);
-
-			getForumGroups()
-				.then(forumGroups => {
-					var forumGroupId = parseInt(Object.keys(forumGroups).find(k => {
-						if (forumGroups[k] !== groupName)
-							return false;
-						return true;
-					}), 10);
-					if (forumGroupId !== undefined && !isNaN(forumGroupId)) {
-						//don't use the version from our closure to prevent asynchronous stuff from causing problems
-						let map = forumIntegrationConfig[role.name];
-						if (map === undefined) {
-							forumIntegrationConfig[role.name] = {
-								permanent: false,
-								forumGroups: [forumGroupId],
-								roleID: `${role.id}`
-							};
-							fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
-							getRolesByForumGroup(guild, true);
-							return message.reply(`Mapped group ${groupName} to role ${role.name}`);
-						} else {
-							let index = map.forumGroups.indexOf(forumGroupId);
-							if (index < 0) {
-								map.forumGroups.push(forumGroupId);
-								fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
-								getRolesByForumGroup(guild, true);
-								return message.reply(`Mapped group ${groupName} to role ${role.name}`);
-							} else {
-								return message.reply('Map already exists');
-							}
-						}
-					} else {
-						return message.reply(`${groupName} group not found`);
-					}
-				})
-				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+			addForumSyncMap(message, guild, roleName, groupName);
 			break;
 		}
 		case 'rem': {
@@ -2486,37 +2744,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 			if (!groupName.endsWith(config.forumOfficerSuffix))
 				return message.reply('Only Officer Groups may be mapped');
 
-			const role = guild.roles.cache.find(r => { return r.name == roleName; });
-			if (!role)
-				return message.reply(`${roleName} role not found`);
-			let map = forumIntegrationConfig[role.name];
-			if (!map)
-				return message.reply('Map does not exist');
-			if (map.permanent)
-				return message.reply(`${roleName} can not be edited`);
-
-			getForumGroups()
-				.then(forumGroups => {
-					var forumGroupId = parseInt(Object.keys(forumGroups).find(k => {
-						if (forumGroups[k] !== groupName)
-							return false;
-						return true;
-					}), 10);
-
-					let map = forumIntegrationConfig[role.name];
-					let index = map.forumGroups.indexOf(forumGroupId);
-					if (index < 0) {
-						return message.reply('Map does not exist');
-					} else {
-						map.forumGroups.splice(index, 1);
-						if (map.forumGroups.length === 0)
-							delete forumIntegrationConfig[role.name];
-						fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
-						getRolesByForumGroup(guild, true);
-						return message.reply(`Removed map of group ${groupName} to role ${role.name}`);
-					}
-				})
-				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+			removeForumSyncMap(message, guild, roleName, groupName);
 			break;
 		}
 		case 'prune': {
@@ -2572,7 +2800,7 @@ function commandRelay(message, member, cmd, args, guild, perm, permName, isDM) {
 	else
 		channel = message.channel;
 
-	if (channel.type !== 'GUILD_TEXT')
+	if (channel.type !== ChannelType.GuildText)
 		return;
 
 	let content = args.join(' ');
@@ -2695,7 +2923,8 @@ function commandSlap(message, member, cmd, args, guild, perm, permName, isDM) {
 }
 
 function commandTest(message, member, cmd, args, guild, perm, permName, isDM) {
-
+	console.log("test:" + args.join(' '));
+	message.reply("test: " + args.join(' '));
 }
 
 //command definitions
@@ -2902,6 +3131,12 @@ commands = {
 		helpText: "Removes a channel.",
 		callback: commandRemChannel
 	},
+	rename: {
+		minPermission: PERM_DIVISION_COMMANDER,
+		args: ["[\"<channel>\"]", "<name>"],
+		helpText: "Rename a channel.",
+		callback: commandRenameChannel
+	},
 	up: {
 		minPermission: PERM_STAFF,
 		args: "<name>",
@@ -2940,6 +3175,17 @@ commands = {
 			"*prune*: Prune roles that have been removed from discord",
 		],
 		callback: commandSubRoles
+	},
+	deproles: {
+		minPermission: PERM_ADMIN,
+		args: ["<set|unset|list|prune>", "<dependent role name>", "<required role name>"],
+		helpText: ["Manage subscribable roles.",
+			"*set*: Set a dependent role that will be assigned when the required role(s) is added",
+			"*unset*: Unset a required role from a dependent role",
+			"*list*: List all dependent roles",
+			"*prune*: Prune roles that have been removed from discord",
+		],
+		callback: commandDependentRoles
 	},
 	purge: {
 		minPermission: PERM_STAFF,
@@ -3122,7 +3368,7 @@ for (const file of commandFiles) {
 	client.commands.set(command.data.name, command);
 }
 client.on('interactionCreate', async interaction => {
-	if (!interaction.isCommand())
+	if (interaction.type !== InteractionType.ApplicationCommand)
 		return;
 	const command = client.commands.get(interaction.commandName);
 	if (!command) return;
@@ -3244,19 +3490,60 @@ client.on('guildMemberAdd', member => {
 	setRolesForMember(member, 'First time join');
 });
 
-/*
-client.on('guildMemberUpdate', (oldMember, newMember)=>{
-	if (newMember.nickname !== undefined && newMember.nickname.startsWith(config.memberPrefix)
-	{
-		const guild = client.guilds.resolve(config.guildId);
-		const memberRole = guild.roles.cache.find(r=>{return r.name == config.memberRole;});
-		if (!newMember.roles.cache.get(memberRole.id))
-		{
-			newMember.setNickname('');
+function checkAddDependentRoles(guild, role, member) {
+	let roleId = '' + role.id;
+	if (dependentRoles.requiredFor[roleId] !== undefined) {
+		let potentialRoleIDs = dependentRoles.requiredFor[roleId];
+		for (let i = 0; i < potentialRoleIDs.length; i++) {
+			if (roleId === potentialRoleIDs[i]) {
+				//recursive add???
+				continue;
+			}
+			let requiredRoleIDs = dependentRoles.requires[potentialRoleIDs[i]];
+			let add = true;
+			for (let j = 0; j < requiredRoleIDs.length; j++) {
+				if (roleId === requiredRoleIDs[j]) {
+					continue; //just added; skip
+				}
+				if (!member.roles.resolve(requiredRoleIDs[j])) {
+					add = false;
+					break;
+				}
+			}
+			if (add) {
+				//all roles are present
+				addRemoveRole(null, guild, true, potentialRoleIDs[i], true, member);
+			}
 		}
 	}
+}
+
+function checkRemoveDependentRoles(guild, role, member) {
+	let roleId = '' + role.id;
+	if (dependentRoles.requiredFor[roleId] !== undefined) {
+		let requiredForIDs = dependentRoles.requiredFor[roleId];
+		for (let i = 0; i < requiredForIDs.length; i++) {
+			if (roleId === requiredForIDs[i]) {
+				//recursive remove???
+				continue;
+			}
+			addRemoveRole(null, guild, false, requiredForIDs[i], true, member);
+		}
+	}
+}
+
+client.on('guildMemberUpdate', (oldMember, newMember) => {
+	const removedRoles = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id));
+	removedRoles.forEach(r => {
+		//console.log(`${r.name} removed from ${newMember.user.tag}`);
+		checkRemoveDependentRoles(newMember.guild, r, newMember);
+	});
+	const addedRoles = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id));
+	addedRoles.forEach(r => {
+		//console.log(`${r.name} added to ${newMember.user.tag}`);
+		checkAddDependentRoles(newMember.guild, r, newMember);
+	});
 });
-*/
 
 var forumSyncTimer = null;
 var lastDate = null;
@@ -3311,7 +3598,7 @@ client.on("ready", async function() {
 	const tempChannelCategory = guild.channels.cache.find(c => { return c.name === config.tempChannelCategory; });
 	if (tempChannelCategory && tempChannelCategory.children && tempChannelCategory.children.size) {
 		tempChannelCategory.children.forEach(function(c) {
-			if (c.type == 'GUILD_VOICE') {
+			if (c.type == ChannelType.GuildVoice) {
 				if (c.members.size === 0)
 					c.delete();
 			}
@@ -3336,7 +3623,7 @@ client.on("guildDelete", guild => {
 });
 
 //common client error handler
-client.on('error', error => { notifyRequestError(null, null, guild, error, false); });
+client.on('error', error => { notifyRequestError(null, null, null, error, false); });
 
 //everything is defined, start the client
 client.login(config.token)
