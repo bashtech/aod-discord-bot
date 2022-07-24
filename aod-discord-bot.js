@@ -333,7 +333,16 @@ function getPermissionsForAdmin(guild, defaultAllow, defaultDeny, allow, deny) {
 	}];
 
 	const muteRole = guild.roles.cache.find(r => { return r.name == config.muteRole; });
-	permissions = addRoleToPermissions(guild, muteRole, permissions, [], [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.SendTTSMessages, PermissionsBitField.Flags.Speak]);
+	permissions = addRoleToPermissions(guild, muteRole, permissions, [], [
+		PermissionsBitField.Flags.SendMessages,
+		PermissionsBitField.Flags.CreatePublicThreads,
+		PermissionsBitField.Flags.CreatePrivateThreads,
+		PermissionsBitField.Flags.SendMessagesInThreads,
+		PermissionsBitField.Flags.SendTTSMessages,
+		PermissionsBitField.Flags.Speak,
+		PermissionsBitField.Flags.RequestToSpeak,
+		PermissionsBitField.Flags.AddReactions,
+		PermissionsBitField.Flags.UseExternalEmojis]);
 	const pttRole = guild.roles.cache.find(r => { return r.name == config.pttRole; });
 	permissions = addRoleToPermissions(guild, pttRole, permissions, [], [PermissionsBitField.Flags.UseVAD]);
 
@@ -1574,6 +1583,41 @@ function saveRolesConfigFile() {
 	fs.writeFileSync(config.managedRoles, JSON.stringify(managedRoles), 'utf8');
 }
 
+function addManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, role, isNew) {
+	if (rolesConfig[roleName] === undefined) {
+		rolesConfig[roleName] = {
+			roleID: role.id,
+			created: isNew
+		};
+		if (otherRolesConfig[roleName] !== undefined && otherRolesConfig[roleName].created === true) {
+			rolesConfig[roleName].created = true;
+		}
+		saveRolesConfigFile();
+		return true;
+	} else {
+		if (rolesConfig[roleName].roleID !== role.id)
+			message.reply(`Role ${roleName} already managed, but ID is different`);
+		else
+			message.reply(`Role ${roleName} already managed`);
+		return false;
+	}
+}
+
+function removeManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName) {
+	if (rolesConfig[roleName] === undefined) {
+		message.reply(`Role ${roleName} is not managed`);
+		return false;
+	} else {
+		let deleteRole = (rolesConfig[roleName].created && otherRolesConfig[roleName] === undefined);
+		let role = guild.roles.resolve(rolesConfig[roleName].roleID);
+		delete rolesConfig[roleName];
+		saveRolesConfigFile();
+		if (deleteRole && role)
+			role.delete(`Requested by ${getNameFromMessage(message)}`);
+		return true;
+	}
+}
+
 //subrole command processing
 async function commandSubRoles(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (args.length <= 0)
@@ -1603,24 +1647,10 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			const role = guild.roles.cache.find(r => { return r.name == roleName; });
 			if (!role)
 				return message.reply(`Role ${roleName} not found`);
-
-			if (rolesConfig[roleName] === undefined) {
-				rolesConfig[roleName] = {
-					roleID: role.id
-				};
-				//sync the created flag
-				if (otherRolesConfig[roleName] !== undefined && otherRolesConfig[roleName].created === true) {
-					rolesConfig[roleName].created = true;
-				}
-			} else {
-				if (rolesConfig[roleName].roleID !== role.id)
-					return message.reply(`Role ${roleName} is already managed, but ID is different`);
-				else
-					return message.reply(`Role ${roleName} is already managed`);
-			}
-
-			saveRolesConfigFile();
-			return message.reply(`Role ${roleName} added to ${commonString} roles`);
+			
+			if (addManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, role, false))
+				return message.reply(`Role ${roleName} added to ${commonString} roles`);
+			break;
 		}
 		case 'rema':
 		case 'rem': {
@@ -1639,20 +1669,11 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 
 			if (args.length <= 0)
 				return message.reply('Role name must be provided');
-
 			let roleName = args.join(' ');
-			if (rolesConfig[roleName] === undefined) {
-				return message.reply(`Role ${roleName} is not managed`);
-			} else {
-				let deleteRole = (rolesConfig[roleName].created && otherRolesConfig[roleName] === undefined);
-				let role = guild.roles.resolve(rolesConfig[roleName].roleID);
-				delete rolesConfig[roleName];
-				if (deleteRole && role)
-					await role.delete(`Requested by ${getNameFromMessage(message)}`);
-			}
-
-			saveRolesConfigFile();
-			return message.reply(`Role ${roleName} removed from ${commonString} roles`);
+			
+			if (removeManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName))
+				message.reply(`Role ${roleName} removed from ${commonString} roles`);
+			break;
 		}
 		case 'createa':
 		case 'create': {
@@ -1686,20 +1707,9 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			roleName = newRole.name; //in case discord alters
 			//FIXME: do we need to set the position?
 
-			if (rolesConfig[roleName] === undefined) {
-				rolesConfig[roleName] = {
-					roleID: newRole.id,
-					created: true
-				};
-			} else {
-				if (rolesConfig[roleName].roleID !== newRole.id)
-					return message.reply(`Role ${roleName} already managed, but ID is different`);
-				else
-					return message.reply(`Role ${roleName} already managed`);
-			}
-
-			saveRolesConfigFile();
-			return message.reply(`Role ${roleName} created and added to ${commonString} roles`);
+			if (addManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, role, true))
+				return message.reply(`Role ${roleName} created and added to ${commonString} roles`);
+			break;
 		}
 		case 'list': {
 			let subRoles = [];
@@ -1807,7 +1817,7 @@ function setDependentRole(guild, dependentRole, requiredRole, skipVerifyMembers)
 	fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
 	
 	if (verifyMembers && !skipVerifyMembers) {
-		dependentRole.members.cache.each(m => {
+		dependentRole.members.each(m => {
 			if (!m.roles.resolve(requiredRole)) {
 				console.log(`Removed ${dependentRole.name} from ${m.user.tag}; missing required role ${requiredRole.name}`);
 				m.roles.remove(dependentRole);
@@ -2922,9 +2932,30 @@ function commandSlap(message, member, cmd, args, guild, perm, permName, isDM) {
 		.catch(() => {});
 }
 
-function commandTest(message, member, cmd, args, guild, perm, permName, isDM) {
-	console.log("test:" + args.join(' '));
-	message.reply("test: " + args.join(' '));
+async function commandTest(message, member, cmd, args, guild, perm, permName, isDM) {
+	//console.log("test:" + args.join(' '));
+	//message.reply("test: " + args.join(' '));
+
+	/*
+	const muteRole = guild.roles.cache.find(r => { return r.name == config.muteRole; });
+	if (muteRole) {
+		guild.channels.cache.each(async function(c) {
+			if (c.type === ChannelType.GuildText || c.type === ChannelType.GuildVoice) {
+				await c.permissionOverwrites.create(muteRole, {
+					SendMessages: false,
+					CreatePublicThreads: false,
+					CreatePrivateThreads: false,
+					SendMessagesInThreads: false,
+					SendTTSMessages: false,
+					Speak: false,
+					RequestToSpeak: false,
+					AddReactions: false,
+					UseExternalEmojis: false
+				});
+				console.log(`Updated Muted for ${c.name}`);
+			}
+		});
+	}*/
 }
 
 //command definitions
