@@ -1647,7 +1647,7 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			const role = guild.roles.cache.find(r => { return r.name == roleName; });
 			if (!role)
 				return message.reply(`Role ${roleName} not found`);
-			
+
 			if (addManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, role, false))
 				return message.reply(`Role ${roleName} added to ${commonString} roles`);
 			break;
@@ -1670,7 +1670,7 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			if (args.length <= 0)
 				return message.reply('Role name must be provided');
 			let roleName = args.join(' ');
-			
+
 			if (removeManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName))
 				message.reply(`Role ${roleName} removed from ${commonString} roles`);
 			break;
@@ -1791,11 +1791,58 @@ dependentRoles = {
 }
 */
 
+function auditDependentRole(guild, dependentRole, requiredRole) {
+	//console.log(`Auditing ${dependentRole.name}`);
+	let toRemove;
+	if (requiredRole) {
+		//Collection.difference returns elements from both sets; use filter instead
+		toRemove = dependentRole.members.filter(m => { return !requiredRole.members.has(m); });
+	} else {
+		let dependentRoleId = '' + dependentRole.id;
+		let sharedMembers;
+		if (dependentRoles.requires[dependentRoleId] !== undefined) {
+			let requiredRoleIds = dependentRoles.requires[dependentRoleId];
+			for (let i = 0; i < requiredRoleIds.length; i++) {
+				let requiredRole = guild.roles.resolve(requiredRoleIds[i]);
+				if (requiredRole) {
+					//console.log(`-- checking ${requiredRole.name}`);
+					if (sharedMembers) {
+						sharedMembers = requiredRole.members.intersect(sharedMembers);
+					} else {
+						sharedMembers = requiredRole.members;
+					}
+				}
+			}
+		}
+		if (sharedMembers) {
+			//Collection.difference returns elements from both sets; use filter instead
+			toRemove = dependentRole.members.filter(m => { return !sharedMembers.has(m); });
+		}
+		//console.log([dependentRole.members, sharedMembers, toRemove]);
+	}
+	if (toRemove) {
+		toRemove.each(m => {
+			m.roles.remove(dependentRole);
+		});
+	}
+}
+
+function auditDependentRoles(guild) {
+	for (var dependentRoleId in dependentRoles.requires) {
+		if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
+			let dependentRole = guild.roles.resolve(dependentRoleId);
+			if (dependentRole) {
+				auditDependentRole(guild, dependentRole);
+			}
+		}
+	}
+}
+
 function setDependentRole(guild, dependentRole, requiredRole, skipVerifyMembers) {
 	let dependentRoleId = '' + dependentRole.id;
 	let requiredRoleId = '' + requiredRole.id;
 	let verifyMembers = false;
-	
+
 	if (dependentRoles.requires[dependentRoleId] === undefined) {
 		dependentRoles.requires[dependentRoleId] = [requiredRoleId];
 		verifyMembers = true;
@@ -1805,7 +1852,7 @@ function setDependentRole(guild, dependentRole, requiredRole, skipVerifyMembers)
 			verifyMembers = true;
 		}
 	}
-	
+
 	if (dependentRoles.requiredFor[requiredRoleId] === undefined) {
 		dependentRoles.requiredFor[requiredRoleId] = [dependentRoleId];
 	} else {
@@ -1813,16 +1860,11 @@ function setDependentRole(guild, dependentRole, requiredRole, skipVerifyMembers)
 			dependentRoles.requiredFor[requiredRoleId].push(dependentRoleId);
 		}
 	}
-	
+
 	fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
-	
+
 	if (verifyMembers && !skipVerifyMembers) {
-		dependentRole.members.each(m => {
-			if (!m.roles.resolve(requiredRole)) {
-				console.log(`Removed ${dependentRole.name} from ${m.user.tag}; missing required role ${requiredRole.name}`);
-				m.roles.remove(dependentRole);
-			}
-		});
+		auditDependentRole(dependentRole, requiredRole);
 	}
 }
 
@@ -1838,7 +1880,7 @@ async function unsetDependentRole(guild, dependentRole, requiredRole) {
 			delete dependentRoles.requires[dependentRoleId];
 		}
 	}
-	
+
 	if (dependentRoles.requiredFor[requiredRoleId] !== undefined) {
 		if (dependentRoles.requiredFor[requiredRoleId].includes(dependentRoleId)) {
 			delete dependentRoles.requiredFor[requiredRoleId][dependentRoleId];
@@ -1847,7 +1889,7 @@ async function unsetDependentRole(guild, dependentRole, requiredRole) {
 			delete dependentRoles.requiredFor[requiredRoleId];
 		}
 	}
-	
+
 	fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
 }
 
@@ -1862,12 +1904,12 @@ async function commandDependentRoles(message, member, cmd, args, guild, perm, pe
 		case 'unset': {
 			if (args.length < 2)
 				return message.reply('Dependent and Required Roles must be provided');
-			
+
 			let dependentRoleName = args.shift();
 			const dependentRole = guild.roles.cache.find(r => { return r.name == dependentRoleName; });
 			if (!dependentRole)
 				return message.reply(`Role ${dependentRoleName} not found`);
-			
+
 			let requiredRoleName = args.shift();
 			const requiredRole = guild.roles.cache.find(r => { return r.name == requiredRoleName; });
 			if (!requiredRole)
@@ -1876,7 +1918,7 @@ async function commandDependentRoles(message, member, cmd, args, guild, perm, pe
 			if (subcmd === 'set') {
 				setDependentRole(guild, dependentRole, requiredRole, false);
 				return message.reply(`Added required role ${requiredRoleName} to dependent role ${dependentRoleName}`);
-			} else {			
+			} else {
 				unsetDependentRole(guild, dependentRole, requiredRole, false);
 				return message.reply(`Removed required role ${requiredRoleName} from dependent role ${dependentRoleName}`);
 			}
@@ -1887,7 +1929,7 @@ async function commandDependentRoles(message, member, cmd, args, guild, perm, pe
 				title: "Dependent Roles",
 				fields: []
 			};
-			
+
 			for (var dependentRoleId in dependentRoles.requires) {
 				if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
 					let dependentRole = guild.roles.resolve(dependentRoleId);
@@ -1900,7 +1942,7 @@ async function commandDependentRoles(message, member, cmd, args, guild, perm, pe
 							if (requiredRole)
 								requiredRoleNames.push(requiredRole.name);
 						}
-						
+
 						let field = { name: dependentRole.name, value: requiredRoleNames.length ? requiredRoleNames.join("\n") : "*None*" };
 						embed.fields.push(field);
 					}
@@ -1911,6 +1953,10 @@ async function commandDependentRoles(message, member, cmd, args, guild, perm, pe
 		case 'prune': {
 			//FIXME
 			return message.reply('Not implemented');
+		}
+		case 'audit': {
+			auditDependentRoles(guild);
+			break;
 		}
 		default: {
 			return message.reply(`Unknown command: ${subcmd}`);
