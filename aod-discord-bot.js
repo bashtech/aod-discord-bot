@@ -8,16 +8,19 @@
 
 /* jshint esversion: 8 */
 
+//include esm-hook to adapt ESM to commonjs
+require("esm-hook");
+
 //include discord.js
 const { Client, GatewayIntentBits, Partials, ChannelType, PermissionsBitField, Collection } = require('discord.js');
 
-//include node-fetch
-const fetch = require('node-fetch');
-const FormData = require('form-data');
+//include node-fetch using esm-hook
+const fetch = require('node-fetch').default;
 
 //include entities
 const htmlEntitiesDecode = require('html-entities').decode;
 
+//include sprintf-js
 const sprintf = require('sprintf-js').sprintf;
 //const vsprintf = require('sprintf-js').vsprintf;
 
@@ -25,7 +28,7 @@ const sprintf = require('sprintf-js').sprintf;
 var config = require('./aod-discord-bot.config.json');
 
 //inclue fs
-const fs = require('fs');
+const fs = require('node:fs');
 
 //include md5
 var md5 = require('md5');
@@ -2096,7 +2099,7 @@ function commandBan(message, member, cmd, args, guild, perm, permName, isDM) {
 //tracker command processing
 async function commandTracker(message, member, cmd, args, guild, perm, permName, isDM) {
 	try {
-		let data = new FormData();
+		let data = new URLSearchParams();
 		data.append('type', 'discord');
 		data.append('text', args.join(' '));
 		data.append('token', config.trackerToken);
