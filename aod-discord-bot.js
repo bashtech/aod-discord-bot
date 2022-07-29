@@ -11,8 +11,9 @@
 //include discord.js
 const { Client, GatewayIntentBits, Partials, ChannelType, PermissionsBitField, Collection } = require('discord.js');
 
-//include request
-var request = require('request');
+//include node-fetch
+const fetch = require('node-fetch');
+const FormData = require('form-data');
 
 //include entities
 const htmlEntitiesDecode = require('html-entities').decode;
@@ -1791,9 +1792,14 @@ dependentRoles = {
 }
 */
 
+function getMemberTag(m) {
+	return m.user.tag;
+}
+
 function auditDependentRole(guild, dependentRole, requiredRole) {
 	//console.log(`Auditing ${dependentRole.name}`);
 	let toRemove;
+	let toAdd;
 	if (requiredRole) {
 		//Collection.difference returns elements from both sets; use filter instead
 		toRemove = dependentRole.members.filter(m => { return !requiredRole.members.has(m); });
@@ -1817,12 +1823,18 @@ function auditDependentRole(guild, dependentRole, requiredRole) {
 		if (sharedMembers) {
 			//Collection.difference returns elements from both sets; use filter instead
 			toRemove = dependentRole.members.filter(m => { return !sharedMembers.has(m); });
+			toAdd = sharedMembers.filter(m => { return !dependentRole.members.has(m); });
+			console.log([dependentRole.name, sharedMembers.map(getMemberTag), toRemove.map(getMemberTag), toAdd.map(getMemberTag)]);
 		}
-		//console.log([dependentRole.members, sharedMembers, toRemove]);
 	}
 	if (toRemove) {
 		toRemove.each(m => {
 			m.roles.remove(dependentRole);
+		});
+	}
+	if (toAdd) {
+		toAdd.each(m => {
+			m.roles.add(dependentRole);
 		});
 	}
 }
@@ -2082,31 +2094,29 @@ function commandBan(message, member, cmd, args, guild, perm, permName, isDM) {
 }
 
 //tracker command processing
-function commandTracker(message, member, cmd, args, guild, perm, permName, isDM) {
-	var postOptions = {
-		method: 'POST',
-		url: config.trackerURL,
-		headers: {
-			'User-Agent': 'Discord Bot'
-		},
-		form: {
-			type: 'discord',
-			text: args.join(' '),
-			token: config.trackerToken
-		},
-		json: true
-	};
-	process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
-	request(postOptions, function(error, response, body) {
-		if (error)
-			return message.reply('There was an error processing the request');
+async function commandTracker(message, member, cmd, args, guild, perm, permName, isDM) {
+	try {
+		let data = new FormData();
+		data.append('type', 'discord');
+		data.append('text', args.join(' '));
+		data.append('token', config.trackerToken);
 
+		let response = await fetch(config.trackerURL, {
+			method: 'post',
+			body: data,
+			headers: {
+				'User-Agent': 'Discord Bot',
+				'Accept': 'application/json'
+			}
+		});
+		let body = await response.json();
 		if (body.embed)
 			return message.reply({ embeds: [body.embed] });
 		else if (body.text)
 			return message.reply(body.text);
+	} catch (e) {
 		return message.reply('There was an error processing the request');
-	});
+	}
 }
 
 //get forum groups from forum database
@@ -3656,7 +3666,7 @@ function forumSyncTimerCallback() {
 
 //messageDelete handler
 client.on("messageDelete", (message) => {
-	if (message.guildId && message.channel && !message.content.startsWith(config.prefix + 'relay ') && !message.content.startsWith(config.prefix + 'login '))
+	if (message.guildId && message.channel && !message.content && !message.content.startsWith(config.prefix + 'relay ') && !message.content.startsWith(config.prefix + 'login '))
 		console.log(`Deleted message from ${message.author.tag} in #${message.channel.name}: ${message.content}`);
 });
 
