@@ -1593,7 +1593,7 @@ function addManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName,
 			roleID: role.id,
 			created: isNew
 		};
-		if (otherRolesConfig[roleName] !== undefined && otherRolesConfig[roleName].created === true) {
+		if (otherRolesConfig && otherRolesConfig[roleName] !== undefined && otherRolesConfig[roleName].created === true) {
 			rolesConfig[roleName].created = true;
 		}
 		saveRolesConfigFile();
@@ -1711,7 +1711,7 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			roleName = newRole.name; //in case discord alters
 			//FIXME: do we need to set the position?
 
-			if (addManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, role, true))
+			if (addManagedRole(message, guild, rolesConfig, null, roleName, newRole, true))
 				return message.reply(`Role ${roleName} created and added to ${commonString} roles`);
 			break;
 		}
