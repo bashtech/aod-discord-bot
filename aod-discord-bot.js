@@ -940,9 +940,9 @@ function commandPurge(message, member, cmd, args, guild, perm, permName, isDM) {
 		.catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
 }
 
-var channelPermissionLevels = ['feed', 'guest', 'member', 'officer', 'mod', 'staff', 'admin'];
+var channelPermissionLevels = ['feed', 'guest', 'member', 'role', 'officer', 'mod', 'staff', 'admin'];
 
-function getChannelPermissions(guild, message, perm, level, type, divisionRole) {
+function getChannelPermissions(guild, message, perm, level, type, divisionOfficerRole, additionalRole) {
 	//get permissions based on type
 	var defaultDeny;
 	if (type == 'ptt')
@@ -959,8 +959,8 @@ function getChannelPermissions(guild, message, perm, level, type, divisionRole) 
 			}
 			permissions = getPermissionsForEveryone(guild, [], defaultDeny);
 			//add role permissions if necessary
-			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+			if (divisionOfficerRole)
+				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
 			break;
 		case 'mod':
 			if (perm < PERM_MOD) {
@@ -974,12 +974,12 @@ function getChannelPermissions(guild, message, perm, level, type, divisionRole) 
 				message.reply("You don't have permissions to add this channel type");
 				return null;
 			}
-			if (!divisionRole) {
+			if (!divisionOfficerRole) {
 				message.reply("No officer role could be determined");
 				return null;
 			}
 			permissions = getPermissionsForModerators(guild, [], defaultDeny);
-			permissions = addRoleToPermissions(guild, divisionRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
+			permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
 			break;
 		case 'staff':
 			if (perm < PERM_STAFF) {
@@ -1018,14 +1018,25 @@ function getChannelPermissions(guild, message, perm, level, type, divisionRole) 
 			const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
 			permissions = addRoleToPermissions(guild, guestRole, permissions, [PermissionsBitField.Flags.ViewChannel], [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.SendTTSMessages, PermissionsBitField.Flags.Speak]);
 			//add role permissions if necessary
-			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
+			if (divisionOfficerRole)
+				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
+			break;
+		case 'role':
+			if (perm < PERM_DIVISION_COMMANDER) {
+				message.reply("You don't have permissions to add this channel type");
+				return null;
+			}
+			permissions = getPermissionsForModerators(guild, [], defaultDeny);
+			if (divisionOfficerRole)
+				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
+			if (additionalRole)
+				permissions = addRoleToPermissions(guild, additionalRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
 			break;
 		default: //member
 			permissions = getPermissionsForMembers(guild, [], defaultDeny);
 			//add role permissions if necessary
-			if (divisionRole)
-				permissions = addRoleToPermissions(guild, divisionRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
+			if (divisionOfficerRole)
+				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
 			break;
 	}
 	return permissions;
@@ -1035,7 +1046,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionRole) 
 function commandAddChannel(message, member, cmd, args, guild, perm, permName, isDM) {
 	let temp = true;
 	let channelCategory;
-	let divisionRole;
+	let divisionOfficerRole;
 
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
@@ -1043,11 +1054,11 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 	if ((channelCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == args[0].toLowerCase() && c.type == ChannelType.GuildCategory); }))) {
 		//check if this category has an associated officer role
 		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
-		divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
+		divisionOfficerRole = guild.roles.cache.find(r => { return r.name == roleName; });
 
 		if (perm < PERM_DIVISION_COMMANDER)
 			return message.reply("You may not create a permanent channel");
-		if (perm == PERM_DIVISION_COMMANDER && (!divisionRole || !member.roles.cache.get(divisionRole.id)))
+		if (perm == PERM_DIVISION_COMMANDER && (!divisionOfficerRole || !member.roles.cache.get(divisionOfficerRole.id)))
 			return message.reply("You may only add channels to a division you command");
 		if (channelCategory.type != ChannelType.GuildCategory)
 			return message.reply("Mentioned channel must be a category");
@@ -1074,6 +1085,21 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 		level = args[0];
 		args.shift();
 	}
+	let levelRole;
+	if (level == 'role') {
+		if (args[0] === undefined)
+			return message.reply("Role name must be defined");
+		let roleName = args[0];
+		args.shift();
+
+		levelRole = guild.roles.cache.find(r => { return r.name === roleName; });
+
+		if ((managedRoles.subscribable[roleName] === undefined &&
+				managedRoles.assignable[roleName] === undefined) ||
+			!levelRole) {
+			return message.reply(`Role ${roleName} not a managed role`);
+		}
+	}
 
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
@@ -1093,7 +1119,7 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 		return message.reply("Channel already exists");
 
 	//get channel permissions
-	let permissions = getChannelPermissions(guild, message, perm, level, cmd, divisionRole);
+	let permissions = getChannelPermissions(guild, message, perm, level, cmd, divisionOfficerRole, levelRole);
 	if (!permissions)
 		return;
 
@@ -1136,6 +1162,21 @@ function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM
 		level = args[0];
 		args.shift();
 	}
+	let levelRole;
+	if (level == 'role') {
+		if (args[0] === undefined)
+			return message.reply("Role name must be defined");
+		let roleName = args[0];
+		args.shift();
+
+		levelRole = guild.roles.cache.find(r => { return r.name === roleName; });
+
+		if ((managedRoles.subscribable[roleName] === undefined &&
+				managedRoles.assignable[roleName] === undefined) ||
+			!levelRole) {
+			return message.reply(`Role ${roleName} not a managed role`);
+		}
+	}
 
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
@@ -1154,14 +1195,14 @@ function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM
 
 	//check if we're in a category and get the proper division role
 	var divisionCategory = existingChannel.parent;
-	var divisionRole;
+	var divisionOfficerRole;
 	if (divisionCategory) {
-		var divisionRoleName = divisionCategory.name + " " + config.discordOfficerSuffix;
-		divisionRole = guild.roles.cache.find(r => { return r.name === divisionRoleName; });
+		var divisionOfficerRoleName = divisionCategory.name + " " + config.discordOfficerSuffix;
+		divisionOfficerRole = guild.roles.cache.find(r => { return r.name === divisionOfficerRoleName; });
 	}
 
 	//get channel permissions //FIXME: support PTT?
-	var permissions = getChannelPermissions(guild, message, perm, level, existingChannel.type, divisionRole);
+	var permissions = getChannelPermissions(guild, message, perm, level, existingChannel.type, divisionOfficerRole, levelRole);
 	if (!permissions)
 		return;
 
@@ -1194,9 +1235,9 @@ function commandRemChannel(message, member, cmd, args, guild, perm, permName, is
 	var channelCategory = existingChannel.parent;
 	if (channelCategory) {
 		//check if this category has an associated officer role
-		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
-		divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
-		if (perm == PERM_DIVISION_COMMANDER && (!divisionRole || !member.roles.cache.get(divisionRole.id)))
+		let officerRoleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
+		divisionOfficerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+		if (perm == PERM_DIVISION_COMMANDER && (!divisionOfficerRole || !member.roles.cache.get(divisionOfficerRole.id)))
 			return message.reply("You may only delete channels from a division you command");
 	} else {
 		if (perm < PERM_STAFF)
@@ -1239,8 +1280,8 @@ function commandRenameChannel(message, member, cmd, args, guild, perm, permName,
 	if (channelCategory) {
 		//check if this category has an associated officer role
 		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
-		divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
-		if (perm == PERM_DIVISION_COMMANDER && (!divisionRole || !member.roles.cache.get(divisionRole.id)))
+		divisionOfficerRole = guild.roles.cache.find(r => { return r.name == roleName; });
+		if (perm == PERM_DIVISION_COMMANDER && (!divisionOfficerRole || !member.roles.cache.get(divisionOfficerRole.id)))
 			return message.reply("You may only rename channels from a division you command");
 		let divisionPrefix = channelCategory.name.toLowerCase().replace(/\s/g, '-');
 		if (!newName.startsWith(divisionPrefix))
@@ -1332,7 +1373,7 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 	let divisionName = args.join(' ');
 	if (divisionName === undefined || divisionName == '')
 		return message.reply("A name must be provided");
-	let roleName = divisionName + ' ' + config.discordOfficerSuffix;
+	let officerRoleName = divisionName + ' ' + config.discordOfficerSuffix;
 	let lcName = divisionName.toLowerCase();
 	let simpleName = lcName.replace(/\s/g, '-');
 	let divisionMembersChannel = simpleName + '-members';
@@ -1343,16 +1384,16 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 	var divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == ChannelType.GuildCategory); });
 	if (divisionCategory)
 		return message.reply("Division already exists.").catch(() => {});
-	var divisionRole = guild.roles.cache.find(r => { return r.name == roleName; });
-	if (divisionRole)
+	var divisionOfficerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+	if (divisionOfficerRole)
 		return message.reply("Division already exists.").catch(() => {});
 
 	try {
 		//create officers role
-		//divisionRole = await guild.roles.create({ name: roleName, permissions: 0, mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
-		divisionRole = await guild.roles.create({ name: roleName, permissions: [], mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
+		//divisionOfficerRole = await guild.roles.create({ name: officerRoleName, permissions: 0, mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
+		divisionOfficerRole = await guild.roles.create({ name: officerRoleName, permissions: [], mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
 		const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
-		await divisionRole.setPosition(memberRole.position + 1).catch(e => { console.log(e); });
+		await divisionOfficerRole.setPosition(memberRole.position + 1).catch(e => { console.log(e); });
 
 		//add category for division
 		let permissions = getPermissionsForEveryone(guild);
@@ -1360,26 +1401,26 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 			.catch(e => { console.log(e); });
 
 		//create members channel
-		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+		permissions = addRoleToPermissions(guild, divisionOfficerRole, getPermissionsForMembers(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
 		let membersChannel = await guild.channels.create({ type: ChannelType.GuildText, name: divisionMembersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create officers channel
-		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForModerators(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+		permissions = addRoleToPermissions(guild, divisionOfficerRole, getPermissionsForModerators(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
 		let officersChannel = await guild.channels.create({ type: ChannelType.GuildText, name: divisionOfficersChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create public channel
-		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForEveryone(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+		permissions = addRoleToPermissions(guild, divisionOfficerRole, getPermissionsForEveryone(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
 		let publicChannel = await guild.channels.create({ type: ChannelType.GuildText, name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
 		//create member voice channel
-		permissions = addRoleToPermissions(guild, divisionRole, getPermissionsForMembers(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+		permissions = addRoleToPermissions(guild, divisionOfficerRole, getPermissionsForMembers(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
 		let memberVoipChannel = await guild.channels.create({ type: ChannelType.GuildVoice, name: divisionMemberVoiceChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
-		addForumSyncMap(message, guild, roleName, divisionName + ' ' + config.forumOfficerSuffix);
+		addForumSyncMap(message, guild, officerRoleName, divisionName + ' ' + config.forumOfficerSuffix);
 
 		return message.reply(`${divisionName} division added`).catch(() => {});
 	} catch (error) {
@@ -1393,7 +1434,7 @@ async function commandRemDivision(message, member, cmd, args, guild, perm, permN
 	let divisionName = args.join(' ');
 	if (divisionName === undefined || divisionName == '')
 		return message.reply("A name must be provided");
-	let roleName = divisionName + ' ' + config.discordOfficerSuffix;
+	let officerRoleName = divisionName + ' ' + config.discordOfficerSuffix;
 
 	const divisionCategory = guild.channels.cache.find(c => { return (c.name == divisionName && c.type === ChannelType.GuildCategory); });
 	if (divisionCategory) {
@@ -1418,7 +1459,7 @@ async function commandRemDivision(message, member, cmd, args, guild, perm, permN
 		}
 
 		//remove role
-		const role = guild.roles.cache.find(r => { return r.name == roleName; });
+		const role = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 		if (role) {
 			try {
 				await role.delete(`Requested by ${getNameFromMessage(message)}`);
@@ -1427,8 +1468,8 @@ async function commandRemDivision(message, member, cmd, args, guild, perm, permN
 			}
 		}
 
-		if (forumIntegrationConfig[roleName] !== undefined) {
-			delete(forumIntegrationConfig[roleName]);
+		if (forumIntegrationConfig[officerRoleName] !== undefined) {
+			delete(forumIntegrationConfig[officerRoleName]);
 			fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
 			getRolesByForumGroup(guild, true);
 		}
@@ -2842,21 +2883,32 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 }
 
 //function to send a message to a change that always returns a promise (simplifies exception handling)
-function sendMessageToChannel(channel, content) {
+function sendMessageToChannel(channel, content, existingMessage) {
 	let json;
 	try { json = JSON.parse(content); } catch (e) {}
 
 	if (json !== undefined) {
-		if (json.embed)
-			return channel.send({ embeds: [json.embed] });
-		else if (json.text)
-			return channel.send(json.text);
-	} else
-		return channel.send(content);
+		if (json.embed) {
+			if (existingMessage)
+				return existingMessage.edit({ embeds: [json.embed] });
+			else
+				return channel.send({ embeds: [json.embed] });
+		} else if (json.text) {
+			if (existingMessage)
+				return existingMessage.edit(json.text);
+			else
+				return channel.send(json.text);
+		}
+	} else {
+		if (existingMessage)
+			return existingMessage.edit(content);
+		else
+			return channel.send(content);
+	}
 }
 
 //relay command processing
-function commandRelay(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandRelay(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (isDM)
 		return;
 	if (args.length <= 0)
@@ -2872,11 +2924,20 @@ function commandRelay(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (channel.type !== ChannelType.GuildText)
 		return;
 
+	if (args.length <= 0)
+		return;
+	await channel.messages.fetch(args[0])
+		.catch(() => {});
+	let existingMessage = channel.messages.resolve(args[0]);
+	if (existingMessage) {
+		args.shift();
+	}
+
 	let content = args.join(' ');
 	if (!content || content === '')
 		return;
 
-	sendMessageToChannel(channel, content)
+	sendMessageToChannel(channel, content, existingMessage)
 		.then((relayed) => {
 			if (message.author.bot && message.webhookId && message.webhookId === message.author.id) {
 				//approved bot, log message IDs
@@ -3162,11 +3223,12 @@ commands = {
 	},
 	voice: {
 		minPermission: PERM_RECRUITER,
-		args: ["[<category>]", "[<guest|member|officer|mod|staff|admin>]", "<name>"],
+		args: ["<category>", "[<feed|guest|member|role|officer|mod|staff|admin>]", "[<roleName>]", "<name>"],
 		helpText: ["Creates a temporary voice channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires staff permissions).",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
-			"*member*: channel is visible to Moderator+ (requires Officer permissions)",
-			"*officer*: channel is visible to Moderator+ (requires Moderator permissions)",
+			"*member*: channel is visible to Member+ (requires Officer permissions)",
+			"*role*: channel is visible to a specific role (requires Divivion Commander permissions)",
+			"*officer*: channel is visible to Officers+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
@@ -3174,11 +3236,12 @@ commands = {
 	},
 	ptt: {
 		minPermission: PERM_RECRUITER,
-		args: ["[<category>]", "[<guest|member|officer|mod|staff|admin>]", "<name>"],
+		args: ["<category>", "[<feed|guest|member|role|officer|mod|staff|admin>]", "[<roleName>]", "<name>"],
 		helpText: ["Creates a temporary push-to-talk channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires staff permissions).",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
-			"*member*: channel is visible to Moderator+ (requires Officer permissions)",
-			"*officer*: channel is visible to Moderator+ (requires Moderator permissions)",
+			"*member*: channel is visible to Member+ (requires Officer permissions)",
+			"*role*: channel is visible to a specific role (requires Divivion Commander permissions)",
+			"*officer*: channel is visible to Officers+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
@@ -3186,12 +3249,13 @@ commands = {
 	},
 	text: {
 		minPermission: PERM_DIVISION_COMMANDER,
-		args: ["<category>", "[<feed|guest|member|officer|mod|staff|admin>]", "<name>"],
+		args: ["<category>", "[<feed|guest|member|role|officer|mod|staff|admin>]", "[<roleName>]", "<name>"],
 		helpText: ["Creates a text channel visible to Members+ by default.",
 			"*feed*: channel is visible to Guest+, but only Officer+ may send messages (requires Divivion Commander permissions)",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
-			"*member*: channel is visible to Moderator+ (requires Officer permissions)",
-			"*officer*: channel is visible to Moderator+ (requires Moderator permissions)",
+			"*member*: channel is visible to Member+ (requires Officer permissions)",
+			"*role*: channel is visible to a specific role (requires Divivion Commander permissions)",
+			"*officer*: channel is visible to Officers+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
@@ -3199,11 +3263,12 @@ commands = {
 	},
 	setperms: {
 		minPermission: PERM_STAFF,
-		args: ["[<feed|guest|member|officer|mod|staff|admin>]", "<name>"],
+		args: ["[<feed|guest|member|role|officer|mod|staff|admin>]", "[<roleName>]", "<name>"],
 		helpText: ["Updates a channels permissions.",
 			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
-			"*member*: channel is visible to Moderator+ (requires Officer permissions)",
-			"*officer*: channel is visible to Moderator+ (requires Moderator permissions)",
+			"*member*: channel is visible to Member+ (requires Officer permissions)",
+			"*role*: channel is visible to a specific role (requires Divivion Commander permissions)",
+			"*officer*: channel is visible to Officers+ (requires Moderator permissions)",
 			"*mod*: channel is visible to Moderator+ (requires Moderator permissions)",
 			"*staff*: channel is visible to Staff+ (requires Staff permissions)",
 			"*admin*: channel is visible to Admins (requires Admin permissions)"],
@@ -3306,7 +3371,7 @@ commands = {
 	},*/
 	relay: {
 		minPermission: PERM_ADMIN,
-		args: ["[\"<channel>\"]", "\"<message>\""],
+		args: ["[\"<channel>\"]", "[<message id>]", "\"<message>\""],
 		helpText: "Relay a message using the bot. If <channel> is provided, the message will be sent there.",
 		callback: commandRelay
 	},
@@ -3669,7 +3734,7 @@ function forumSyncTimerCallback() {
 
 //messageDelete handler
 client.on("messageDelete", (message) => {
-	if (message.guildId && message.channel && !message.content && !message.content.startsWith(config.prefix + 'relay ') && !message.content.startsWith(config.prefix + 'login '))
+	if (message.guildId && message.channel && message.content && !message.content.startsWith(config.prefix + 'relay ') && !message.content.startsWith(config.prefix + 'login '))
 		console.log(`Deleted message from ${message.author.tag} in #${message.channel.name}: ${message.content}`);
 });
 
