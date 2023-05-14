@@ -2929,9 +2929,8 @@ async function commandRelay(message, member, cmd, args, guild, perm, permName, i
 	await channel.messages.fetch(args[0])
 		.catch(() => {});
 	let existingMessage = channel.messages.resolve(args[0]);
-	if (existingMessage) {
+	if (existingMessage)
 		args.shift();
-	}
 
 	let content = args.join(' ');
 	if (!content || content === '')
@@ -2948,6 +2947,40 @@ async function commandRelay(message, member, cmd, args, guild, perm, permName, i
 		.catch(error => { notifyRequestError(message, member, guild, error, PERM_NONE); });
 }
 
+//react command processing
+async function commandReact(message, member, cmd, args, guild, perm, permName, isDM) {
+	if (isDM)
+		return;
+	if (args.length <= 0)
+		return;
+
+	let channelName = args[0].toLowerCase();
+	let channel = guild.channels.cache.find(c => { return (c.name.toLowerCase() == channelName); });
+	if (channel)
+		args.shift();
+	else
+		channel = message.channel;
+
+	if (channel.type !== ChannelType.GuildText)
+		return;
+
+	if (args.length <= 0)
+		return;
+	await channel.messages.fetch(args[0])
+		.catch(() => {});
+	let existingMessage = channel.messages.resolve(args[0]);
+	if (existingMessage)
+		args.shift();
+	else
+		return;
+	
+	if (args.length <= 0)
+		return;
+	existingMessage.react(args[0]);
+	if (!isDM) message.delete();
+}
+
+//relaydm command processing
 function commandRelayDm(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (args.length <= 0)
 		return;
@@ -3374,6 +3407,12 @@ commands = {
 		args: ["[\"<channel>\"]", "[<message id>]", "\"<message>\""],
 		helpText: "Relay a message using the bot. If <channel> is provided, the message will be sent there.",
 		callback: commandRelay
+	},
+	react: {
+		minPermission: PERM_ADMIN,
+		args: ["\"<channel>\"", "<message id>", "\"<emoji>\""],
+		helpText: "React to a message using the bot.",
+		callback: commandReact
 	},
 	relaydm: {
 		minPermission: PERM_ADMIN,
