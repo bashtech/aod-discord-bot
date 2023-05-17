@@ -2893,27 +2893,10 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 
 //function to send a message to a change that always returns a promise (simplifies exception handling)
 function sendMessageToChannel(channel, content, existingMessage) {
-	let json;
-	try { json = JSON.parse(content); } catch (e) {}
-
-	if (json !== undefined) {
-		if (json.embed) {
-			if (existingMessage)
-				return existingMessage.edit({ embeds: [json.embed] });
-			else
-				return channel.send({ embeds: [json.embed] });
-		} else if (json.text) {
-			if (existingMessage)
-				return existingMessage.edit(json.text);
-			else
-				return channel.send(json.text);
-		}
-	} else {
-		if (existingMessage)
-			return existingMessage.edit(content);
-		else
-			return channel.send(content);
-	}
+	if (existingMessage)
+		return existingMessage.edit(content);
+	else
+		return channel.send(content);
 }
 
 //relay command processing
@@ -2937,23 +2920,52 @@ async function commandRelay(message, member, cmd, args, guild, perm, permName, i
 		return;
 	await channel.messages.fetch(args[0])
 		.catch(() => {});
-	let existingMessage = channel.messages.resolve(args[0]);
-	if (existingMessage)
+	let existingMessage;
+	if (args[0] == "relayed") {
 		args.shift();
+		if (args.length <= 0)
+			return;
+		map = relayedMessageMap[args[0]];
+		if (!map)
+			return;
+		await channel.messages.fetch(map.messageId)
+			.catch(() => {});
+		existingMessage = channel.messages.resolve(map.messageId);
+	} else {
+		await channel.messages.fetch(args[0])
+			.catch(() => {});
+		existingMessage = channel.messages.resolve(args[0]);
+	}
+	args.shift();
 
 	let content = args.join(' ');
 	if (!content || content === '')
 		return;
 
+	let json;
+	let relayId;
+	try {
+		json = JSON.parse(content);
+		if (json.embed !== undefined)
+			content = { embeds: [json.embed] };
+		else if (json.text !== undefined)
+			content = json.text;
+		else
+			return;
+		relayId = json.id;
+	} catch (e) {}
+
 	sendMessageToChannel(channel, content, existingMessage)
 		.then((relayed) => {
 			if (message.author.bot && message.webhookId && message.webhookId === message.author.id) {
-				//approved bot, log message IDs
-				relayedMessageMap[message.id] = {
-					messageId: relayed.id,
-					epoch: (new Date()).getTime()
-				};
-				fs.writeFileSync(config.relayedMessageMap, JSON.stringify(relayedMessageMap), 'utf8');
+				//approved bot, save message if given id
+				if (!existingMessage && relayId) {
+					relayedMessageMap[relayId] = {
+						messageId: relayed.id,
+						epoch: (new Date()).getTime()
+					};
+					fs.writeFileSync(config.relayedMessageMap, JSON.stringify(relayedMessageMap), 'utf8');
+				}
 			}
 		})
 		.finally(() => { if (!isDM) message.delete(); })
@@ -2979,7 +2991,7 @@ async function commandReact(message, member, cmd, args, guild, perm, permName, i
 
 	if (args.length <= 0)
 		return;
-	
+
 	let existingMessage;
 	if (args[0] == "relayed") {
 		args.shift();
