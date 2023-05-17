@@ -69,6 +69,15 @@ try {
 	dependentRoles = { requires: {}, requiredFor: {} };
 }
 
+//include relayedMessageMap
+var relayedMessageMap;
+try {
+	relayedMessageMap = require(config.relayedMessageMap);
+} catch (error) {
+	console.log(error);
+	relayedMessageMap = {};
+}
+
 //permission levels
 const PERM_OWNER = 8;
 const PERM_ADMIN = 7;
@@ -2940,7 +2949,11 @@ async function commandRelay(message, member, cmd, args, guild, perm, permName, i
 		.then((relayed) => {
 			if (message.author.bot && message.webhookId && message.webhookId === message.author.id) {
 				//approved bot, log message IDs
-				console.log(`Webhook message ${message.id} relayed to ${channelName} as ${relayed.id}`);
+				relayedMessageMap[message.id] = {
+					messageId: relayed.id,
+					epoch: (new Date()).getTime()
+				};
+				fs.writeFileSync(config.relayedMessageMap, JSON.stringify(relayedMessageMap), 'utf8');
 			}
 		})
 		.finally(() => { if (!isDM) message.delete(); })
@@ -2966,14 +2979,27 @@ async function commandReact(message, member, cmd, args, guild, perm, permName, i
 
 	if (args.length <= 0)
 		return;
-	await channel.messages.fetch(args[0])
-		.catch(() => {});
-	let existingMessage = channel.messages.resolve(args[0]);
-	if (existingMessage)
-		args.shift();
-	else
-		return;
 	
+	let existingMessage;
+	if (args[0] == "relayed") {
+		args.shift();
+		if (args.length <= 0)
+			return;
+		map = relayedMessageMap[args[0]];
+		if (!map)
+			return;
+		await channel.messages.fetch(map.messageId)
+			.catch(() => {});
+		existingMessage = channel.messages.resolve(map.messageId);
+	} else {
+		await channel.messages.fetch(args[0])
+			.catch(() => {});
+		existingMessage = channel.messages.resolve(args[0]);
+	}
+	args.shift();
+	if (!existingMessage)
+		return;
+
 	if (args.length <= 0)
 		return;
 	existingMessage.react(args[0]);
