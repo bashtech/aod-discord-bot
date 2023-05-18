@@ -2936,7 +2936,8 @@ async function commandRelay(message, member, cmd, args, guild, perm, permName, i
 			.catch(() => {});
 		existingMessage = channel.messages.resolve(args[0]);
 	}
-	args.shift();
+	if (existingMessage)
+		args.shift();
 
 	let content = args.join(' ');
 	if (!content || content === '')
