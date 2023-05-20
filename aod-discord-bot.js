@@ -93,7 +93,7 @@ const PERM_NONE = 0;
 var undefined;
 
 //other globals
-global.lastForumSync = null
+global.lastForumSync = null;
 
 const client = new Client({
 	intents: [
@@ -3858,7 +3858,7 @@ function forumSyncTimerCallback() {
 
 //messageDelete handler
 client.on("messageDelete", (message) => {
-	if (message.guildId && message.channel && message.content && !message.content.startsWith(config.prefix + 'relay ') && 
+	if (message.guildId && message.channel && message.content && !message.content.startsWith(config.prefix + 'relay ') &&
 		!message.content.startsWith(config.prefix + 'relaydm ') && !message.content.startsWith(config.prefix + 'react ') &&
 		!message.content.startsWith(config.prefix + 'login '))
 		console.log(`Deleted message from ${message.author.tag} in #${message.channel.name}: ${message.content}`);

@@ -1,3 +1,5 @@
+/* jshint esversion: 8 */
+
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {

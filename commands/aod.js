@@ -1,3 +1,5 @@
+/* jshint esversion: 8 */
+
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
@@ -18,9 +20,9 @@ module.exports = {
 			arg_string = input.slice(first_space + 1).trim();
 		}
 		let [perm, permName] = getPermissionLevelForMember(interaction.member);
-	
+
 		global.processCommand(interaction, interaction.member, command, arg_string, interaction.guild, perm, permName, false);
-		
+
 		//interaction.reply({ content: "Not yet implemented", ephemeral: true });
 	},
 };
