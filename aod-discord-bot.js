@@ -12,7 +12,7 @@
 require("esm-hook");
 
 //include discord.js
-const { Client, GatewayIntentBits, Partials, ChannelType, PermissionsBitField, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ChannelType, PermissionsBitField, Collection, InteractionType } = require('discord.js');
 
 //include node-fetch using esm-hook
 const fetch = require('node-fetch').default;
@@ -93,7 +93,7 @@ const PERM_NONE = 0;
 var undefined;
 
 //other globals
-var lastForumSync;
+global.lastForumSync = null
 
 const client = new Client({
 	intents: [
@@ -2994,7 +2994,9 @@ async function commandReact(message, member, cmd, args, guild, perm, permName, i
 		return;
 
 	let existingMessage;
+	let relayed = false;
 	if (args[0] == "relayed") {
+		relayed = true;
 		args.shift();
 		if (args.length <= 0)
 			return;
@@ -3015,7 +3017,50 @@ async function commandReact(message, member, cmd, args, guild, perm, permName, i
 
 	if (args.length <= 0)
 		return;
-	existingMessage.react(args[0]);
+	if (args[0] == "clear") {
+		args.shift();
+		if (args.length <= 0 || args[0] == "self") {
+			//clear self reactions
+			const userReactions = existingMessage.reactions.cache.filter(reaction => reaction.users.cache.has(client.user.id));
+			try {
+				for (const reaction of userReactions.values()) {
+					await reaction.users.remove(client.user.id);
+				}
+			} catch (e) {}
+		} else if (args[0] == "all") {
+			//clear all reactions
+			existingMessage.reactions.removeAll();
+		} else {
+			//remove reaction entirely if emoji passed
+			let existingReaction = existingMessage.reactions.cache.get(args[0]);
+			if (existingReaction) {
+				existingReaction.remove();
+			} else {
+				//remove all reactions from member if member passed
+				let targetMember = getMemberFromMessageOrArgs(guild, message, args);
+				if (targetMember) {
+					const userReactions = existingMessage.reactions.cache.filter(reaction => reaction.users.cache.has(client.user.id));
+					try {
+						for (const reaction of userReactions.values()) {
+							await reaction.users.remove(client.user.id);
+						}
+					} catch (e) {}
+				}
+			}
+		}
+	} else if (relayed) {
+		//relayed messages only come from the tracker webhook right now, make the reactions exclusive
+		await existingMessage.reactions.removeAll();
+		existingMessage.react(args[0]);
+	} else {
+		let existingReaction = existingMessage.reactions.cache.get(args[0]);
+		if (existingReaction && existingReaction.users.resolve(client.user.id)) {
+			await existingReaction.users.remove(client.user.id);
+		} else {
+			existingMessage.react(args[0]);
+		}
+	}
+
 	if (!isDM) message.delete();
 }
 
@@ -3061,12 +3106,13 @@ function secondsToString(seconds) {
 	if (days) str = `${days}d ` + str;
 	return str;
 }
+global.secondsToString = secondsToString;
 
 //status command processing
 function commandStatus(message, member, cmd, args, guild, perm, permName, isDM) {
 	let uptimeSeconds = Math.round(client.uptime / 1000);
 	let now = new Date();
-	let lastForumSyncDiff = new Date(now - lastForumSync);
+	let lastForumSyncDiff = new Date(now - global.lastForumSync);
 	let nextTimerSeconds = ((nextSavedTimerEpoch ? nextSavedTimerEpoch : now.getTime()) - now.getTime()) / 1000;
 	let embed = {
 		title: 'Bot Status',
@@ -3612,7 +3658,7 @@ client.on('interactionCreate', async interaction => {
 		await command.execute(interaction);
 	} catch (error) {
 		console.error(error);
-		await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+		interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
 	}
 });
 
@@ -3782,8 +3828,8 @@ var forumSyncTimer = null;
 var lastDate = null;
 
 function forumSyncTimerCallback() {
-	lastForumSync = new Date();
-	let currentDate = `${lastForumSync.getFullYear()}/${lastForumSync.getMonth()+1}/${lastForumSync.getDate()}`;
+	global.lastForumSync = new Date();
+	let currentDate = `${global.lastForumSync.getFullYear()}/${global.lastForumSync.getMonth()+1}/${global.lastForumSync.getDate()}`;
 	const guild = client.guilds.resolve(config.guildId);
 	let doDaily = false;
 
@@ -3812,7 +3858,9 @@ function forumSyncTimerCallback() {
 
 //messageDelete handler
 client.on("messageDelete", (message) => {
-	if (message.guildId && message.channel && message.content && !message.content.startsWith(config.prefix + 'relay ') && !message.content.startsWith(config.prefix + 'login '))
+	if (message.guildId && message.channel && message.content && !message.content.startsWith(config.prefix + 'relay ') && 
+		!message.content.startsWith(config.prefix + 'relaydm ') && !message.content.startsWith(config.prefix + 'react ') &&
+		!message.content.startsWith(config.prefix + 'login '))
 		console.log(`Deleted message from ${message.author.tag} in #${message.channel.name}: ${message.content}`);
 });
 
