@@ -260,6 +260,19 @@ function returnMessage(message, msg) {
 	return promise;
 }
 
+function ephemeralReply(message, msg) {
+	if (message) {
+		if (message.isInteraction)
+			return message.reply({ content: msg, ephemeral: true });
+		else
+			return message.reply(message);
+	}
+	let promise = new Promise(function(resolve, reject) {
+		resolve();
+	});
+	return promise;
+}
+
 //add or remove a role from a guildMember
 function addRemoveRole(message, guild, add, roleName, isID, member) {
 	if (!guild)
@@ -591,10 +604,18 @@ function sendMessageToMember(member, data) {
 
 //send a reply as DM to the author of a message (if available) and return a promise
 function sendReplyToMessageAuthor(message, member, guild, data) {
-	//if (message && message.isInteraction)
-	//	return message.reply({ content: data, ephemeral: true });
-	if (message && member)
-		return sendMessageToMember(member, data);
+	if (message) {
+		if (message.isInteraction) {
+			if (typeof data === 'object') {
+				data.ephemeral = true;
+				return message.reply(data);
+			} else {
+				return message.reply({ content: data, ephemeral: true });
+			}
+		} else if (member) {
+			return sendMessageToMember(member, data);
+		}
+	}
 	var promise = new Promise(function(resolve, reject) {
 		reject();
 	});
@@ -602,7 +623,7 @@ function sendReplyToMessageAuthor(message, member, guild, data) {
 }
 
 //send a list of items as DM to the author of a message
-function sendListToMessageAuthor(message, member, guild, title, list, footer, formatter) {
+async function sendListToMessageAuthor(message, member, guild, title, list, footer, formatter) {
 	let embed = {
 		title: title,
 		description: "",
@@ -616,7 +637,7 @@ function sendListToMessageAuthor(message, member, guild, title, list, footer, fo
 		if (embed.description.length + desc.length < 2048) {
 			embed.description = embed.description + desc;
 		} else {
-			sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+			await sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
 			embed = {
 				title: `Continued...`,
 				description: "",
@@ -626,7 +647,11 @@ function sendListToMessageAuthor(message, member, guild, title, list, footer, fo
 		}
 	}
 	if (embed.description.length)
-		sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+		return sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+	let promise = new Promise(function(resolve, reject) {
+		resolve();
+	});
+	return promise;
 }
 
 //help command processing
@@ -1510,6 +1535,25 @@ function escapeDisplayNameForOutput(member) {
 	return member.displayName.replace(/[*_]/g, escapeNameCharacter);
 }
 
+function listMembers(message, member, guild, roleName) {
+	let menuOrder = parseInt(roleName);
+	if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= managedRoles.menuOrder.length) {
+		roleName = managedRoles.menuOrder[menuOrder - 1];
+	}
+	roleName = roleName.toLowerCase();
+	let role = guild.roles.cache.find(r => { return r.name.toLowerCase() == roleName; });
+	if (role) {
+		if (role.members.size > 256) {
+			return ephemeralReply(message, `Role ${role.name} has more than 256 members.`);
+		}
+		return sendListToMessageAuthor(message, member, guild, `Members of ${role.name} (${role.members.size})`,
+			role.members.sort((a, b) => a.displayName.localeCompare(b.displayName)).values(), "", escapeDisplayNameForOutput);
+	} else {
+		return ephemeralReply(message, `Role ${roleName} does not exist`);
+	}
+}
+global.listMembers = listMembers;
+
 //sub/unsub/list command processing
 function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
@@ -1566,21 +1610,9 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 					return message.reply("You don't have permissions to show role members.");
 				}
 				let roleName = args.join(' ');
-				let menuOrder = parseInt(roleName);
-				if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= managedRoles.menuOrder.length) {
-					roleName = managedRoles.menuOrder[menuOrder - 1];
-				}
-				let role = guild.roles.cache.find(r => { return r.name == roleName; });
-				if (role) {
-					if (role.members.size > 256) {
-						return message.reply(`Role ${roleName} has more than 256 members.`);
-					}
-					sendListToMessageAuthor(message, member, guild, `Members of ${roleName} (${role.members.size})`,
-						role.members.sort((a, b) => a.displayName.localeCompare(b.displayName)).values(), "", escapeDisplayNameForOutput);
-					return;
-				} else {
-					return message.reply(`Role ${roleName} does not exist`);
-				}
+
+
+
 			} else {
 				let subedRoles = [];
 				let assignedRoles = [];
@@ -3662,7 +3694,7 @@ client.on('interactionCreate', async interaction => {
 		console.error(`${interaction.commandName} not found`);
 		return;
 	}
-	
+
 	let member = interaction.member;
 	[perm, permName] = getPermissionLevelForMember(member);
 
@@ -3671,13 +3703,17 @@ client.on('interactionCreate', async interaction => {
 	if (interaction.isChatInputCommand()) {
 		try {
 			await command.execute(interaction, member, perm, permName);
+			if (!interaction.replied)
+				interaction.reply({ content: "Done", ephemeral: true });
 		} catch (error) {
 			console.error(error);
-			interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+			interaction.reply({ content: 'There was an error while executing your command', ephemeral: true });
 		}
 	} else if (interaction.isAutocomplete()) {
 		try {
 			await command.autocomplete(interaction, member, perm, permName);
+			if (!interaction.responded)
+				interaction.respond([]);
 		} catch (error) {
 			console.error(error);
 			interaction.respond([]);

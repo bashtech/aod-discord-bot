@@ -21,7 +21,5 @@ module.exports = {
 		}
 
 		global.processCommand(interaction, interaction.member, command, arg_string, interaction.guild, perm, permName, false);
-
-		//interaction.reply({ content: "Not yet implemented", ephemeral: true });
 	},
 };
