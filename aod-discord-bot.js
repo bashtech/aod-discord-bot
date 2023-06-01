@@ -89,6 +89,16 @@ const PERM_MEMBER = 2;
 const PERM_GUEST = 1;
 const PERM_NONE = 0;
 
+global.PERM_OWNER = PERM_OWNER;
+global.PERM_ADMIN = PERM_ADMIN;
+global.PERM_STAFF = PERM_STAFF;
+global.PERM_DIVISION_COMMANDER = PERM_DIVISION_COMMANDER;
+global.PERM_MOD = PERM_MOD;
+global.PERM_RECRUITER = PERM_RECRUITER;
+global.PERM_MEMBER = PERM_MEMBER;
+global.PERM_GUEST = PERM_GUEST;
+global.PERM_NONE = PERM_NONE;
+
 //global undefined for readable code
 var undefined;
 
@@ -3647,18 +3657,31 @@ for (const file of commandFiles) {
 	client.commands.set(command.data.name, command);
 }
 client.on('interactionCreate', async interaction => {
-	if (interaction.type !== InteractionType.ApplicationCommand)
-		return;
 	const command = client.commands.get(interaction.commandName);
-	if (!command) return;
+	if (!command) {
+		console.error(`${interaction.commandName} not found`);
+		return;
+	}
+	
+	let member = interaction.member;
+	[perm, permName] = getPermissionLevelForMember(member);
 
 	//console.log([interaction, command]);
 	interaction.isInteraction = true;
-	try {
-		await command.execute(interaction);
-	} catch (error) {
-		console.error(error);
-		interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+	if (interaction.isChatInputCommand()) {
+		try {
+			await command.execute(interaction, member, perm, permName);
+		} catch (error) {
+			console.error(error);
+			interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+		}
+	} else if (interaction.isAutocomplete()) {
+		try {
+			await command.autocomplete(interaction, member, perm, permName);
+		} catch (error) {
+			console.error(error);
+			interaction.respond([]);
+		}
 	}
 });
 

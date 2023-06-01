@@ -7,7 +7,7 @@ module.exports = {
 		.setName('status')
 		.setDescription('AOD bot status')
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-	async execute(interaction) {
+	async execute(interaction, member, perm, permName) {
 		let uptimeSeconds = Math.round(interaction.client.uptime / 1000);
 		let now = new Date();
 		let lastForumSyncDiff = new Date(now - global.lastForumSync);
