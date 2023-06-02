@@ -1,6 +1,23 @@
-/* jshint esversion: 8 */
+/* jshint esversion: 11 */
 
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+
+function sortAndLimitOptions(options, len, search) {
+	let count = 0;
+	return options
+		.sort()
+		.filter(o => {
+			if (count >= len) {
+				return false;
+			} else if (o.toLowerCase().startsWith(search)) {
+				count++;
+				return true;
+			} else {
+				return false;
+			}
+		})
+		.map(o => ({ name: o, value: o }));
+}
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -12,6 +29,14 @@ module.exports = {
 		.addSubcommand(command => command.setName('members').setDescription('Show members of a role (requires Moderator permissions)')
 			.addRoleOption(option => option.setName('role').setDescription('Role').setRequired(true)))
 		.addSubcommand(command => command.setName('sub').setDescription('Subscribe to a role')
+			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
+		.addSubcommand(command => command.setName('unsub').setDescription('Unsubscribe from a role')
+			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
+		.addSubcommand(command => command.setName('assign').setDescription('Assign a role to a user')
+			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
+			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
+		.addSubcommand(command => command.setName('unassign').setDescription('Unassign a role from a user')
+			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true))),
 	async autocomplete(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
@@ -19,44 +44,68 @@ module.exports = {
 		let search = focusedOption.value.toLowerCase();
 		switch (subCommand) {
 			case 'sub':
+			case 'unsub': {
 				if (focusedOption.name === 'role') {
-					let count = 0;
-					let options = global.getSubscribableRoles().filter(r => {
-						if (count >= 25) {
-							return false;
-						} else if (r.toLowerCase().startsWith(search)) {
-							count++;
-							return true;
-						}
-						return false; });
-					await interaction.respond(options.sort().map(r => ({ name: r, value: r })));
+					await interaction.respond(sortAndLimitOptions(global.getUserRoles(false, member, subCommand !== 'sub'), 25, search));
 					return;
 				}
 				break;
+			}
+			case 'assign':
+			case 'unassign': {
+				let targetMember = interaction.guild.members.resolve(interaction.options.get('user')?.value);
+				if (!targetMember)
+					return;
+				if (focusedOption.name === 'role') {
+					await interaction.respond(sortAndLimitOptions(global.getUserRoles(true, targetMember, subCommand !== 'assign'), 25, search));
+					return;
+				}
+				break;
+			}
 		}
 	},
 	async execute(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		switch (subCommand) {
-			case 'list':
+			case 'list': {
 				await global.listRoles(interaction, member, interaction.guild, member, false);
 				return;
-			case 'list_user':
-			if (perm < global.PERM_MOD) {
-					return interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
+			}
+			case 'list_user': {
+				if (perm < global.PERM_MOD) {
+					await interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
+					return;
 				}
 				let targetMember = interaction.options.getMember('user');
 				await global.listRoles(interaction, member, interaction.guild, targetMember, true);
 				return;
-			case 'members':
+			}
+			case 'members': {
 				if (perm < global.PERM_MOD) {
-					return interaction.reply({ content: "You do not have permissions to show role members", ephemeral: true });
+					await interaction.reply({ content: "You do not have permissions to show role members", ephemeral: true });
+					return;
 				}
 				let role = interaction.options.getRole('role');
 				await global.listMembers(interaction, member, interaction.guild, role.name);
 				return;
-			default:
-				return interaction.reply({ content: "Not implemented", ephemeral: true });
+			}
+			case 'sub':
+			case 'unsub': {
+				let roleName = interaction.options.getString('role');
+				await global.subUnsubRole(interaction, member, interaction.guild, member, false, subCommand === 'sub', roleName);
+				return;
+			}
+			case 'assign':
+			case 'unassign': {
+				if (perm < global.PERM_MOD) {
+					await interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
+					return;
+				}
+				let targetMember = interaction.options.getMember('user');
+				let roleName = interaction.options.getString('role');
+				await global.subUnsubRole(interaction, targetMember, interaction.guild, targetMember, true, subCommand === 'assign', roleName);
+				return;
+			}
 		}
 	}
 };

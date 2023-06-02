@@ -287,7 +287,7 @@ function returnMessage(message, msg) {
 }
 
 //add or remove a role from a guildMember
-function addRemoveRole(message, guild, add, roleName, isID, member) {
+async function addRemoveRole(message, guild, add, roleName, isID, member) {
 	if (!guild)
 		return returnMessage(message, "Invalid Guild");
 	var role;
@@ -300,14 +300,29 @@ function addRemoveRole(message, guild, add, roleName, isID, member) {
 	if (!member)
 		return returnMessage(message, "Please mention a valid member of this server");
 
-	if (add)
-		member.roles.add(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
-		.then(returnMessage(message, "Added " + role.name + " to " + member.user.tag))
-		.catch(error => { notifyRequestError(null, null, guild, error, false); });
-	else
-		member.roles.remove(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
-		.then(returnMessage(message, "Removed " + role.name + " from " + member.user.tag))
-		.catch(error => { notifyRequestError(null, null, guild, error, false); });
+	let promise = new Promise(function(resolve, reject) {
+		if (add)
+			member.roles.add(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
+			.then(async function() {
+				await returnMessage(message, "Added " + role.name + " to " + member.user.tag);
+				resolve();
+			})
+			.catch(error => {
+				notifyRequestError(null, null, guild, error, false);
+				resolve();
+			});
+		else
+			member.roles.remove(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
+			.then(async function() {
+				await returnMessage(message, "Removed " + role.name + " from " + member.user.tag);
+				resolve();
+			})
+			.catch(error => {
+				notifyRequestError(null, null, guild, error, false);
+				resolve();
+			});
+	});
+	return promise;
 }
 
 function getStringForPermission(perm) {
@@ -622,7 +637,7 @@ function sendReplyToMessageAuthor(message, member, guild, data) {
 			if (typeof data === 'object')
 				data.ephemeral = true;
 			else
-				data = { content: data, ephemeral: true }
+				data = { content: data, ephemeral: true };
 			return sendInteractionReply(message, data);
 		} else if (member) {
 			return sendMessageToMember(member, data);
@@ -1604,10 +1619,19 @@ async function listRoles(message, member, guild, targetMember, assign) {
 }
 global.listRoles = listRoles;
 
-function getSubscribableRoles() {
-	return Object.keys(managedRoles.subscribable);	
+function getUserRoles(assign, member, hasRole) {
+	let config = assign ? managedRoles.assignable : managedRoles.subscribable;
+	let roles = Object.keys(config);
+	if (!member)
+		return roles;
+	return roles.filter(r => {
+		if (member.roles.cache.get(config[r].roleID))
+			return hasRole;
+		else
+			return !hasRole;
+	});
 }
-global.getSubscribableRoles = getSubscribableRoles;
+global.getUserRoles = getUserRoles;
 
 async function subUnsubRole(message, member, guild, targetMember, assign, sub, roleName) {
 	let rolesConfig;
@@ -3233,7 +3257,7 @@ function commandSlap(message, member, cmd, args, guild, perm, permName, isDM) {
 	else
 		object = 'a large trout';
 	return message.channel.send(`_${member} slaps ${targetMember} around a bit with ${object}._`)
-		.then(message.delete())
+		.then(() => { message.delete(); })
 		.catch(() => {});
 }
 
@@ -3732,7 +3756,9 @@ client.on('interactionCreate', async interaction => {
 				interaction.reply({ content: "Done", ephemeral: true });
 		} catch (error) {
 			console.error(error);
-			sendInteractionReply(interaction, { content: 'There was an error while executing your command', ephemeral: true });
+			try {
+				sendInteractionReply(interaction, { content: 'There was an error while executing your command', ephemeral: true });
+			} catch (error) {}
 		}
 	} else if (interaction.isAutocomplete()) {
 		try {
@@ -3744,6 +3770,12 @@ client.on('interactionCreate', async interaction => {
 			if (!interaction.responded)
 				interaction.respond([]);
 		}
+	} else {
+		try {
+			console.error(`Unknown interaction type ${interaction.type}`);
+			if (interaction.isRepliable())
+				sendInteractionReply(interaction, { content: 'Unknown interaction type', ephemeral: true });
+		} catch (error) {}
 	}
 });
 
