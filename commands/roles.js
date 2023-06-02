@@ -32,10 +32,10 @@ module.exports = {
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
 		.addSubcommand(command => command.setName('unsub').setDescription('Unsubscribe from a role')
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
-		.addSubcommand(command => command.setName('assign').setDescription('Assign a role to a user')
+		.addSubcommand(command => command.setName('assign').setDescription('Assign a role to a user (requires Moderator permissions)')
 			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
-		.addSubcommand(command => command.setName('unassign').setDescription('Unassign a role from a user')
+		.addSubcommand(command => command.setName('unassign').setDescription('Unassign a role from a user (requires Moderator permissions)')
 			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true))),
 	async autocomplete(interaction, member, perm, permName) {
