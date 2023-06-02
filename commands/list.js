@@ -8,7 +8,7 @@ module.exports = {
 		.setDescription('List subscribable roles.')
 		.addSubcommand(command => command.setName('my_roles').setDescription('Lists your current and available subscribable roles'))
 		.addSubcommand(command => command.setName('user_roles').setDescription('Lists current and available assignable roles for another user (requires Moderator permissions)')
-			.addMentionableOption(option => option.setName('target').setDescription('Target User').setRequired(true)))
+			.addUserOption(option => option.setName('target').setDescription('Target User').setRequired(true)))
 		.addSubcommand(command => command.setName('role').setDescription('Role to display (requires Moderator permissions)')
 			.addStringOption(option => option.setName('target').setDescription('Target Role').setAutocomplete(true).setRequired(true))),
 	async autocomplete(interaction, member, perm, permName) {
@@ -40,6 +40,16 @@ module.exports = {
 	async execute(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		switch (subCommand) {
+			case 'my_roles':
+				await global.listRoles(interaction, member, interaction.guild, member, false);
+				return;
+			case 'user_roles':
+			if (perm < global.PERM_MOD) {
+					return interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
+				}
+				let targetMember = interaction.options.getMember('target');
+				await global.listRoles(interaction, member, interaction.guild, member, true);
+				return;
 			case 'role':
 				if (perm < global.PERM_MOD) {
 					return interaction.reply({ content: "You do not have permissions to show role members", ephemeral: true });
@@ -49,6 +59,5 @@ module.exports = {
 			default:
 				break;
 		}
-		interaction.reply({ content: "Not yet implemented", ephemeral: true });
 	}
 };

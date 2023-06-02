@@ -260,12 +260,21 @@ function returnMessage(message, msg) {
 	return promise;
 }
 
+function sendInteractionReply(interaction, data) {
+	if (!interaction.replied)
+		return interaction.reply(data);
+	else
+		return interaction.followUp(data);
+}
+global.sendInteractionReply = sendInteractionReply;
+
 function ephemeralReply(message, msg) {
 	if (message) {
-		if (message.isInteraction)
-			return message.reply({ content: msg, ephemeral: true });
-		else
+		if (message.isInteraction) {
+			return sendInteractionReply(message, { content: msg, ephemeral: true });
+		} else {
 			return message.reply(message);
+		}
 	}
 	let promise = new Promise(function(resolve, reject) {
 		resolve();
@@ -606,12 +615,11 @@ function sendMessageToMember(member, data) {
 function sendReplyToMessageAuthor(message, member, guild, data) {
 	if (message) {
 		if (message.isInteraction) {
-			if (typeof data === 'object') {
+			if (typeof data === 'object')
 				data.ephemeral = true;
-				return message.reply(data);
-			} else {
-				return message.reply({ content: data, ephemeral: true });
-			}
+			else
+				data = { content: data, ephemeral: true }
+			return sendInteractionReply(message, data);
 		} else if (member) {
 			return sendMessageToMember(member, data);
 		}
@@ -1554,6 +1562,44 @@ function listMembers(message, member, guild, roleName) {
 }
 global.listMembers = listMembers;
 
+async function listRoles(message, member, guild, targetMember, assign) {
+	let subedRoles = [];
+	let assignedRoles = [];
+	let availRoles = [];
+	for (let index = 0; index < managedRoles.menuOrder.length; index++) {
+		let roleName = managedRoles.menuOrder[index];
+		let subConfig;
+		let assignConfig;
+		if ((subConfig = managedRoles.subscribable[roleName])) {
+			if (targetMember.roles.cache.get(subConfig.roleID)) {
+				let role = guild.roles.resolve(subConfig.roleID);
+				let size = (role ? role.members.size : 0);
+				subedRoles.push(`[${subConfig.menuOrder}] ${roleName} (${size} members)`);
+			} else if (!assign) {
+				availRoles.push(`[${subConfig.menuOrder}] ${roleName}`);
+			}
+		} else if (assign && (assignConfig = managedRoles.assignable[roleName])) {
+			if (targetMember.roles.cache.get(assignConfig.roleID)) {
+				let role = guild.roles.resolve(assignConfig.roleID);
+				let size = (role ? role.members.size : 0);
+				assignedRoles.push(`[${assignConfig.menuOrder}] ${roleName} (${size} members)`);
+			} else {
+				availRoles.push(`[${assignConfig.menuOrder}] ${roleName}`);
+			}
+		}
+	}
+	if (assign) {
+		let displayName = escapeDisplayNameForOutput(targetMember);
+		await sendListToMessageAuthor(message, member, guild, `Subscribed Roles for ${displayName}`, subedRoles);
+		await sendListToMessageAuthor(message, member, guild, `Assigned Roles for ${displayName}`, assignedRoles);
+		return sendListToMessageAuthor(message, member, guild, `Available Roles for ${displayName}`, availRoles);
+	} else {
+		await sendListToMessageAuthor(message, member, guild, `Subscribed Roles`, subedRoles);
+		return sendListToMessageAuthor(message, member, guild, `Available Roles`, availRoles);
+	}
+}
+global.listRoles = listRoles;
+
 //sub/unsub/list command processing
 function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
@@ -1610,44 +1656,9 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 					return message.reply("You don't have permissions to show role members.");
 				}
 				let roleName = args.join(' ');
-
-
-
+				return listMembers(message, member, guild, roleName);
 			} else {
-				let subedRoles = [];
-				let assignedRoles = [];
-				let availRoles = [];
-				for (let index = 0; index < managedRoles.menuOrder.length; index++) {
-					let roleName = managedRoles.menuOrder[index];
-					let subConfig;
-					let assignConfig;
-					if ((subConfig = managedRoles.subscribable[roleName])) {
-						if (targetMember.roles.cache.get(subConfig.roleID)) {
-							let role = guild.roles.resolve(subConfig.roleID);
-							let size = (role ? role.members.size : 0);
-							subedRoles.push(`[${subConfig.menuOrder}] ${roleName} (${size} members)`);
-						} else if (!assign) {
-							availRoles.push(`[${subConfig.menuOrder}] ${roleName}`);
-						}
-					} else if (assign && (assignConfig = managedRoles.assignable[roleName])) {
-						if (targetMember.roles.cache.get(assignConfig.roleID)) {
-							let role = guild.roles.resolve(assignConfig.roleID);
-							let size = (role ? role.members.size : 0);
-							assignedRoles.push(`[${assignConfig.menuOrder}] ${roleName} (${size} members)`);
-						} else {
-							availRoles.push(`[${assignConfig.menuOrder}] ${roleName}`);
-						}
-					}
-				}
-				if (assign) {
-					let displayName = escapeDisplayNameForOutput(targetMember);
-					sendListToMessageAuthor(message, member, guild, `Subscribed Roles for ${displayName}`, subedRoles);
-					sendListToMessageAuthor(message, member, guild, `Assigned Roles for ${displayName}`, assignedRoles);
-					sendListToMessageAuthor(message, member, guild, `Available Roles for ${displayName}`, availRoles);
-				} else {
-					sendListToMessageAuthor(message, member, guild, `Subscribed Roles`, subedRoles);
-					sendListToMessageAuthor(message, member, guild, `Available Roles`, availRoles);
-				}
+				listRoles(message, member, guild, targetMember, assign);
 			}
 		}
 	}
@@ -3707,7 +3718,7 @@ client.on('interactionCreate', async interaction => {
 				interaction.reply({ content: "Done", ephemeral: true });
 		} catch (error) {
 			console.error(error);
-			interaction.reply({ content: 'There was an error while executing your command', ephemeral: true });
+			sendInteractionReply(interaction, { content: 'There was an error while executing your command', ephemeral: true });
 		}
 	} else if (interaction.isAutocomplete()) {
 		try {
@@ -3716,7 +3727,8 @@ client.on('interactionCreate', async interaction => {
 				interaction.respond([]);
 		} catch (error) {
 			console.error(error);
-			interaction.respond([]);
+			if (!interaction.responded)
+				interaction.respond([]);
 		}
 	}
 });
