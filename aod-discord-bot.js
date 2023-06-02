@@ -251,15 +251,6 @@ function getMemberFromMessageOrArgs(guild, message, args) {
 	return member;
 }
 
-function returnMessage(message, msg) {
-	if (message)
-		return message.reply(msg);
-	let promise = new Promise(function(resolve, reject) {
-		resolve();
-	});
-	return promise;
-}
-
 function sendInteractionReply(interaction, data) {
 	if (!interaction.replied)
 		return interaction.reply(data);
@@ -275,6 +266,19 @@ function ephemeralReply(message, msg) {
 		} else {
 			return message.reply(message);
 		}
+	}
+	let promise = new Promise(function(resolve, reject) {
+		resolve();
+	});
+	return promise;
+}
+
+function returnMessage(message, msg) {
+	if (message) {
+		if (message.isInteraction)
+			return sendInteractionReply(message, msg);
+		else
+			return message.reply(msg);
 	}
 	let promise = new Promise(function(resolve, reject) {
 		resolve();
@@ -1600,6 +1604,44 @@ async function listRoles(message, member, guild, targetMember, assign) {
 }
 global.listRoles = listRoles;
 
+function getSubscribableRoles() {
+	return Object.keys(managedRoles.subscribable);	
+}
+global.getSubscribableRoles = getSubscribableRoles;
+
+async function subUnsubRole(message, member, guild, targetMember, assign, sub, roleName) {
+	let rolesConfig;
+	let otherRolesConfig;
+	if (assign) {
+		rolesConfig = managedRoles.assignable;
+		otherRolesConfig = managedRoles.subscribable;
+	} else {
+		rolesConfig = managedRoles.subscribable;
+		otherRolesConfig = managedRoles.assignable;
+	}
+
+	let config = rolesConfig[roleName];
+	if (!config && assign && !sub)
+		config = otherRolesConfig[roleName];
+	if (!config) {
+		let menuOrder = parseInt(roleName);
+		if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= managedRoles.menuOrder.length) {
+			roleName = managedRoles.menuOrder[menuOrder - 1];
+			config = rolesConfig[roleName];
+			if (!config && assign && !sub)
+				config = otherRolesConfig[roleName];
+		}
+	}
+	if (!config) {
+		if (assign)
+			return ephemeralReply(message, `Role ${roleName} is not assignable`);
+		else
+			return ephemeralReply(message, `Role ${roleName} is not subscribable`);
+	}
+	return addRemoveRole(message, guild, sub, config.roleID, true, targetMember);
+}
+global.subUnsubRole = subUnsubRole;
+
 //sub/unsub/list command processing
 function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
@@ -1618,47 +1660,19 @@ function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
 		case 'sub':
 		case 'unsub': {
 			if (args.length <= 0)
-				return message.reply('Role must be provided');
+				return ephemeralReply(message, 'Role must be provided');
 			let roleName = args.join(' ');
-			let rolesConfig;
-			let otherRolesConfig;
-			if (assign) {
-				rolesConfig = managedRoles.assignable;
-				otherRolesConfig = managedRoles.subscribable;
-			} else {
-				rolesConfig = managedRoles.subscribable;
-				otherRolesConfig = managedRoles.assignable;
-			}
-
-			let config = rolesConfig[roleName];
-			if (!config && assign && cmd === 'unsub')
-				config = otherRolesConfig[roleName];
-			if (!config) {
-				let menuOrder = parseInt(roleName);
-				if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= managedRoles.menuOrder.length) {
-					roleName = managedRoles.menuOrder[menuOrder - 1];
-					config = rolesConfig[roleName];
-					if (!config && assign && cmd === 'unsub')
-						config = otherRolesConfig[roleName];
-				}
-			}
-			if (!config) {
-				if (assign)
-					return message.reply(`Role ${roleName} is not assignable`);
-				else
-					return message.reply(`Role ${roleName} is not subscribable`);
-			}
-			return addRemoveRole(message, guild, cmd === 'sub', config.roleID, true, targetMember);
+			return subUnsubRole(message, member, guild, targetMember, assign, cmd === 'sub', roleName);
 		}
 		case 'list': {
 			if (args.length) {
 				if (perm < PERM_MOD) {
-					return message.reply("You don't have permissions to show role members.");
+					return ephemeralReply(message, "You don't have permissions to show role members.");
 				}
 				let roleName = args.join(' ');
 				return listMembers(message, member, guild, roleName);
 			} else {
-				listRoles(message, member, guild, targetMember, assign);
+				return listRoles(message, member, guild, targetMember, assign);
 			}
 		}
 	}
