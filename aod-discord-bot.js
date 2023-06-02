@@ -3730,6 +3730,37 @@ client.on("messageCreate", message => {
 	} //don't let user input crash the bot
 });
 
+function parseInteractionData(option) {
+	if (option.type == 1 || option.type == 2) { //subcommand/group
+		let cmd = [option.name];
+		let options = [];
+		option.options.forEach(o => {
+			let parsed = parseInteractionData(o);
+			cmd = cmd.concat(parsed.cmd);
+			options = options.concat(parsed.options);
+		});
+		return { cmd: cmd, options: options };
+	} else {
+		return { cmd: [], options: [`${option.name}: "${option.value}"`] };
+	}
+}
+
+function logInteraction(command, interaction) {
+	if (command.noLog === true)
+		return;
+	let cmd = [interaction.commandName];
+	let options = [];
+	interaction.options.data.forEach(o => {
+		let parsed = parseInteractionData(o);
+		cmd = cmd.concat(parsed.cmd);
+		options = options.concat(parsed.options);
+	});
+
+	cmd = '["' + cmd.join('", "') + '"]';
+	options = command.noOptionsLog === true ? '' : ' options:[' + options.join(', ') + ']';
+	console.log(`${getNameFromMessage(interaction)} executed: cmd:${cmd}${options}`);
+}
+
 //Slash Command Processing
 client.commands = new Collection();
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
@@ -3751,6 +3782,7 @@ client.on('interactionCreate', async interaction => {
 	interaction.isInteraction = true;
 	if (interaction.isChatInputCommand()) {
 		try {
+			logInteraction(command, interaction);
 			await command.execute(interaction, member, perm, permName);
 			if (!interaction.replied)
 				interaction.reply({ content: "Done", ephemeral: true });
