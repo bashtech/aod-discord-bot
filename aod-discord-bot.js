@@ -197,7 +197,7 @@ function getRolesByForumGroup(guild, doUpdate) {
 }
 
 //initialize and return the mysql database connection 
-var mysql = require('mysql');
+var mysql = require('mysql2');
 var mysqlConnection = null;
 
 function connectToDB() {
@@ -264,7 +264,7 @@ function ephemeralReply(message, msg) {
 		if (message.isInteraction) {
 			return sendInteractionReply(message, { content: msg, ephemeral: true });
 		} else {
-			return message.reply(message);
+			return message.reply(msg);
 		}
 	}
 	let promise = new Promise(function(resolve, reject) {
@@ -631,7 +631,7 @@ function sendMessageToMember(member, data) {
 }
 
 //send a reply as DM to the author of a message (if available) and return a promise
-function sendReplyToMessageAuthor(message, member, guild, data) {
+function sendReplyToMessageAuthor(message, member, data) {
 	if (message) {
 		if (message.isInteraction) {
 			if (typeof data === 'object')
@@ -664,7 +664,7 @@ async function sendListToMessageAuthor(message, member, guild, title, list, foot
 		if (embed.description.length + desc.length < 2048) {
 			embed.description = embed.description + desc;
 		} else {
-			await sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+			await sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 			embed = {
 				title: `Continued...`,
 				description: "",
@@ -674,7 +674,7 @@ async function sendListToMessageAuthor(message, member, guild, title, list, foot
 		}
 	}
 	if (embed.description.length)
-		return sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+		return sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 	let promise = new Promise(function(resolve, reject) {
 		resolve();
 	});
@@ -710,9 +710,9 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 					name: `${filter} ${commandArgsText}`,
 					value: commandHelpText
 				});
-			sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+			sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 		} else {
-			sendReplyToMessageAuthor(message, member, guild, "Unknown command.");
+			sendReplyToMessageAuthor(message, member, "Unknown command.");
 		}
 	} else {
 		let embed = {
@@ -744,7 +744,7 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 					if (embed.description.length + line.length < 2048) {
 						embed.description = embed.description + line;
 					} else {
-						sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+						sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 						embed = {
 							title: `Continued...`,
 							description: "",
@@ -756,14 +756,14 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 			}
 		}
 		if (embed.description.length)
-			sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+			sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 	}
 }
 
 //ping command processing
 function commandPing(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (perm >= PERM_STAFF)
-		sendReplyToMessageAuthor(message, member, guild, "Ping?")
+		sendReplyToMessageAuthor(message, member, "Ping?")
 		.then(m => {
 			let pingTime = sprintf('%.3f', client.ws.ping);
 			m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${pingTime}ms`)
@@ -771,7 +771,7 @@ function commandPing(message, member, cmd, args, guild, perm, permName, isDM) {
 		})
 		.catch(console.error);
 	else
-		sendReplyToMessageAuthor(message, member, guild, "Pong!")
+		sendReplyToMessageAuthor(message, member, "Pong!")
 		.catch(console.error);
 }
 
@@ -842,13 +842,13 @@ function commandReminder(message, member, cmd, args, guild, perm, permName, isDM
 				if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= myReminders.length) {
 					let reminder = myReminders[menuOrder - 1];
 					deleteTimer(reminder.index);
-					return sendReplyToMessageAuthor(message, member, guild, `Removed reminder: ${reminder.timer.data.message}`);
+					return sendReplyToMessageAuthor(message, member, `Removed reminder: ${reminder.timer.data.message}`);
 				}
 			}
-			return sendReplyToMessageAuthor(message, member, guild, `Reminder required.`);
+			return sendReplyToMessageAuthor(message, member, `Reminder required.`);
 		} else {
 			if (myReminders.length >= 5)
-				return sendReplyToMessageAuthor(message, member, guild, `Max reminders already set.`);
+				return sendReplyToMessageAuthor(message, member, `Max reminders already set.`);
 			let seconds = processTimeStr(args[0]);
 			if (seconds < 0)
 				return message.reply('Timeout required');
@@ -863,7 +863,7 @@ function commandReminder(message, member, cmd, args, guild, perm, permName, isDM
 				message: reminderMessage
 			};
 			addTimer(expireEpoch, 'reminder', timerData);
-			return sendReplyToMessageAuthor(message, member, guild, `Reminder set for ${secondsToString(seconds)}.`);
+			return sendReplyToMessageAuthor(message, member, `Reminder set for ${secondsToString(seconds)}.`);
 		}
 	} else {
 		let currEpoch = (new Date()).getTime();
@@ -875,7 +875,7 @@ function commandReminder(message, member, cmd, args, guild, perm, permName, isDM
 			let seconds = Math.round((reminder.timer.epoch - currEpoch) / 1000);
 			myReminderStr.push(`[${reminder.menuOrder}] ${secondsToString(seconds)}: ${reminder.timer.data.message}`);
 		}
-		return sendReplyToMessageAuthor(message, member, guild, {
+		return sendReplyToMessageAuthor(message, member, {
 			embeds: [{
 				title: 'Current Reminders',
 				description: myReminderStr.length ? myReminderStr.join("\n") : 'No Reminders Set'
@@ -884,20 +884,8 @@ function commandReminder(message, member, cmd, args, guild, perm, permName, isDM
 	}
 }
 
-//login command processing
 var loginErrorsByUserID = [];
-async function commandLogin(message, member, cmd, args, guild, perm, permName, isDM) {
-	if (!isDM) {
-		message.delete();
-		sendMessageToMember(member, `***WARNING:*** You have entered your credentials into a public channel. Your password may be compromised. Please change your password immediately.`);
-	}
-
-	if (args.length < 2)
-		return sendMessageToMember(member, "Username and Password must be provided.");
-
-	var username = args.shift();
-	var password = args.shift();
-
+async function userLogin(message, member, guild, username, password) {
 	//check for failed login attempts
 	if (loginErrorsByUserID[member.user.id] !== undefined) {
 		let currEpochMs = (new Date()).getTime();
@@ -907,7 +895,7 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 				loginError.epochMs = currEpochMs;
 				let minutes = Math.round(config.forumLoginErrorTimeoutMs / 60000);
 				console.log(`${member.user.tag} login failed for ${username} (too many attempts)`);
-				return sendMessageToMember(member, `You have too many failed login attempts. Please wait ${minutes} minutes and try again.`);
+				return sendReplyToMessageAuthor(message, member, `You have too many failed login attempts. Please wait ${minutes} minutes and try again.`);
 			}
 		} else {
 			//console.log(`deleting error for ${member.user.tag}`);
@@ -920,7 +908,7 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 		let password_md5 = db.escape(md5(password));
 		let esc_username = db.escape(username);
 		let query = `CALL check_user(${esc_username},${password_md5})`;
-		db.query(query, function(err, rows, fields) {
+		db.query(query, async function(err, rows, fields) {
 			var success = false;
 			if (!err) {
 				//rows[i].userid
@@ -937,13 +925,13 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 							`SELECT u.userid,u.username FROM ${config.mysql.prefix}userfield f ` +
 							`INNER JOIN ${config.mysql.prefix}user u ON f.userid=u.userid ` +
 							`WHERE (f.field19=${tag} OR f.field20=${discordId}) AND f.userid!=${data.userid}`;
-						db.query(query2, function(err, rows2, fields) {
+						db.query(query2, async function(err, rows2, fields) {
 							if (rows2 && rows2.length) {
 								let data2 = rows2[0];
 								const sgtsChannel = guild.channels.cache.find(c => { return c.name === 'aod-sergeants'; });
 								console.log(`Existing forum account found ${data2.username} ${data2.userid}`);
 								if (sgtsChannel) {
-									sgtsChannel.send(`${member.user.tag} logged in as ${data.username} but was already known as ${data2.username}`).catch(() => {});
+									await sgtsChannel.send(`${member.user.tag} logged in as ${data.username} but was already known as ${data2.username}`).catch(() => {});
 								}
 								query2 = `UPDATE ${config.mysql.prefix}userfield SET field19='',field20='' WHERE userid=${data2.userid}`;
 								db.query(query2);
@@ -951,18 +939,18 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 						});
 
 						query2 = `UPDATE ${config.mysql.prefix}userfield SET field19=${tag},field20=${discordId} WHERE userid=${data.userid}`;
-						db.query(query2, function(err, rows2, fields) {
+						db.query(query2, async function(err, rows2, fields) {
 							if (err) {
-								sendMessageToMember(member, `Successfully logged in as ${data.username} (${data.userid}), but there was an error updating your user infomation.`);
+								await sendReplyToMessageAuthor(message, member, `Successfully logged in as ${data.username} (${data.userid}), but there was an error updating your user infomation.`);
 								console.log(err);
 								return reject(err);
 							}
 							console.log(`${member.user.tag} logged in as ${data.username} (${data.userid})`);
 							let msg = `Successfully logged in as ${data.username} (${data.userid}).`;
-							if (isDM)
+							if (!message.isInteraction && !message.channel.isDMBased())
 								msg += ` We recommend you delete the \`${config.prefix}login\` message from your history to protect your identity.`;
-							sendMessageToMember(member, msg);
-							setRolesForMember(member, "Forum login");
+							await sendReplyToMessageAuthor(message, member, msg);
+							await setRolesForMember(member, "Forum login");
 							return resolve();
 						});
 					}
@@ -976,12 +964,29 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 				loginErrorsByUserID[member.user.id].count++;
 
 				console.log(`${member.user.tag} login failed for ${username} (count: ${loginErrorsByUserID[member.user.id].count})`);
-				sendMessageToMember(member, `Login failed for ${username}.`);
+				await sendReplyToMessageAuthor(message, member, `Login failed for ${username}.`);
+				return reject();
 			}
-			return resolve();
 		});
 	});
 	return promise;
+}
+global.userLogin = userLogin;
+
+//login command processing
+async function commandLogin(message, member, cmd, args, guild, perm, permName, isDM) {
+	if (!isDM) {
+		message.delete();
+		sendMessageToMember(member, `***WARNING:*** You have entered your credentials into a public channel. Your password may be compromised. Please change your password immediately.`);
+	}
+
+	if (args.length < 2)
+		return sendMessageToMember(member, "Username and Password must be provided.");
+
+	var username = args.shift();
+	var password = args.shift();
+
+	return userLogin(message, member, guild, username, password);
 }
 
 //aod command processing
@@ -1908,7 +1913,7 @@ async function commandSubRoles(message, member, cmd, args, guild, perm, permName
 			assignRoles.sort();
 			if (subRoles.length || assignRoles.length)
 				saveRolesConfigFile();
-			return sendReplyToMessageAuthor(message, member, guild, {
+			return sendReplyToMessageAuthor(message, member, {
 				embeds: [{
 					title: "Roles Pruned",
 					fields: [
@@ -2104,7 +2109,7 @@ async function commandDependentRoles(message, member, cmd, args, guild, perm, pe
 					}
 				}
 			}
-			return sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+			return sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 		}
 		case 'prune': {
 			//FIXME
@@ -2762,7 +2767,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 							});
 					}
 					if (message && sendMessage) {
-						sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+						sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 					}
 				}
 			}
@@ -2779,7 +2784,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 	let hrEndS = sprintf('%.3f', (hrEnd[0] + hrEnd[1] / 1000000000));
 	let msg = `Forum Sync Processing Time: ${hrEndS}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account, ${disconnected} members who have left the server, ${duplicates} duplicate tags`;
 	if (message)
-		sendReplyToMessageAuthor(message, member, guild, msg);
+		sendReplyToMessageAuthor(message, member, msg);
 	if (message || adds || removes || renames)
 		console.log(msg);
 	date = new Date();
@@ -2884,13 +2889,13 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 							value: groupMap.forumGroups.map(groupID => `${forumGroups[groupID]} (${groupID})`).join(', ')
 						});
 						if (fields.length >= 25) {
-							sendReplyToMessageAuthor(message, member, guild, { embeds: [{ title: 'Configured Group Maps', fields: fields }] });
+							sendReplyToMessageAuthor(message, member, { embeds: [{ title: 'Configured Group Maps', fields: fields }] });
 							fields = [];
 						}
 					});
 
 					if (fields.length > 0) {
-						sendReplyToMessageAuthor(message, member, guild, { embeds: [{ title: 'Configured Group Maps', fields: fields }] });
+						sendReplyToMessageAuthor(message, member, { embeds: [{ title: 'Configured Group Maps', fields: fields }] });
 					}
 				})
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
@@ -2904,7 +2909,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 					value: guild.roles.cache.filter(r => r.name.endsWith(config.discordOfficerSuffix)).map(r => r.name).sort().join("\n")
 				}]
 			};
-			sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+			sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 			break;
 		}
 		case 'showforumgroups': {
@@ -2921,7 +2926,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 								value: chunk.join("\n")
 							}]
 						};
-						sendReplyToMessageAuthor(message, member, guild, { embeds: [embed] });
+						sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 					}
 				})
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
@@ -2973,7 +2978,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 				getRolesByForumGroup(guild, true);
 			}
 			reply += "Prune complete.";
-			sendReplyToMessageAuthor(message, member, guild, reply);
+			sendReplyToMessageAuthor(message, member, reply);
 			break;
 		}
 		default: {
@@ -3756,7 +3761,7 @@ function logInteraction(command, interaction) {
 		options = options.concat(parsed.options);
 	});
 
-	cmd = '["' + cmd.join('", "') + '"]';
+	cmd = '["' + cmd.join('" > "') + '"]';
 	options = command.noOptionsLog === true ? '' : ' options:[' + options.join(', ') + ']';
 	console.log(`${getNameFromMessage(interaction)} executed: cmd:${cmd}${options}`);
 }
@@ -3867,50 +3872,57 @@ function getForumGroupsForMember(member) {
 }
 
 function setRolesForMember(member, reason) {
-	getForumGroupsForMember(member)
-		.then(async function(data) {
-			if (data === undefined || data.groups.length === 0) {
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
-				return;
-			}
+	var promise = new Promise(function(resolve, reject) {
+		getForumGroupsForMember(member)
+			.then(async function(data) {
+				if (data === undefined || data.groups.length === 0) {
+					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
+					resolve();
+					return;
+				}
 
-			let rolesByGroup = getRolesByForumGroup(member.guild);
-			let rolesToAdd = [],
-				existingRoles = [];
-			for (var i in data.groups) {
-				var group = data.groups[i];
-				if (rolesByGroup[group] !== undefined) {
-					for (const roleName of Object.keys(rolesByGroup[group])) {
-						let role = rolesByGroup[group][roleName];
-						if (role) {
-							if (!member.roles.cache.get(role.id))
-								rolesToAdd.push(role);
-							else
-								existingRoles.push(role);
+				let rolesByGroup = getRolesByForumGroup(member.guild);
+				let rolesToAdd = [],
+					existingRoles = [];
+				for (var i in data.groups) {
+					var group = data.groups[i];
+					if (rolesByGroup[group] !== undefined) {
+						for (const roleName of Object.keys(rolesByGroup[group])) {
+							let role = rolesByGroup[group][roleName];
+							if (role) {
+								if (!member.roles.cache.get(role.id))
+									rolesToAdd.push(role);
+								else
+									existingRoles.push(role);
+							}
 						}
 					}
 				}
-			}
-			if (rolesToAdd.length) {
-				try {
-					await member.roles.add(rolesToAdd, reason);
-				} catch (error) {
+				if (rolesToAdd.length) {
+					try {
+						await member.roles.add(rolesToAdd, reason);
+					} catch (error) {
+						reject();
+						return;
+					}
+				} else if (!existingRoles.length) {
+					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` in a DM the to associate your Discord user to our forums (https://www.clanaod.net). \`${config.prefix}help login\` can provide more details.`).catch(() => {});
+					resolve();
 					return;
 				}
-			} else if (!existingRoles.length) {
-				member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` in a DM the to associate your Discord user to our forums (https://www.clanaod.net). \`${config.prefix}help login\` can provide more details.`).catch(() => {});
-				return;
-			}
 
-			if (member.displayName !== data.name) {
-				try {
-					await member.setNickname(data.name, reason);
-				} catch (error) {}
-			}
-			let roles = existingRoles.concat(rolesToAdd);
-			member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use \`!help\` to see available commands.`).catch(() => {});
-		})
-		.catch(error => { notifyRequestError(null, member, guild, error, false); });
+				if (member.displayName !== data.name) {
+					try {
+						await member.setNickname(data.name, reason);
+					} catch (error) {}
+				}
+				let roles = existingRoles.concat(rolesToAdd);
+				await member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use \`!help\` to see available commands.`).catch(() => {});
+				resolve();
+			})
+			.catch(error => { notifyRequestError(null, member, guild, error, false); reject(); });
+	});
+	return promise;
 }
 
 //guildMemberAdd event handler -- triggered when a user joins the guild
