@@ -2347,9 +2347,9 @@ function getForumUsersForGroups(groups, allowPending) {
 				let discordid = row.field20;
 				let discordtag = convertForumDiscordName(row.field19);
 				discordTagRegEx.lastIndex = 0;
-				if (!discordTagRegEx.exec(discordtag)) {
+				/*if (!discordTagRegEx.exec(discordtag)) {
 					discordtag += '#0';
-				}
+				}*/
 
 				let index = discordtag;
 				let indexIsId = false;
@@ -2750,7 +2750,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 						fs.appendFileSync(config.syncLogFile, leftServer.join('\n\t\t') + "\n", 'utf8');
 						if (message)
 							embed.fields.push({
-								name: `Members to add with no discord user (${leftServer.length})`,
+								name: `Members who have left server (${leftServer.length})`,
 								value: truncateStr(leftServer.join(', '), 1024)
 							});
 					}
