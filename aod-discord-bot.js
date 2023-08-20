@@ -349,7 +349,7 @@ function getStringForPermission(perm) {
 
 //map roles to permissions based on config
 function getPermissionLevelForMember(member) {
-	let perm = PERM_NONE;
+	let perm = PERM_GUEST;
 	const r = member.roles.highest;
 	if (member.permissions.bitfield & BigInt(0x00000008))
 		perm = PERM_OWNER;
@@ -416,6 +416,10 @@ function getPermissionsForAdmin(guild, defaultAllow, defaultDeny, allow, deny) {
 		if (role)
 			permissions = addRoleToPermissions(guild, role, permissions, allow, deny);
 	});
+	
+	const restrictedBotRole = guild.roles.cache.find(r => { return r.name == "Restricted Bot"; });
+	permissions = addRoleToPermissions(guild, restrictedBotRole, permissions, [], [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
+	
 	return permissions;
 }
 //build a list of permissions for staff+
@@ -448,8 +452,9 @@ function getPermissionsForMembers(guild, defaultAllow, defaultDeny, allow, deny)
 //build a list of permissions for guest+
 function getPermissionsForEveryone(guild, defaultAllow, defaultDeny, allow, deny) {
 	let permissions = getPermissionsForMembers(guild, defaultAllow, defaultDeny, allow, deny);
-	const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
-	return addRoleToPermissions(guild, guestRole, permissions, allow, deny);
+	//const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
+	//return addRoleToPermissions(guild, guestRole, permissions, allow, deny);
+	return permissions;
 }
 
 /*************************************
@@ -1022,9 +1027,9 @@ function getChannelPermissions(guild, message, perm, level, type, divisionOffice
 	//get permissions based on type
 	var defaultDeny;
 	if (type == 'ptt')
-		defaultDeny = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.UseVAD];
+		defaultDeny = [PermissionsBitField.Flags.UseVAD];
 	else
-		defaultDeny = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect];
+		defaultDeny = [];
 
 	var permissions;
 	switch (level) {
@@ -1039,6 +1044,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionOffice
 				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
 			break;
 		case 'mod':
+			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessagesD);
 			if (perm < PERM_MOD) {
 				message.reply("You don't have permissions to add this channel type");
 				return null;
@@ -1046,6 +1052,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionOffice
 			permissions = getPermissionsForModerators(guild, [], defaultDeny);
 			break;
 		case 'officer':
+			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
 			if (perm < PERM_MOD) {
 				message.reply("You don't have permissions to add this channel type");
 				return null;
@@ -1058,6 +1065,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionOffice
 			permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
 			break;
 		case 'staff':
+			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
 			if (perm < PERM_STAFF) {
 				message.reply("You don't have permissions to add this channel type");
 				return null;
@@ -1065,6 +1073,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionOffice
 			permissions = getPermissionsForStaff(guild, [], defaultDeny);
 			break;
 		case 'admin':
+			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
 			if (perm < PERM_ADMIN) {
 				message.reply("You don't have permissions to add this channel type");
 				return null;
@@ -1072,6 +1081,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionOffice
 			permissions = getPermissionsForAdmin(guild, [], defaultDeny);
 			break;
 		case 'feed':
+			defaultDeny.push(PermissionsBitField.Flags.SendMessages);
 			if (type !== 'text') {
 				message.reply("Feed may only be used for text channels");
 				return null;
@@ -1098,6 +1108,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionOffice
 				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
 			break;
 		case 'role':
+			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
 			if (perm < PERM_DIVISION_COMMANDER) {
 				message.reply("You don't have permissions to add this channel type");
 				return null;
@@ -1109,6 +1120,7 @@ function getChannelPermissions(guild, message, perm, level, type, divisionOffice
 				permissions = addRoleToPermissions(guild, additionalRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
 			break;
 		default: //member
+			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
 			permissions = getPermissionsForMembers(guild, [], defaultDeny);
 			//add role permissions if necessary
 			if (divisionOfficerRole)
@@ -2304,6 +2316,8 @@ function convertForumDiscordName(discordName) {
 }
 
 //get forum users from forum groups
+var discordTagRegEx = /^[^\s#@][^#@]{0,30}[^\s#@](#(0|[0-9]{4}))?$/g;
+
 function getForumUsersForGroups(groups, allowPending) {
 	var promise = new Promise(function(resolve, reject) {
 		let usersByIDOrDiscriminator = {};
@@ -2332,6 +2346,11 @@ function getForumUsersForGroups(groups, allowPending) {
 			.on('result', function(row) {
 				let discordid = row.field20;
 				let discordtag = convertForumDiscordName(row.field19);
+				discordTagRegEx.lastIndex = 0;
+				if (!discordTagRegEx.exec(discordtag)) {
+					discordtag += '#0';
+				}
+
 				let index = discordtag;
 				let indexIsId = false;
 				if (discordid && discordid != '') {
@@ -2397,7 +2416,7 @@ function setDiscordIDForForumUser(forumUser, guildMember) {
 		return;
 	console.log(`Updating Discord ID for ${forumUser.name} (${forumUser.id}) Discord Tag ${guildMember.user.tag} from '${forumUser.discordid}' to '${guildMember.user.id}'`);
 	let db = connectToDB();
-	let tag = db.escape(convertDiscordTag(guildMember.user.tag));
+	//let tag = db.escape(convertDiscordTag(guildMember.user.tag));
 	let query = `UPDATE ${config.mysql.prefix}userfield SET field20="${guildMember.user.id}" WHERE userid=${forumUser.id}`;
 	db.query(query, function(err, rows, fields) {});
 }
@@ -2426,7 +2445,6 @@ function matchGuildRoleName(guildRole) {
 
 
 function matchGuildMemberTag(guildMember) {
-
 	return guildMember.user.tag == this;
 }
 
@@ -3438,8 +3456,8 @@ commands = {
 	voice: {
 		minPermission: PERM_RECRUITER,
 		args: ["<category>", "[<feed|guest|member|role|officer|mod|staff|admin>]", "[<roleName>]", "<name>"],
-		helpText: ["Creates a temporary voice channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires staff permissions).",
-			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+		helpText: ["Creates a temporary voice channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires division commander permissions).",
+			"*guest*: channel is visible to everyone (requires Moderator permissions)",
 			"*member*: channel is visible to Member+ (requires Officer permissions)",
 			"*role*: channel is visible to a specific role (requires Divivion Commander permissions)",
 			"*officer*: channel is visible to Officers+ (requires Moderator permissions)",
@@ -3451,8 +3469,8 @@ commands = {
 	ptt: {
 		minPermission: PERM_RECRUITER,
 		args: ["<category>", "[<feed|guest|member|role|officer|mod|staff|admin>]", "[<roleName>]", "<name>"],
-		helpText: ["Creates a temporary push-to-talk channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires staff permissions).",
-			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+		helpText: ["Creates a temporary push-to-talk channel visible to Members+ by default.\nIf <category> is provided, the channel will be permanent in that cateogry (requires division commander permissions).",
+			"*guest*: channel is visible to everyone (requires Moderator permissions)",
 			"*member*: channel is visible to Member+ (requires Officer permissions)",
 			"*role*: channel is visible to a specific role (requires Divivion Commander permissions)",
 			"*officer*: channel is visible to Officers+ (requires Moderator permissions)",
@@ -3465,8 +3483,8 @@ commands = {
 		minPermission: PERM_DIVISION_COMMANDER,
 		args: ["<category>", "[<feed|guest|member|role|officer|mod|staff|admin>]", "[<roleName>]", "<name>"],
 		helpText: ["Creates a text channel visible to Members+ by default.",
-			"*feed*: channel is visible to Guest+, but only Officer+ may send messages (requires Divivion Commander permissions)",
-			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+			"*feed*: channel is visible to everyone, but only Officer+ may send messages (requires Divivion Commander permissions)",
+			"*guest*: channel is visible to everyone (requires Moderator permissions)",
 			"*member*: channel is visible to Member+ (requires Officer permissions)",
 			"*role*: channel is visible to a specific role (requires Divivion Commander permissions)",
 			"*officer*: channel is visible to Officers+ (requires Moderator permissions)",
@@ -3479,7 +3497,7 @@ commands = {
 		minPermission: PERM_STAFF,
 		args: ["[<feed|guest|member|role|officer|mod|staff|admin>]", "[<roleName>]", "<name>"],
 		helpText: ["Updates a channels permissions.",
-			"*guest*: channel is visible to Guest+ (requires Moderator permissions)",
+			"*guest*: channel is visible to everyone (requires Moderator permissions)",
 			"*member*: channel is visible to Member+ (requires Officer permissions)",
 			"*role*: channel is visible to a specific role (requires Divivion Commander permissions)",
 			"*officer*: channel is visible to Officers+ (requires Moderator permissions)",
@@ -3920,7 +3938,8 @@ function setRolesForMember(member, reason) {
 				await member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use \`!help\` to see available commands.`).catch(() => {});
 				resolve();
 			})
-			.catch(error => { notifyRequestError(null, member, guild, error, false); reject(); });
+			.catch(error => { notifyRequestError(null, member, guild, error, false);
+				reject(); });
 	});
 	return promise;
 }
