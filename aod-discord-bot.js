@@ -26,6 +26,7 @@ const sprintf = require('sprintf-js').sprintf;
 
 //include config
 var config = require('./aod-discord-bot.config.json');
+global.config = config;
 
 //inclue fs
 const fs = require('node:fs');
@@ -233,6 +234,7 @@ function getNameFromMessage(message) {
 	}
 	return "<unknown>";
 }
+global.getNameFromMessage = getNameFromMessage;
 
 //get the guild member object from the message
 function getMemberFromMessageOrArgs(guild, message, args) {
@@ -252,10 +254,13 @@ function getMemberFromMessageOrArgs(guild, message, args) {
 }
 
 function sendInteractionReply(interaction, data) {
-	if (!interaction.replied)
-		return interaction.reply(data);
-	else
+	if	(interaction.replied)
 		return interaction.followUp(data);
+	else if (interaction.deferred)
+		return interaction.editReply(data);
+	else
+		return interaction.reply(data);
+		
 }
 global.sendInteractionReply = sendInteractionReply;
 
@@ -1023,116 +1028,170 @@ function commandPurge(message, member, cmd, args, guild, perm, permName, isDM) {
 
 var channelPermissionLevels = ['feed', 'guest', 'member', 'role', 'officer', 'mod', 'staff', 'admin'];
 
-function getChannelPermissions(guild, message, perm, level, type, divisionOfficerRole, additionalRole) {
-	//get permissions based on type
-	var defaultDeny;
-	if (type == 'ptt')
-		defaultDeny = [PermissionsBitField.Flags.UseVAD];
-	else
-		defaultDeny = [];
+async function getChannelPermissions(guild, message, perm, level, type, divisionOfficerRole, additionalRole) {
+	let promise = new Promise(async function(resolve, reject) {
+		//get permissions based on type
+		var defaultDeny;
+		if (type == 'ptt')
+			defaultDeny = [PermissionsBitField.Flags.UseVAD];
+		else
+			defaultDeny = [];
 
-	var permissions;
-	switch (level) {
-		case 'guest':
-			if (perm < PERM_MOD) {
-				message.reply("You don't have permissions to add this channel type");
-				return null;
-			}
-			permissions = getPermissionsForEveryone(guild, [], defaultDeny);
-			//add role permissions if necessary
-			if (divisionOfficerRole)
-				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
-			break;
-		case 'mod':
-			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessagesD);
-			if (perm < PERM_MOD) {
-				message.reply("You don't have permissions to add this channel type");
-				return null;
-			}
-			permissions = getPermissionsForModerators(guild, [], defaultDeny);
-			break;
-		case 'officer':
-			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
-			if (perm < PERM_MOD) {
-				message.reply("You don't have permissions to add this channel type");
-				return null;
-			}
-			if (!divisionOfficerRole) {
-				message.reply("No officer role could be determined");
-				return null;
-			}
-			permissions = getPermissionsForModerators(guild, [], defaultDeny);
-			permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
-			break;
-		case 'staff':
-			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
-			if (perm < PERM_STAFF) {
-				message.reply("You don't have permissions to add this channel type");
-				return null;
-			}
-			permissions = getPermissionsForStaff(guild, [], defaultDeny);
-			break;
-		case 'admin':
-			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
-			if (perm < PERM_ADMIN) {
-				message.reply("You don't have permissions to add this channel type");
-				return null;
-			}
-			permissions = getPermissionsForAdmin(guild, [], defaultDeny);
-			break;
-		case 'feed':
-			defaultDeny.push(PermissionsBitField.Flags.SendMessages);
-			if (type !== 'text') {
-				message.reply("Feed may only be used for text channels");
-				return null;
-			}
-			if (perm < PERM_DIVISION_COMMANDER) {
-				message.reply("You don't have permissions to add this channel type");
-				return null;
-			}
-			//get permissions for staff -- add manage webhooks
-			permissions = getPermissionsForStaff(guild, [], defaultDeny, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageWebhooks]);
-			//add moderators
-			config.modRoles.forEach(n => {
-				const role = guild.roles.cache.find(r => { return r.name == n; });
-				if (role)
-					permissions = addRoleToPermissions(guild, role, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages]);
-			});
-			//add member/guest as read only
-			const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
-			permissions = addRoleToPermissions(guild, memberRole, permissions, [PermissionsBitField.Flags.ViewChannel], [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.SendTTSMessages, PermissionsBitField.Flags.Speak]);
-			const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
-			permissions = addRoleToPermissions(guild, guestRole, permissions, [PermissionsBitField.Flags.ViewChannel], [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.SendTTSMessages, PermissionsBitField.Flags.Speak]);
-			//add role permissions if necessary
-			if (divisionOfficerRole)
-				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
-			break;
-		case 'role':
-			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
-			if (perm < PERM_DIVISION_COMMANDER) {
-				message.reply("You don't have permissions to add this channel type");
-				return null;
-			}
-			permissions = getPermissionsForModerators(guild, [], defaultDeny);
-			if (divisionOfficerRole)
+		var permissions;
+		switch (level) {
+			case 'guest':
+				if (perm < PERM_MOD) {
+					await ephemeralReply(message, "You don't have permissions to add this channel type");
+					resolve(null);
+					return;
+				}
+				permissions = getPermissionsForEveryone(guild, [], defaultDeny);
+				//add role permissions if necessary
+				if (divisionOfficerRole)
+					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+				break;
+			case 'mod':
+				defaultDeny.push(PermissionsBitField.Flags.ViewChannel);
+				if (perm < PERM_MOD) {
+					await ephemeralReply(message, "You don't have permissions to add this channel type");
+					resolve(null);
+					return;
+				}
+				permissions = getPermissionsForModerators(guild, [], defaultDeny);
+				break;
+			case 'officer':
+				defaultDeny.push(PermissionsBitField.Flags.ViewChannel);
+				if (perm < PERM_MOD) {
+					await ephemeralReply(message, "You don't have permissions to add this channel type");
+					resolve(null);
+					return;
+				}
+				if (!divisionOfficerRole) {
+					await ephemeralReply(message, "No officer role could be determined");
+					resolve(null);
+					return;
+				}
+				permissions = getPermissionsForModerators(guild, [], defaultDeny);
 				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
-			if (additionalRole)
-				permissions = addRoleToPermissions(guild, additionalRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
-			break;
-		default: //member
-			defaultDeny.push(PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages);
-			permissions = getPermissionsForMembers(guild, [], defaultDeny);
-			//add role permissions if necessary
-			if (divisionOfficerRole)
-				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
-			break;
-	}
-	return permissions;
+				break;
+			case 'staff':
+				defaultDeny.push(PermissionsBitField.Flags.ViewChannel);
+				if (perm < PERM_STAFF) {
+					await ephemeralReply(message, "You don't have permissions to add this channel type");
+					resolve(null);
+					return;
+				}
+				permissions = getPermissionsForStaff(guild, [], defaultDeny);
+				break;
+			case 'admin':
+				defaultDeny.push(PermissionsBitField.Flags.ViewChannel);
+				if (perm < PERM_ADMIN) {
+					await ephemeralReply(message, "You don't have permissions to add this channel type");
+					resolve(null);
+					return;
+				}
+				permissions = getPermissionsForAdmin(guild, [], defaultDeny);
+				break;
+			case 'feed':
+				defaultDeny.push(PermissionsBitField.Flags.SendMessages);
+				if (type !== 'text') {
+					await ephemeralReply(message, "Feed may only be used for text channels");
+					resolve(null);
+					return;
+				}
+				if (perm < PERM_DIVISION_COMMANDER) {
+					await ephemeralReply(message, "You don't have permissions to add this channel type");
+					resolve(null);
+					return;
+				}
+				//get permissions for staff -- add manage webhooks
+				permissions = getPermissionsForStaff(guild, [], defaultDeny, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageWebhooks]);
+				//add moderators
+				config.modRoles.forEach(n => {
+					const role = guild.roles.cache.find(r => { return r.name == n; });
+					if (role)
+						permissions = addRoleToPermissions(guild, role, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages]);
+				});
+				//add member/guest as read only
+				const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
+				permissions = addRoleToPermissions(guild, memberRole, permissions, [PermissionsBitField.Flags.ViewChannel], [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.SendTTSMessages, PermissionsBitField.Flags.Speak]);
+				const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
+				permissions = addRoleToPermissions(guild, guestRole, permissions, [PermissionsBitField.Flags.ViewChannel], [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.SendTTSMessages, PermissionsBitField.Flags.Speak]);
+				//add role permissions if necessary
+				if (divisionOfficerRole)
+					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
+				break;
+			case 'role':
+				defaultDeny.push(PermissionsBitField.Flags.ViewChannel);
+				if (perm < PERM_DIVISION_COMMANDER) {
+					await ephemeralReply(message, "You don't have permissions to add this channel type");
+					resolve(null);
+					return;
+				}
+				permissions = getPermissionsForModerators(guild, [], defaultDeny);
+				if (divisionOfficerRole)
+					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
+				if (additionalRole)
+					permissions = addRoleToPermissions(guild, additionalRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
+				break;
+			default: //member
+				defaultDeny.push(PermissionsBitField.Flags.ViewChannel);
+				permissions = getPermissionsForMembers(guild, [], defaultDeny);
+				//add role permissions if necessary
+				if (divisionOfficerRole)
+					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
+				break;
+		}
+		resolve(permissions);
+	});
+	return promise;
 }
+
+async function addChannel(guild, message, member, perm, name, type, level, category, officerRole, role) {
+	//get channel permissions
+	let permissions = await getChannelPermissions(guild, message, perm, level, type, officerRole, role);
+	if (!permissions)
+		return ephemeralReply(message, 'Failed to get permissions for channel');
+
+	let channelType = ChannelType.GuildText;
+	if (type === 'voice') {
+		channelType = ChannelType.GuildVoice;
+	} else if (type === 'ptt') {
+		channelName += '-ptt';
+		type = 'voice';
+		channelType = ChannelType.GuildVoice;
+	}
+
+	//create channel
+	let promise = new Promise(function(resolve, reject)	{
+		guild.channels.create({ type: channelType, name: name, parent: category, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
+			.then(async function(c) {
+				if (type === 'voice') {
+					//make sure someone gets into the channel
+					if (category.name == config.tempChannelCategory)
+						setTimeout(function() {
+							if (c.members.size === 0)
+								c.delete()
+								.catch(e => {}); //probably removed already
+						}, 30000);
+					//try to move the person requesting the channel to it
+					if (member)
+						member.voice.setChannel(c).catch(error => {});
+				}
+				await ephemeralReply(message, `Added channel ${c.toString()} in ${category.name}`);
+				resolve();
+			})
+			.then(async function(error) {
+				notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+				reject();
+			});
+	});
+	return promise;
+}
+global.addChannel = addChannel;
 
 //voice command processing
 function commandAddChannel(message, member, cmd, args, guild, perm, permName, isDM) {
-	let temp = true;
 	let channelCategory;
 	let divisionOfficerRole;
 
@@ -1153,7 +1212,6 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 		if (perm < PERM_ADMIN && channelCategory.children.size >= config.maxChannelsPerCategory)
 			return message.reply("Category is full");
 		args.shift();
-		temp = false;
 	} else {
 		if (cmd === 'text')
 			return message.reply("A category must be set for text channels");
@@ -1168,7 +1226,6 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 
 	//process level argument if present
 	let level = 'member';
-	let type = ChannelType.GuildText;
 	if (channelPermissionLevels.includes(args[0])) {
 		level = args[0];
 		args.shift();
@@ -1206,41 +1263,40 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 	if (existingChannel)
 		return message.reply("Channel already exists");
 
+	return addChannel(guild, message, member, perm, channelName, cmd, level, channelCategory, divisionOfficerRole, levelRole);
+}
+
+async function setChannelPerms(guild, message, member, perm, channel, level, category, officerRole, role) {
 	//get channel permissions
-	let permissions = getChannelPermissions(guild, message, perm, level, cmd, divisionOfficerRole, levelRole);
+	let type = channel.isVoiceBased() ? 'voice' : 'text';
+	if (channel.isVoiceBased()) {
+		let everyonePerms = await channel.permissionsFor(guild.roles.everyone);
+		if (everyonePerms && !everyonePerms.has(PermissionsBitField.Flags.UseVAD))
+			type = 'ptt';
+	}
+	var permissions = await getChannelPermissions(guild, message, perm, level, type, officerRole, role);
 	if (!permissions)
 		return;
 
-	if (cmd === 'voice') {
-		type = ChannelType.GuildVoice;
-	} else if (cmd === 'ptt') {
-		channelName += '-ptt';
-		cmd = 'voice';
-		type = ChannelType.GuildVoice;
-	}
-
-	//create channel
-	return guild.channels.create({ type: type, name: channelName, parent: channelCategory, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
-		.then(c => {
-			if (cmd === 'voice') {
-				//make sure someone gets into the channel
-				if (temp)
-					setTimeout(function() {
-						if (c.members.size === 0)
-							c.delete()
-							.catch(e => {}); //probably removed already
-					}, 30000);
-				//try to move the person requesting the channel to it
-				if (member)
-					member.voice.setChannel(c).catch(error => {});
-			}
-			return message.reply(`Added channel ${c.toString()} in ${channelCategory.name}`);
-		})
-		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+	//replace channel permission overrides
+	let promise = new Promise(function(resolve, reject)	{
+		channel.permissionOverwrites.set(permissions, `Requested by ${getNameFromMessage(message)}`)
+			.then(async function() {
+				await ephemeralReply(message, `Channel ${channel} permissions updated`);
+				resolve();
+			})
+			.catch(async function(error) {
+				await ephemeralReply(message, `Failed to update channel ${channel} permissions`);
+				notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+				reject();
+			});
+	});
+	return promise;
 }
+global.setChannelPerms = setChannelPerms;
 
 //set channel perms command processing
-function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
 
@@ -1289,18 +1345,7 @@ function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM
 		divisionOfficerRole = guild.roles.cache.find(r => { return r.name === divisionOfficerRoleName; });
 	}
 
-	//get channel permissions //FIXME: support PTT?
-	var permissions = getChannelPermissions(guild, message, perm, level, existingChannel.type, divisionOfficerRole, levelRole);
-	if (!permissions)
-		return;
-
-	//replace channel permission overrides
-	existingChannel.permissionOverwrites.set(permissions, `Requested by ${getNameFromMessage(message)}`)
-		.then(() => { message.reply(`Channel ${channelName} permissions updated`); })
-		.catch(error => {
-			message.reply(`Failed to update channel ${channelName} permissions`);
-			notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-		});
+	return setChannelPerms(guild, message, member, perm, existingChannel, level, divisionCategory, divisionOfficerRole, levelRole);
 }
 
 //remove channel command processing
@@ -3792,6 +3837,11 @@ for (const file of commandFiles) {
 	client.commands.set(command.data.name, command);
 }
 client.on('interactionCreate', async interaction => {
+	if (interaction.isButton()) {
+		//buttons handled through collectors
+		return;
+	}
+	
 	const command = client.commands.get(interaction.commandName);
 	if (!command) {
 		console.error(`${interaction.commandName} not found`);
@@ -3808,7 +3858,7 @@ client.on('interactionCreate', async interaction => {
 			logInteraction(command, interaction);
 			await command.execute(interaction, member, perm, permName);
 			if (!interaction.replied)
-				interaction.reply({ content: "Done", ephemeral: true });
+				sendInteractionReply(interaction, { content: "Done", ephemeral: true });
 		} catch (error) {
 			console.error(error);
 			try {

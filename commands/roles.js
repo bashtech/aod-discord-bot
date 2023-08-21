@@ -45,10 +45,8 @@ module.exports = {
 		switch (subCommand) {
 			case 'sub':
 			case 'unsub': {
-				if (focusedOption.name === 'role') {
-					await interaction.respond(sortAndLimitOptions(global.getUserRoles(false, member, subCommand !== 'sub'), 25, search));
-					return;
-				}
+				if (focusedOption.name === 'role')
+					return interaction.respond(sortAndLimitOptions(global.getUserRoles(false, member, subCommand !== 'sub'), 25, search));
 				break;
 			}
 			case 'assign':
@@ -56,10 +54,8 @@ module.exports = {
 				let targetMember = interaction.guild.members.resolve(interaction.options.get('user')?.value);
 				if (!targetMember)
 					return;
-				if (focusedOption.name === 'role') {
-					await interaction.respond(sortAndLimitOptions(global.getUserRoles(true, targetMember, subCommand !== 'assign'), 25, search));
-					return;
-				}
+				if (focusedOption.name === 'role')
+					return interaction.respond(sortAndLimitOptions(global.getUserRoles(true, targetMember, subCommand !== 'assign'), 25, search));
 				break;
 			}
 		}
@@ -72,39 +68,29 @@ module.exports = {
 				return;
 			}
 			case 'list_user': {
-				if (perm < global.PERM_MOD) {
-					await interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
-					return;
-				}
+				if (perm < global.PERM_MOD)
+					return interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
 				let targetMember = interaction.options.getMember('user');
-				await global.listRoles(interaction, member, interaction.guild, targetMember, true);
-				return;
+				return global.listRoles(interaction, member, interaction.guild, targetMember, true);
 			}
 			case 'members': {
-				if (perm < global.PERM_MOD) {
-					await interaction.reply({ content: "You do not have permissions to show role members", ephemeral: true });
-					return;
-				}
+				if (perm < global.PERM_MOD)
+					return interaction.reply({ content: "You do not have permissions to show role members", ephemeral: true });
 				let role = interaction.options.getRole('role');
-				await global.listMembers(interaction, member, interaction.guild, role.name);
-				return;
+				return global.listMembers(interaction, member, interaction.guild, role.name);
 			}
 			case 'sub':
 			case 'unsub': {
 				let roleName = interaction.options.getString('role');
-				await global.subUnsubRole(interaction, member, interaction.guild, member, false, subCommand === 'sub', roleName);
-				return;
+				return global.subUnsubRole(interaction, member, interaction.guild, member, false, subCommand === 'sub', roleName);
 			}
 			case 'assign':
 			case 'unassign': {
-				if (perm < global.PERM_MOD) {
-					await interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
-					return;
-				}
+				if (perm < global.PERM_MOD)
+					return interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
 				let targetMember = interaction.options.getMember('user');
 				let roleName = interaction.options.getString('role');
-				await global.subUnsubRole(interaction, targetMember, interaction.guild, targetMember, true, subCommand === 'assign', roleName);
-				return;
+				return global.subUnsubRole(interaction, targetMember, interaction.guild, targetMember, true, subCommand === 'assign', roleName);
 			}
 		}
 	}
