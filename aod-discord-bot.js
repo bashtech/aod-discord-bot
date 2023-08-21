@@ -254,13 +254,13 @@ function getMemberFromMessageOrArgs(guild, message, args) {
 }
 
 function sendInteractionReply(interaction, data) {
-	if	(interaction.replied)
+	if (interaction.replied)
 		return interaction.followUp(data);
 	else if (interaction.deferred)
 		return interaction.editReply(data);
 	else
 		return interaction.reply(data);
-		
+
 }
 global.sendInteractionReply = sendInteractionReply;
 
@@ -421,10 +421,10 @@ function getPermissionsForAdmin(guild, defaultAllow, defaultDeny, allow, deny) {
 		if (role)
 			permissions = addRoleToPermissions(guild, role, permissions, allow, deny);
 	});
-	
+
 	const restrictedBotRole = guild.roles.cache.find(r => { return r.name == "Restricted Bot"; });
 	permissions = addRoleToPermissions(guild, restrictedBotRole, permissions, [], [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
-	
+
 	return permissions;
 }
 //build a list of permissions for staff+
@@ -1163,7 +1163,7 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 	}
 
 	//create channel
-	let promise = new Promise(function(resolve, reject)	{
+	let promise = new Promise(function(resolve, reject) {
 		guild.channels.create({ type: channelType, name: name, parent: category, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
 			.then(async function(c) {
 				if (type === 'voice') {
@@ -1279,7 +1279,7 @@ async function setChannelPerms(guild, message, member, perm, channel, level, cat
 		return;
 
 	//replace channel permission overrides
-	let promise = new Promise(function(resolve, reject)	{
+	let promise = new Promise(function(resolve, reject) {
 		channel.permissionOverwrites.set(permissions, `Requested by ${getNameFromMessage(message)}`)
 			.then(async function() {
 				await ephemeralReply(message, `Channel ${channel} permissions updated`);
@@ -3841,7 +3841,7 @@ client.on('interactionCreate', async interaction => {
 		//buttons handled through collectors
 		return;
 	}
-	
+
 	const command = client.commands.get(interaction.commandName);
 	if (!command) {
 		console.error(`${interaction.commandName} not found`);
@@ -3988,8 +3988,10 @@ function setRolesForMember(member, reason) {
 				await member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use \`!help\` to see available commands.`).catch(() => {});
 				resolve();
 			})
-			.catch(error => { notifyRequestError(null, member, guild, error, false);
-				reject(); });
+			.catch(error => {
+				notifyRequestError(null, member, guild, error, false);
+				reject();
+			});
 	});
 	return promise;
 }

@@ -1,7 +1,13 @@
-/* jshint esversion: 8 */
+/* jshint esversion: 11 */
 
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType,
-			ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const {
+	SlashCommandBuilder,
+	PermissionFlagsBits,
+	ChannelType,
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle
+} = require('discord.js');
 
 const typeChoices = [
 	{ name: 'Voice Channel', value: 'voice' },
@@ -76,15 +82,15 @@ module.exports = {
 			case 'add': {
 				if (perm < global.PERM_RECRUITER)
 					return interaction.reply({ content: "You do not have permissions to create channels", ephemeral: true });
-				
+
 				let name = interaction.options.getString('name');
 				let channelName = name.toLowerCase().replace(/\s/g, '-');
 				let type = interaction.options.getString('type') ?? 'voice';
 				let level = interaction.options.getString('perm') ?? 'member';
 				let category = interaction.options.getChannel('category');
 				let roleName = interaction.options.getString('role');
-				
-				let officerRole;				
+
+				let officerRole;
 				if (category) {
 					//check if this category has an associated officer role
 					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
@@ -95,19 +101,19 @@ module.exports = {
 						return interaction.reply({ content: "You can only add channels to a division you command", ephemeral: true });
 					if (perm < global.PERM_STAFF && category.children.size >= config.maxChannelsPerCategory)
 						return interaction.reply({ content: "Category is full", ephemeral: true });
-					
+
 					let prefix = category.name.toLowerCase().replace(/\s/g, '-') + '-';
 					if (channelName.indexOf(prefix) < 0)
 						channelName = prefix + channelName;
 				} else {
 					if (type === 'text')
 						return interaction.reply({ content: "A category must be set for text channels", ephemeral: true });
-					
+
 					category = interaction.guild.channels.cache.find(c => { return c.name == config.tempChannelCategory; });
 					if (!category)
 						return interaction.reply({ content: "Temp channel category not found", ephemeral: true });
 				}
-				
+
 				let role;
 				if (roleName)
 					role = interaction.guild.roles.cache.find(r => { return r.name == roleName; });
@@ -119,18 +125,18 @@ module.exports = {
 				} else if (level === 'role') {
 					return interaction.reply({ content: "Role must be provided if Channel Permissions is 'role'", ephemeral: true });
 				}
-				
+
 				let existingChannel = interaction.guild.channels.cache.find(c => { return c.name == channelName; });
 				if (existingChannel)
 					return interaction.reply({ content: "Channel already exists", ephemeral: true });
-				
+
 				await interaction.deferReply({ ephemeral: true });
 				return global.addChannel(interaction.guild, interaction, member, perm, channelName, type, level, category, officerRole, role);
 			}
 			case 'delete': {
 				if (perm < global.PERM_DIVISION_COMMANDER)
 					return interaction.reply({ content: "You do not have permissions to delete channels", ephemeral: true });
-				
+
 				let channel = interaction.options.getChannel('channel');
 				let channelName = channel.name;
 				if (global.config.protectedChannels.includes(channel.name))
@@ -147,7 +153,7 @@ module.exports = {
 					if (perm < PERM_STAFF)
 						return interaction.reply({ content: 'You cannot delete this channel', ephemeral: true });
 				}
-				
+
 				const confirm = new ButtonBuilder()
 					.setCustomId('confirm_channel_delete')
 					.setLabel('Confirm Delete')
@@ -163,10 +169,10 @@ module.exports = {
 					components: [row],
 					ephemeral: true
 				});
-				
+
 				const filter = (i) => (i.customId === 'confirm_channel_delete' || i.customId === 'cancel_channel_delete') && i.user.id === interaction.user.id;
 				try {
-					const confirmation = await response.awaitMessageComponent({ filter: filter, time: 10_000 });
+					const confirmation = await response.awaitMessageComponent({ filter: filter, time: 10000 });
 					if (confirmation.customId === 'confirm_channel_delete') {
 						await channel.delete(`Requested by ${global.getNameFromMessage(interaction)}`);
 						if (interaction.channel.id !== channel.id) {
@@ -190,16 +196,16 @@ module.exports = {
 				if (perm < global.PERM_MOD)
 					return interaction.reply({ content: "You do not have permissions to set channel topics", ephemeral: true });
 				let topic = interaction.options.getString('topic') ?? "";
-				let channel = interaction.options.getChannel('channel') ?? interaction.channel;		
+				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 				if (!channel)
-					return interaction.reply({ content: "Please provide a channel or execute in a text channel", ephemeral: true });	
+					return interaction.reply({ content: "Please provide a channel or execute in a text channel", ephemeral: true });
 				await interaction.deferReply({ ephemeral: true });
 				return channel.setTopic(topic, `Requested by ${global.getNameFromMessage(interaction)}`);
 			}
 			case 'update': {
 				if (perm < global.PERM_STAFF)
 					return interaction.reply({ content: "You do not have permissions to update channel permissions", ephemeral: true });
-				
+
 				let level = interaction.options.getString('perm') ?? 'member';
 				let roleName = interaction.options.getString('role');
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
@@ -219,7 +225,7 @@ module.exports = {
 					if (perm < PERM_STAFF)
 						return interaction.reply({ content: 'You cannot update this channel', ephemeral: true });
 				}
-				
+
 				let role;
 				if (roleName)
 					role = interaction.guild.roles.cache.find(r => { return r.name == roleName; });
@@ -237,4 +243,3 @@ module.exports = {
 		}
 	}
 };
-
