@@ -61,7 +61,12 @@ module.exports = {
 		.addSubcommand(command => command.setName('update').setDescription('Update the permissions for a channel')
 			.addStringOption(option => option.setName('perm').setDescription('Channel Permissions (default=Member)').setRequired(true).setChoices(...permChoices))
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to update').addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice))
-			.addStringOption(option => option.setName('role').setDescription('Channel Role for role locked channels').setAutocomplete(true))),
+			.addStringOption(option => option.setName('role').setDescription('Channel Role for role locked channels').setAutocomplete(true)))
+		.addSubcommand(command => command.setName('rename').setDescription('Rename a channel')
+			.addChannelOption(option => option.setName('channel').setDescription('Channel to rename').setRequired(true).addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice))
+			.addStringOption(option => option.setName('name').setDescription('Channel Name').setRequired(true)))
+		.addSubcommand(command => command.setName('move').setDescription('Move a channel')
+			.addChannelOption(option => option.setName('channel').setDescription('Channel to move').setRequired(true))),
 	async autocomplete(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);
@@ -83,8 +88,7 @@ module.exports = {
 				if (perm < global.PERM_RECRUITER)
 					return interaction.reply({ content: "You do not have permissions to create channels", ephemeral: true });
 
-				let name = interaction.options.getString('name');
-				let channelName = name.toLowerCase().replace(/\s/g, '-');
+				let name = interaction.options.getString('name').toLowerCase().replace(/\s/g, '-');
 				let type = interaction.options.getString('type') ?? 'voice';
 				let level = interaction.options.getString('perm') ?? 'member';
 				let category = interaction.options.getChannel('category');
@@ -103,8 +107,8 @@ module.exports = {
 						return interaction.reply({ content: "Category is full", ephemeral: true });
 
 					let prefix = category.name.toLowerCase().replace(/\s/g, '-') + '-';
-					if (channelName.indexOf(prefix) < 0)
-						channelName = prefix + channelName;
+					if (name.indexOf(prefix) < 0)
+						name = prefix + name;
 				} else {
 					if (type === 'text')
 						return interaction.reply({ content: "A category must be set for text channels", ephemeral: true });
@@ -126,12 +130,12 @@ module.exports = {
 					return interaction.reply({ content: "Role must be provided if Channel Permissions is 'role'", ephemeral: true });
 				}
 
-				let existingChannel = interaction.guild.channels.cache.find(c => { return c.name == channelName; });
+				let existingChannel = interaction.guild.channels.cache.find(c => { return c.name == name; });
 				if (existingChannel)
 					return interaction.reply({ content: "Channel already exists", ephemeral: true });
 
 				await interaction.deferReply({ ephemeral: true });
-				return global.addChannel(interaction.guild, interaction, member, perm, channelName, type, level, category, officerRole, role);
+				return global.addChannel(interaction.guild, interaction, member, perm, name, type, level, category, officerRole, role);
 			}
 			case 'delete': {
 				if (perm < global.PERM_DIVISION_COMMANDER)
@@ -139,8 +143,8 @@ module.exports = {
 
 				let channel = interaction.options.getChannel('channel');
 				let channelName = channel.name;
-				if (global.config.protectedChannels.includes(channel.name))
-					return interaction.reply({ content: `${channelName} is a protected channel.`, ephemeral: true });
+				if (global.config.protectedChannels.includes(channelName))
+					return interaction.reply({ content: `${channel} is a protected channel.`, ephemeral: true });
 
 				let category = channel.parent;
 				if (category) {
@@ -188,7 +192,7 @@ module.exports = {
 						});
 					}
 				} catch (e) {
-					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [] });
+					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
 				}
 				break;
 			}
@@ -210,8 +214,8 @@ module.exports = {
 				let roleName = interaction.options.getString('role');
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 				let channelName = channel.name;
-				if (global.config.protectedChannels.includes(channel.name))
-					return interaction.reply({ content: `${channelName} is a protected channel`, ephemeral: true });
+				if (global.config.protectedChannels.includes(channelName))
+					return interaction.reply({ content: `${channel} is a protected channel`, ephemeral: true });
 
 				let category = channel.parent;
 				let officerRole;
@@ -239,6 +243,105 @@ module.exports = {
 				}
 				await interaction.deferReply({ ephemeral: true });
 				return setChannelPerms(interaction.guild, interaction, member, perm, channel, level, category, officerRole, role);
+			}
+			case 'rename': {
+				if (perm < global.PERM_DIVISION_COMMANDER)
+					return interaction.reply({ content: "You do not have permissions to rename channels", ephemeral: true });
+
+				let name = interaction.options.getString('name').toLowerCase().replace(/\s/g, '-');
+				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
+				let channelName = channel.name;
+				if (channel.type === ChannelType.GuildCategory)
+					return interaction.reply({ content: `Cannot rename a category`, ephemeral: true });
+				if (global.config.protectedChannels.includes(channelName))
+					return interaction.reply({ content: `${channel} is a protected channel`, ephemeral: true });
+
+				let category = channel.parent;
+				if (category) {
+					//check if this category has an associated officer role
+					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+					let officerRole = interaction.guild.roles.cache.find(r => { return r.name == officerRoleName; });
+					if (perm == global.PERM_DIVISION_COMMANDER && (!officerRole || !member.roles.cache.get(officerRole.id)))
+						return interaction.reply({ content: 'You can only rename channels from a division you command', ephemeral: true });
+					let divisionPrefix = category.name.toLowerCase().replace(/\s/g, '-');
+					if (!name.startsWith(divisionPrefix))
+						name = divisionPrefix + '-' + name;
+				} else {
+					if (perm < PERM_STAFF)
+						return interaction.reply({ content: 'You cannot rename this channel', ephemeral: true });
+				}
+
+				let existingChannel = interaction.guild.channels.cache.find(c => { return c.name == name; });
+				if (existingChannel)
+					return interaction.reply({ content: `A channel already exists with the name ${existingChannel}`, ephemeral: true });
+
+				await interaction.deferReply({ ephemeral: true });
+				await channel.setName(name, `Requested by ${global.getNameFromMessage(interaction)}`);
+				return interaction.editReply({ content: `#${channelName} renamed to ${channel}`, ephemeral: true });
+			}
+			case 'move': {
+				if (perm < global.PERM_DIVISION_COMMANDER)
+					return interaction.reply({ content: "You do not have permissions to move channels", ephemeral: true });
+
+				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
+				let category = channel.parent;
+				if (category) {
+					//check if this category has an associated officer role
+					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+					let officerRole = interaction.guild.roles.cache.find(r => { return r.name == officerRoleName; });
+					if (perm == global.PERM_DIVISION_COMMANDER && (!officerRole || !member.roles.cache.get(officerRole.id)))
+						return interaction.reply({ content: 'You can only move channels in a division you command', ephemeral: true });
+					let divisionPrefix = category.name.toLowerCase().replace(/\s/g, '-');
+				} else {
+					if (perm < PERM_STAFF)
+						return interaction.reply({ content: 'You cannot rename this channel', ephemeral: true });
+				}
+
+				const up = new ButtonBuilder()
+					.setCustomId('move_channel_up')
+					.setLabel('Up')
+					.setStyle(ButtonStyle.Success);
+				const down = new ButtonBuilder()
+					.setCustomId('move_channel_down')
+					.setLabel('Down')
+					.setStyle(ButtonStyle.Primary);
+				const done = new ButtonBuilder()
+					.setCustomId('move_channel_done')
+					.setLabel('Done')
+					.setStyle(ButtonStyle.Secondary);
+				const row = new ActionRowBuilder()
+					.addComponents(up, down, done);
+				const response = await interaction.reply({
+					content: `Move ${channel}...`,
+					components: [row],
+					ephemeral: true
+				});
+
+				const filter = (i) =>
+					(i.customId === 'move_channel_up' ||
+						i.customId === 'move_channel_down' ||
+						i.customId === 'move_channel_done') &&
+					i.user.id === interaction.user.id;
+				while (1) {
+					try {
+						const action = await response.awaitMessageComponent({ filter: filter, time: 30000 });
+						if (action.customId === 'move_channel_up') {
+							await channel.setPosition(-1, { relative: true, reason: `Requested by ${global.getNameFromMessage(interaction)}` });
+						} else if (action.customId === 'move_channel_down') {
+							await channel.setPosition(1, { relative: true, reason: `Requested by ${global.getNameFromMessage(interaction)}` });
+						} else {
+							return interaction.editReply({ content: 'Done', components: [], ephemeral: true });
+						}
+						await action.update({
+							content: `Move ${channel}...`,
+							components: [row],
+							ephemeral: true
+						});
+					} catch (e) {
+						return await interaction.editReply({ content: 'Timeout', components: [], ephemeral: true });
+					}
+				}
+				break;
 			}
 		}
 	}
