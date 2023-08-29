@@ -22,7 +22,7 @@ function sortAndLimitOptions(options, len, search) {
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('roles')
-		.setDescription('Manage user roles.')
+		.setDescription('Manage user roles')
 		.addSubcommand(command => command.setName('list').setDescription('Lists your current and available subscribable roles'))
 		.addSubcommand(command => command.setName('list_user').setDescription('Lists current and available assignable roles for another user (requires Moderator permissions)')
 			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true)))
@@ -38,6 +38,7 @@ module.exports = {
 		.addSubcommand(command => command.setName('unassign').setDescription('Unassign a role from a user (requires Moderator permissions)')
 			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true))),
+	help: 'Manage user roles.',
 	async autocomplete(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);

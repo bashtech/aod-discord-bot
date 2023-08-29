@@ -4106,6 +4106,8 @@ client.on("ready", async function() {
 		.catch(error => { console.log(error); });
 	await guild.roles.fetch()
 		.catch(error => { console.log(error); });
+	await guild.commands.fetch()
+		.catch(error => { console.log(error); });
 	console.log(`Member fetch complete`);
 
 	const tempChannelCategory = guild.channels.cache.find(c => { return c.name === config.tempChannelCategory; });

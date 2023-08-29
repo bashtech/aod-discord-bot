@@ -8,6 +8,7 @@ module.exports = {
 		.setDescription('Roll a dice.')
 		.addIntegerOption(option => option.setName('dice').setDescription('The number of dice to roll (1-20)').setMinValue(1).setMaxValue(20))
 		.addIntegerOption(option => option.setName('sides').setDescription('The number of sides on the dice (1-100)').setMinValue(1).setMaxValue(100)),
+	help: 'Roll up to 20 dice with up to 100 sides. One six-sided die by default.',
 	async execute(interaction) {
 		const num = interaction.options.getInteger('dice') ?? 1;
 		const size = interaction.options.getInteger('sides') ?? 6;
@@ -20,7 +21,7 @@ module.exports = {
 				reply += ', ';
 			reply += result;
 		}
-		if (num > 0)
+		if (num > 1)
 			reply += ` (total: ${total})`;
 		return interaction.reply(reply);
 	},

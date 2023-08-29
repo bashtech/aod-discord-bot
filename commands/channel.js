@@ -46,7 +46,7 @@ function sortAndLimitOptions(options, len, search) {
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('channel')
-		.setDescription('Add, remove or alter a channel')
+		.setDescription('Add, remove or update a channel')
 		.addSubcommand(command => command.setName('add').setDescription('Create a new channel')
 			.addStringOption(option => option.setName('name').setDescription('Channel Name').setRequired(true))
 			.addStringOption(option => option.setName('type').setDescription('Channel Type (default=Voice)').setChoices(...typeChoices))
@@ -67,6 +67,7 @@ module.exports = {
 			.addStringOption(option => option.setName('name').setDescription('Channel Name').setRequired(true)))
 		.addSubcommand(command => command.setName('move').setDescription('Move a channel')
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to move').setRequired(true))),
+	help: 'Add, remove or update a channel.',
 	async autocomplete(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);
