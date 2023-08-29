@@ -2,12 +2,18 @@
 
 const { SlashCommandBuilder, PermissionFlagsBits, ApplicationCommandOptionType } = require('discord.js');
 
+function objectWithNameSort(a, b) {
+	if (a.name < b.name) return -1;
+	if (a.name > b.name) return 1;
+	return 0;
+}
+
 function buildSubCommandList(command, cmdOption, parentName) {
 	if (cmdOption.type === ApplicationCommandOptionType.Subcommand) {
-		return [`</${parentName} ${cmdOption.name}:${command.commandId}>`];
+		return [`</${parentName} ${cmdOption.name}:${command.commandId}>: ${cmdOption.description}\n`];
 	} else if (cmdOption.type === ApplicationCommandOptionType.SubcommandGroup) {
 		let list = [];
-		cmdOption.options.sort(function(a,b) { return a.name<b.name; }).forEach(subCmdOption => {
+		cmdOption.options.sort(objectWithNameSort).forEach(subCmdOption => {
 			list.concat(buildSubCommandList(command, subCmdOption, `${parentName} ${cmdOption.name}`));
 		});
 		return list;
@@ -21,7 +27,10 @@ module.exports = {
 		.setDescription('Show list of available commands'),
 	help: "Show list of available commands.",
 	async execute(interaction) {
-		let reply = "Available Commands\n";
+		let embed = {
+			title: "Available Commands",
+			description: ""
+		};
 
 		interaction.client.commands.sort().each(function (command, name) {
 			if (command.help) {
@@ -37,23 +46,20 @@ module.exports = {
 					guildCommand = interaction.guild.commands.resolve(command.commandId);
 				}
 				if (guildCommand) {
-					reply += `</${name}:${command.commandId}>: ${command.help}\n`;
 					let subCommands = ""
-					guildCommand.options.sort(function(a,b) { return a.name<b.name; }).forEach(cmdOption => {
+					guildCommand.options.sort(objectWithNameSort).forEach(cmdOption => {
 						let subCommandList = buildSubCommandList(command, cmdOption, name);
-							if (subCommandList.length > 0) {
-								if (subCommands.length > 0)
-									subCommands += ', ';
-								subCommands += subCommandList.join(', ')
-						}
+						subCommands += subCommandList.join();
 					});
-					if (subCommands.length > 0)
-						reply += `> Subcommands: ${subCommands}\n`;
+					if (subCommands.length)
+						embed.description += subCommands;
+					else
+						embed.description += `</${name}:${command.commandId}>: ${guildCommand.description}\n`;
 				} else {
-					reply += `/${name}: ${command.help}`;
+					embed.description += `/${name}: ${command.help}`;
 				}
 			}
 		});
-		return interaction.reply({ content: reply, ephemeral: true });
+		return interaction.reply({ embeds: [embed], ephemeral: true });
 	},
 };

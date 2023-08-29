@@ -67,7 +67,7 @@ module.exports = {
 			.addStringOption(option => option.setName('name').setDescription('Channel Name').setRequired(true)))
 		.addSubcommand(command => command.setName('move').setDescription('Move a channel')
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to move').setRequired(true))),
-	help: 'Add, remove or update a channel.',
+	help: true,
 	async autocomplete(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);

@@ -8,7 +8,7 @@ module.exports = {
 		.setDescription('Associate discord user to AOD forum account')
 		.addStringOption(option => option.setName('username').setDescription('ClanAOD.net Forum Username').setRequired(true))
 		.addStringOption(option => option.setName('password').setDescription('ClanAOD.net Forum Password').setRequired(true)),
-	help: 'Associate discord user to AOD forum account.',
+	help: true,
 	async execute(interaction, member, perm, permName) {
 		let username = interaction.options.getString('username');
 		let password = interaction.options.getString('password');

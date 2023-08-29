@@ -24,21 +24,21 @@ module.exports = {
 		.setName('roles')
 		.setDescription('Manage user roles')
 		.addSubcommand(command => command.setName('list').setDescription('Lists your current and available subscribable roles'))
-		.addSubcommand(command => command.setName('list_user').setDescription('Lists current and available assignable roles for another user (requires Moderator permissions)')
+		.addSubcommand(command => command.setName('list_user').setDescription('Lists current and available assignable roles for another user')
 			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true)))
-		.addSubcommand(command => command.setName('members').setDescription('Show members of a role (requires Moderator permissions)')
+		.addSubcommand(command => command.setName('members').setDescription('Show members of a role')
 			.addRoleOption(option => option.setName('role').setDescription('Role').setRequired(true)))
 		.addSubcommand(command => command.setName('sub').setDescription('Subscribe to a role')
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
 		.addSubcommand(command => command.setName('unsub').setDescription('Unsubscribe from a role')
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
-		.addSubcommand(command => command.setName('assign').setDescription('Assign a role to a user (requires Moderator permissions)')
+		.addSubcommand(command => command.setName('assign').setDescription('Assign a role to a user')
 			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
-		.addSubcommand(command => command.setName('unassign').setDescription('Unassign a role from a user (requires Moderator permissions)')
+		.addSubcommand(command => command.setName('unassign').setDescription('Unassign a role from a user')
 			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
 			.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true))),
-	help: 'Manage user roles.',
+	help: true,
 	async autocomplete(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);
