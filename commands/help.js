@@ -14,7 +14,7 @@ function buildSubCommandList(command, cmdOption, parentName) {
 	} else if (cmdOption.type === ApplicationCommandOptionType.SubcommandGroup) {
 		let list = [];
 		cmdOption.options.sort(objectWithNameSort).forEach(subCmdOption => {
-			list.concat(buildSubCommandList(command, subCmdOption, `${parentName} ${cmdOption.name}`));
+			list = list.concat(buildSubCommandList(command, subCmdOption, `${parentName} ${cmdOption.name}`));
 		});
 		return list;
 	}
@@ -32,12 +32,12 @@ module.exports = {
 			description: ""
 		};
 
-		interaction.client.commands.sort().each(function (command, name) {
+		interaction.client.commands.sort().each(function(command, name) {
 			if (command.help) {
 				let guildCommand;
 				if (!command.commandId) {
-					guildCommand = interaction.guild.commands.cache.find(c => { 
-						return (c.applicationId === interaction.client.application.id && c.name === name); 
+					guildCommand = interaction.guild.commands.cache.find(c => {
+						return (c.applicationId === interaction.client.application.id && c.name === name);
 					});
 					if (guildCommand) {
 						command.commandId = guildCommand.id;
@@ -49,14 +49,14 @@ module.exports = {
 					let subCommands = ""
 					guildCommand.options.sort(objectWithNameSort).forEach(cmdOption => {
 						let subCommandList = buildSubCommandList(command, cmdOption, name);
-						subCommands += subCommandList.join();
+						subCommands += subCommandList.join('');
 					});
 					if (subCommands.length)
 						embed.description += subCommands;
 					else
 						embed.description += `</${name}:${command.commandId}>: ${guildCommand.description}\n`;
 				} else {
-					embed.description += `/${name}: ${command.help}`;
+					embed.description += `/${name}\n`;
 				}
 			}
 		});
