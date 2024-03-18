@@ -1530,7 +1530,7 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 		await divisionOfficerRole.setPosition(memberRole.position + 1).catch(e => { console.log(e); });
 
 		//add category for division
-		let permissions = getPermissionsForEveryone(guild);
+		let permissions = getPermissionsForEveryone(guild, [], []);
 		divisionCategory = await guild.channels.create({ type: ChannelType.GuildCategory, name: divisionName, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
@@ -1545,7 +1545,7 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 			.catch(e => { console.log(e); });
 
 		//create public channel
-		permissions = addRoleToPermissions(guild, divisionOfficerRole, getPermissionsForEveryone(guild), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
+		permissions = addRoleToPermissions(guild, divisionOfficerRole, getPermissionsForEveryone(guild, [], []), [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages]);
 		let publicChannel = await guild.channels.create({ type: ChannelType.GuildText, name: divisionPublicChannel, parent: divisionCategory, permissionOverwrites: permissions, reason: `Requested by ${getNameFromMessage(message)}` })
 			.catch(e => { console.log(e); });
 
