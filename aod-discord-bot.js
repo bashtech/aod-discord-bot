@@ -79,6 +79,15 @@ try {
 	relayedMessageMap = {};
 }
 
+//include joinToCreateChannels
+var joinToCreateChannels;
+try {
+	joinToCreateChannels = require(config.joinToCreateChannels);
+} catch (error) {
+	console.log(error);
+	joinToCreateChannels = { joinToCreateChannels: {}, tempChannels: {} };
+}
+
 //permission levels
 const PERM_OWNER = 8;
 const PERM_ADMIN = 7;
@@ -1151,15 +1160,19 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 async function addChannel(guild, message, member, perm, name, type, level, category, officerRole, role) {
 	//get channel permissions
 	let permissions = await getChannelPermissions(guild, message, perm, level, type, officerRole, role);
-	if (!permissions)
-		return ephemeralReply(message, 'Failed to get permissions for channel');
+	if (!permissions) {
+		ephemeralReply(message, 'Failed to get permissions for channel');
+		let promise = new Promise(function(resolve, reject) { reject(); });
+		return promise;
+	}
 
 	let channelType = ChannelType.GuildText;
 	if (type === 'voice') {
 		channelType = ChannelType.GuildVoice;
 	} else if (type === 'ptt') {
 		channelName += '-ptt';
-		type = 'voice';
+		channelType = ChannelType.GuildVoice;
+	} else if (type === 'jtc') {
 		channelType = ChannelType.GuildVoice;
 	}
 
@@ -1167,7 +1180,7 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 	let promise = new Promise(function(resolve, reject) {
 		guild.channels.create({ type: channelType, name: name, parent: category, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
 			.then(async function(c) {
-				if (type === 'voice') {
+				if (channelType === ChannelType.GuildVoice) {
 					//make sure someone gets into the channel
 					if (category.name == config.tempChannelCategory)
 						setTimeout(function() {
@@ -1180,7 +1193,13 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 						member.voice.setChannel(c).catch(error => {});
 				}
 				await ephemeralReply(message, `Added channel ${c.toString()} in ${category.name}`);
-				resolve();
+
+				if (type === 'jtc') {
+					joinToCreateChannels.joinToCreateChannels[c.id] = 1;
+					fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
+				}
+
+				resolve(c);
 			})
 			.then(async function(error) {
 				notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
@@ -3901,15 +3920,52 @@ client.on('interactionCreate', async interaction => {
 });
 
 //voiceStateUpdate event handler -- triggered when a user joins or leaves a channel or their status in the channel changes
-client.on('voiceStateUpdate', (oldMember, newMember) => {
-	//if the user left the channel, check if we should delete it
-	if (oldMember.channelId != newMember.channelId) {
-		if (oldMember.channel) {
-			const guild = client.guilds.resolve(config.guildId);
-			const oldCategory = guild.channels.resolve(oldMember.channel.parentId);
-			if (oldCategory && oldCategory.name === config.tempChannelCategory) {
-				if (oldMember.channel.members.size === 0) {
-					oldMember.channel.delete();
+client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
+	if (oldMemberState.channelId != newMemberState.channelId) {
+		const guild = oldMemberState.guild;
+		//user changed channels
+		if (oldMemberState.channel) {
+			if (joinToCreateChannels.tempChannels[oldMemberState.channelId] === 1) {
+				//user left temp channel created by join-to-create
+				if (oldMemberState.channel.members.size === 0) {
+					oldMemberState.channel.delete();
+					delete joinToCreateChannels.tempChannels[oldMemberState.channelId];
+					fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
+				}
+			} else {
+				const oldCategory = guild.channels.resolve(oldMemberState.channel.parentId);
+				if (oldCategory && oldCategory.name === config.tempChannelCategory) {
+					//user left temp channel in the global category
+					if (oldMemberState.channel.members.size === 0) {
+						oldMemberState.channel.delete();
+					}
+				}
+			}
+		}
+		if (newMemberState.channel) {
+			if (joinToCreateChannels.joinToCreateChannels[newMemberState.channelId] === 1) {
+				//user joined a join-to-create channel; create a new channel with the same parent and move the user to it
+				let perm = getPermissionLevelForMember(newMemberState.member);
+				if (perm < PERM_MEMBER) {
+					sendMessageToMember(newMemberState.member, 'You do not have permissions to create voice channels');
+					newMemberState.disconnect().catch(error => {});
+				} else {
+					//FIXME what what if the member creates mulitple channels?
+					let tempChannelName = `${newMemberState.member.nickname}'s Channel`;
+					let type = 'voice';
+					let level = 'guest';
+					let category = guild.channels.resolve(newMemberState.channel.parentId);
+					let officerRoleName = category.name + ' ' + config.discordOfficerSuffix;
+					let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+					let tempChannel = await addChannel(guild, null, newMemberState.member, perm, tempChannelName, type, level, category, officerRole, null);
+					if (tempChannel) {
+						newMemberState.member.voice.setChannel(tempChannel).catch(error => {});
+						joinToCreateChannels.tempChannels[tempChannel.id] = 1;
+						fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
+					} else {
+						sendMessageToMember(newMemberState.member, 'Failed to create voice channel');
+						newMemberState.disconnect().catch(error => {});
+					}
 				}
 			}
 		}
@@ -4105,11 +4161,22 @@ function forumSyncTimerCallback() {
 }
 
 //messageDelete handler
-client.on("messageDelete", (message) => {
+client.on('messageDelete', (message) => {
 	if (message.guildId && message.channel && message.content && !message.content.startsWith(config.prefix + 'relay ') &&
 		!message.content.startsWith(config.prefix + 'relaydm ') && !message.content.startsWith(config.prefix + 'react ') &&
 		!message.content.startsWith(config.prefix + 'login '))
 		console.log(`Deleted message from ${message.author.tag} in #${message.channel.name}: ${message.content}`);
+});
+
+//channelDelete handler
+client.on('channelDelete', (channel) => {
+	if (joinToCreateChannels.joinToCreateChannels[channel.id] === 1) {
+		delete joinToCreateChannels.joinToCreateChannels[channel.id];
+		fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
+	} else if (joinToCreateChannels.tempChannels[channel.id] === 1) {
+		delete joinToCreateChannels.tempChannels[channel.id];
+		fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
+	}
 });
 
 //ready handler
@@ -4135,6 +4202,24 @@ client.on("ready", async function() {
 			}
 		});
 	}
+
+	for (let joinToCreateChannel in joinToCreateChannels.joinToCreateChannels) {
+		if (joinToCreateChannels.joinToCreateChannels.hasOwnProperty(joinToCreateChannel)) {
+			const channel = guild.channels.resolve(joinToCreateChannel);
+			if (!channel) {
+				delete joinToCreateChannels.joinToCreateChannels[joinToCreateChannel];
+			}
+		}
+	}
+	for (let tempChannel in joinToCreateChannels.tempChannels) {
+		if (joinToCreateChannels.tempChannels.hasOwnProperty(tempChannel)) {
+			const channel = guild.channels.resolve(tempChannel);
+			if (!channel) {
+				delete joinToCreateChannels.tempChannels[tempChannel];
+			}
+		}
+	}
+	fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
 
 	forumSyncTimerCallback(); //prime the date and do initial adds
 	forumSyncTimer = setInterval(forumSyncTimerCallback, config.forumSyncIntervalMS);

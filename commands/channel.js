@@ -12,6 +12,7 @@ const {
 const typeChoices = [
 	{ name: 'Voice Channel', value: 'voice' },
 	{ name: 'PTT Voice Channel', value: 'ptt' },
+	{ name: 'Join to Create Voice', value: 'jtc' },
 	{ name: 'Text', value: 'text' },
 ];
 
@@ -113,6 +114,8 @@ module.exports = {
 				} else {
 					if (type === 'text')
 						return interaction.reply({ content: "A category must be set for text channels", ephemeral: true });
+					if (type === 'jtc')
+						return interaction.reply({ content: "A category must be set for join-to-create channels", ephemeral: true });
 
 					category = interaction.guild.channels.cache.find(c => { return c.name == config.tempChannelCategory; });
 					if (!category)
