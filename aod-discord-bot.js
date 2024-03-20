@@ -2459,6 +2459,41 @@ function getForumUsersForGroups(groups, allowPending) {
 	return promise;
 }
 
+function getForumInfoForMember(member) {
+	var promise = new Promise(function(resolve, reject) {
+		let userData = [];
+		let db = connectToDB();
+		let query =
+			`SELECT u.userid,u.username,f.field13,f.field11,f.field14,g.title ` +
+			`FROM ${config.mysql.prefix}user AS u ` +
+			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
+			`INNER JOIN ${config.mysql.prefix}usergroup AS g ON u.usergroupid=g.usergroupid ` +
+			`WHERE f.field20 like "${member.id}" `;
+		let queryError = false;
+		db.query(query)
+			.on('error', function(err) {
+				queryError = true;
+				reject(err);
+			})
+			.on('result', function(row) {
+				userData.push({
+					name: row.username,
+					id: row.userid,
+					division: row.field13,
+					rank: row.field11,
+					loaStatus: row.field14,
+					forumGroup: row.title
+				});
+			})
+			.on('end', function(err) {
+				if (!queryError)
+					resolve(userData);
+			});
+	});
+	return promise;
+}
+global.getForumInfoForMember = getForumInfoForMember;
+
 function truncateStr(str, maxLen) {
 	if (str.length <= maxLen)
 		return str;
@@ -4216,6 +4251,8 @@ client.on("ready", async function() {
 			const channel = guild.channels.resolve(tempChannel);
 			if (!channel) {
 				delete joinToCreateChannels.tempChannels[tempChannel];
+			} else if (channel.members.size === 0) {
+				channel.delete();
 			}
 		}
 	}
