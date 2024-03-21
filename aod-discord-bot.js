@@ -2405,7 +2405,7 @@ function getForumUsersForGroups(groups, allowPending) {
 		let groupStr = groups.join(',');
 		let groupRegex = groups.join('|');
 		let query =
-			`SELECT u.userid,u.username,f.field19,f.field20,f.field13, ` +
+			`SELECT u.userid,u.username,f.field19,f.field20,f.field13,f.field23,f.field24, ` +
 			`(CASE WHEN (r.requester_id IS NOT NULL AND r.approver_id IS NULL) THEN 1 ELSE 0 END) AS pending ` +
 			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
@@ -2447,6 +2447,8 @@ function getForumUsersForGroups(groups, allowPending) {
 						division: row.field13,
 						discordid: discordid,
 						discordtag: discordtag,
+						discordstatus: row.field24,
+						discordactivity: row.field23,
 						pending: row.pending
 					};
 				}
@@ -2547,10 +2549,31 @@ function setDiscordTagForForumUser(forumUser, guildMember) {
 	forumUser.discordtag = guildMember.user.tag;
 }
 
+function setDiscordStatusForForumUser(forumUser, status) {
+	if (forumUser.discordstatus === status)
+		return;
+	console.log(`Updating Discord Status for ${forumUser.name} (${forumUser.id}) from '${forumUser.discordstatus}' to '${status}'`);
+	let db = connectToDB();
+	let query = `UPDATE ${config.mysql.prefix}userfield SET field24='${status}' WHERE userid=${forumUser.id}`;
+	db.query(query, function(err, rows, fields) {});
+	forumUser.discordstatus = status;
+}
+
+function setDiscordActivityForForumUser(forumUser, activityEpochMs) {
+	activityEpoch = '' + (Math.floor((activityEpochMs / 1000) / 21600) * 21600); //6 hour increments to dampen sql updates
+	if (forumUser.discordactivity === activityEpoch)
+		return;
+	console.log(`Updating Discord Activity for ${forumUser.name} (${forumUser.id}) from '${forumUser.discordactivity}' to '${activityEpoch}'`);
+	let db = connectToDB();
+	let query = `UPDATE ${config.mysql.prefix}userfield SET field23='${activityEpoch}' WHERE userid=${forumUser.id}`;
+	db.query(query, function(err, rows, fields) {});
+	forumUser.discordactivity = activityEpoch;
+}
+
 function clearDiscordDataForForumUser(forumUser) {
 	console.log(`Clearing Discord data for ${forumUser.name} (${forumUser.id})`);
 	let db = connectToDB();
-	let query = `UPDATE ${config.mysql.prefix}userfield SET field19='', field20='' WHERE userid=${forumUser.id}`;
+	let query = `UPDATE ${config.mysql.prefix}userfield SET field19='', field20='', field23='', field24='' WHERE userid=${forumUser.id}`;
 	db.query(query, function(err, rows, fields) {});
 }
 
@@ -2626,6 +2649,9 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 	} catch (e) {
 		console.error(e);
 	}
+
+	let localVoiceStatusUpdates = voiceStatusUpdates;
+	voiceStatusUpdates = {};
 
 	var seenByID = {}; //make sure we don't have users added as both guest and member
 	for (var roleName in forumIntegrationConfig) {
@@ -2716,8 +2742,12 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 								}
 							}
 						}
-						if (forumUser.discordtag != roleMember.user.tag)
-							setDiscordTagForForumUser(forumUser, roleMember);
+						setDiscordTagForForumUser(forumUser, roleMember);
+						setDiscordStatusForForumUser(forumUser, 'connected');
+						if (roleMember.voice.channel)
+							setDiscordActivityForForumUser(forumUser, date.getTime());
+						else if (localVoiceStatusUpdates[roleMember.id])
+							setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[roleMember.id]);
 
 						//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
 						if (role.id === memberRole.id) {
@@ -2814,16 +2844,22 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 										}
 									}
 								}
-								if (forumUser.discordtag != guildMember.user.tag)
-									setDiscordTagForForumUser(forumUser, guildMember);
+								setDiscordTagForForumUser(forumUser, guildMember);
+								setDiscordStatusForForumUser(forumUser, 'connected');
+								if (guildMember.voice.channel)
+									setDiscordActivityForForumUser(forumUser, date.getTime());
+								else if (localVoiceStatusUpdates[guildMember.id])
+									setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[guildMember.id]);
 							} else {
 								if (role.id === memberRole.id) {
 									if (forumUser.indexIsId) {
 										disconnected++;
 										leftServer.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
+										setDiscordStatusForForumUser(forumUser, 'disconnected');
 									} else {
 										misses++;
 										noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
+										setDiscordStatusForForumUser(forumUser, 'never_connected');
 									}
 								} else if (role.id === guestRole.id) {
 									//We don't need to constantly reprocess old AOD members who have left or forum guests who visited discord once
@@ -3954,6 +3990,8 @@ client.on('interactionCreate', async interaction => {
 	}
 });
 
+var voiceStatusUpdates = {};
+
 //voiceStateUpdate event handler -- triggered when a user joins or leaves a channel or their status in the channel changes
 client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 	if (oldMemberState.channelId != newMemberState.channelId) {
@@ -4003,6 +4041,7 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 					}
 				}
 			}
+			voiceStatusUpdates[newMemberState.member.id] = (new Date()).getTime();
 		}
 	}
 });
