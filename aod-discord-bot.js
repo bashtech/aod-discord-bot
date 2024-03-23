@@ -1157,7 +1157,7 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 	return promise;
 }
 
-async function addChannel(guild, message, member, perm, name, type, level, category, officerRole, role) {
+async function addChannel(guild, message, member, perm, name, type, level, category, officerRole, role, position) {
 	//get channel permissions
 	let permissions = await getChannelPermissions(guild, message, perm, level, type, officerRole, role);
 	if (!permissions) {
@@ -1178,7 +1178,15 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 
 	//create channel
 	let promise = new Promise(function(resolve, reject) {
-		guild.channels.create({ type: channelType, name: name, parent: category, permissionOverwrites: permissions, bitrate: 96000, reason: `Requested by ${getNameFromMessage(message)}` })
+		guild.channels.create({
+				type: channelType,
+				name: name,
+				parent: category,
+				permissionOverwrites:
+				permissions,
+				bitrate: 96000,
+				reason: `Requested by ${getNameFromMessage(message)}`
+			})
 			.then(async function(c) {
 				if (channelType === ChannelType.GuildVoice) {
 					//make sure someone gets into the channel
@@ -2342,7 +2350,7 @@ async function commandTracker(message, member, cmd, args, guild, perm, permName,
 		data.append('text', args.join(' '));
 		data.append('token', config.trackerToken);
 
-		let response = await fetch(config.trackerURL, {
+		let response = await fetch(`${config.trackerURL}/slack`, {
 			method: 'post',
 			body: data,
 			headers: {
@@ -4030,7 +4038,8 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 					let category = guild.channels.resolve(newMemberState.channel.parentId);
 					let officerRoleName = category.name + ' ' + config.discordOfficerSuffix;
 					let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
-					let tempChannel = await addChannel(guild, null, newMemberState.member, perm, tempChannelName, type, level, category, officerRole, null);
+					let tempChannel = await addChannel(guild, null, newMemberState.member, perm, tempChannelName, type, level,
+							category, officerRole, null);
 					if (tempChannel) {
 						newMemberState.member.voice.setChannel(tempChannel).catch(error => {});
 						joinToCreateChannels.tempChannels[tempChannel.id] = 1;

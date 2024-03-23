@@ -15,24 +15,61 @@ module.exports = {
 		await interaction.deferReply({ ephemeral: true });
 		
 		let targetMember = interaction.options.getMember('user');
-		userData = await global.getForumInfoForMember(targetMember);
+		const userData = await global.getForumInfoForMember(targetMember);
+		const memberRole = interaction.guild.roles.cache.find(r => { return r.name == global.config.memberRole; });
 		
-		reply = `Information for ${targetMember}:\n`;
+		let embed = {
+			description: `**Information for ${targetMember}**`,
+			thumbnail: { url: targetMember.displayAvatarURL({extension: 'png'}) },
+			fields: []
+		}
+		
+		embed.fields.push({
+			name: 'Discord User',
+			value: `${targetMember.user.username} (${targetMember.id})`
+		});
 		
 		if (!userData || userData.length == 0) {
-			reply += `User is not registered on the forums.\n`;
+			embed.fields.push({
+				name: 'Forum Data',
+				value: 'User is not registered on the forums.'
+			});
 		} else {
-			reply += `Found the following forum information:\n`;
 			for (let i = 0; i < userData.length; i++) {
 				let data = userData[i];
-				reply += `User: ${data.name}  Division: ${data.division}  Rank: ${data.rank}  Status: ${data.loaStatus}\n`;
+				embed.fields.push({
+					name: 'Forum Data',
+					value: 
+						`**Username**: ${data.name} (${data.id})\n` +
+						`**Division**: ${data.division}\n` +
+						`**Rank**: ${data.rank}\n` +
+						`**Status**: ${data.loaStatus}\n`
+				});
+				if (targetMember.roles.cache.find(r => r.name === global.config.memberRole)) {
+					embed.fields.push({
+						name: 'Tracker Link',
+						value: `${global.config.trackerURL}/members/${data.id}`
+					});
+				}
 			}
 		}
 		if (targetMember.voice.channel) {
-			reply += `User is currently in ${targetMember.voice.channel}`;
+			embed.fields.push({
+				name: 'Voice Channel',
+				value: `${targetMember.voice.channel}`
+			});
 		}
 
+		embed.fields.push({
+			name: 'Roles',
+			value: targetMember.roles.cache
+				.filter(r => r != interaction.guild.roles.everyone)
+				.sort((r1,r2) => r2.position - r1.position)
+				.map(r => `${r}`)
+				.join(', ')
+		});
+
 		interaction.replied = true; //avoid common reply
-		return interaction.editReply({ content: reply, ephemeral: true });
+		return interaction.editReply({ embeds: [embed], ephemeral: true });
 	},
 };
