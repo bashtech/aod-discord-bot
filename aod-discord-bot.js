@@ -4000,13 +4000,21 @@ client.on('interactionCreate', async interaction => {
 
 var voiceStatusUpdates = {};
 
+function tempChannelCreatedBy(channelId) {
+	if (joinToCreateChannels.tempChannels[channelId]) {
+		return joinToCreateChannels.tempChannels[channelId];
+	}
+	return null;
+}
+global.tempChannelCreatedBy = tempChannelCreatedBy;
+
 //voiceStateUpdate event handler -- triggered when a user joins or leaves a channel or their status in the channel changes
 client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 	if (oldMemberState.channelId != newMemberState.channelId) {
 		const guild = oldMemberState.guild;
 		//user changed channels
 		if (oldMemberState.channel) {
-			if (joinToCreateChannels.tempChannels[oldMemberState.channelId] === 1) {
+			if (joinToCreateChannels.tempChannels[oldMemberState.channelId]) {
 				//user left temp channel created by join-to-create
 				if (oldMemberState.channel.members.size === 0) {
 					oldMemberState.channel.delete();
@@ -4042,7 +4050,7 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 							category, officerRole, null);
 					if (tempChannel) {
 						newMemberState.member.voice.setChannel(tempChannel).catch(error => {});
-						joinToCreateChannels.tempChannels[tempChannel.id] = 1;
+						joinToCreateChannels.tempChannels[tempChannel.id] = newMemberState.member.id;
 						fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
 					} else {
 						sendMessageToMember(newMemberState.member, 'Failed to create voice channel');
@@ -4253,10 +4261,10 @@ client.on('messageDelete', (message) => {
 
 //channelDelete handler
 client.on('channelDelete', (channel) => {
-	if (joinToCreateChannels.joinToCreateChannels[channel.id] === 1) {
+	if (joinToCreateChannels.joinToCreateChannels[channel.id]) {
 		delete joinToCreateChannels.joinToCreateChannels[channel.id];
 		fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
-	} else if (joinToCreateChannels.tempChannels[channel.id] === 1) {
+	} else if (joinToCreateChannels.tempChannels[channel.id]) {
 		delete joinToCreateChannels.tempChannels[channel.id];
 		fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
 	}

@@ -201,14 +201,31 @@ module.exports = {
 				break;
 			}
 			case 'topic': {
-				if (perm < global.PERM_MOD)
-					return interaction.reply({ content: "You do not have permissions to set channel topics", ephemeral: true });
 				let topic = interaction.options.getString('topic') ?? "";
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 				if (!channel)
 					return interaction.reply({ content: "Please provide a channel or execute in a text channel", ephemeral: true });
+				if (perm < global.PERM_MOD) {
+					let category = channel.parent;
+					if (category) {
+						let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+						let officerRole = interaction.guild.roles.cache.find(r => { return r.name == officerRoleName; });
+						if (!officerRole || !member.roles.cache.get(officerRole.id)) {
+							if (global.tempChannelCreatedBy(channel.id) !== member.id) {
+								return interaction.reply({ content: "You do not have permissions to edit this channel.", ephemeral: true });
+							}
+						}
+					} else {
+						return interaction.reply({ content: "You do not have permissions to edit this channel.", ephemeral: true });
+					}
+				}
+
 				await interaction.deferReply({ ephemeral: true });
-				return channel.setTopic(topic, `Requested by ${global.getNameFromMessage(interaction)}`);
+				if (channel.type === ChannelType.GuildText) {
+					return channel.setTopic(topic, `Requested by ${global.getNameFromMessage(interaction)}`);
+				} else if (channel.type === ChannelType.GuildVoice) {
+					return interaction.editReply({ content: "Not supported.", ephemeral: true });
+				}
 			}
 			case 'update': {
 				if (perm < global.PERM_STAFF)
