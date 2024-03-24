@@ -1157,7 +1157,7 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 	return promise;
 }
 
-async function addChannel(guild, message, member, perm, name, type, level, category, officerRole, role, position) {
+async function addChannel(guild, message, member, perm, name, type, level, category, officerRole, role) {
 	//get channel permissions
 	let permissions = await getChannelPermissions(guild, message, perm, level, type, officerRole, role);
 	if (!permissions) {

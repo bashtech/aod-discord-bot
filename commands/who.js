@@ -1,6 +1,14 @@
 /* jshint esversion: 8 */
 
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const {
+	SlashCommandBuilder,
+	PermissionFlagsBits,
+	PermissionsBitField,
+	ChannelType,
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle
+} = require('discord.js');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -22,7 +30,7 @@ module.exports = {
 			description: `**Information for ${targetMember}**`,
 			thumbnail: { url: targetMember.displayAvatarURL({extension: 'png'}) },
 			fields: []
-		}
+		};
 		
 		embed.fields.push({
 			name: 'Discord User',
@@ -69,7 +77,59 @@ module.exports = {
 				.join(', ')
 		});
 
+		let components = [];
+		if (member.voice.channel && member.voice.channelId !== targetMember.voice.channelId) {
+			const row = new ActionRowBuilder();
+			const invite = new ButtonBuilder()
+				.setCustomId('send_invite')
+				.setLabel('Invite to your channel')
+				.setStyle(ButtonStyle.Primary);
+			row.addComponents(invite);
+			if (member.permissions.has(PermissionsBitField.Flags.MoveMembers)) {
+				[targetPerm, targetPermName] = getPermissionLevelForMember(targetMember);
+				if (perm >= targetPerm) {
+					const move = new ButtonBuilder()
+						.setCustomId('move_to_me')
+						.setLabel('Move to your channel')
+						.setStyle(ButtonStyle.Danger);
+					row.addComponents(move);
+				}
+			}
+			components.push(row);
+		}
+
 		interaction.replied = true; //avoid common reply
-		return interaction.editReply({ embeds: [embed], ephemeral: true });
+		const response = await interaction.editReply({ embeds: [embed], components: components, ephemeral: true });
+		if (components.length) {
+			const filter = (i) => (i.customId === 'send_invite' || i.customId === 'move_to_me') && i.user.id === interaction.user.id;
+			try {
+				const confirmation = await response.awaitMessageComponent({ filter: filter, time: 10000 });
+				if (confirmation.customId === 'send_invite') {
+					confirmation.update({
+						components: []
+					});
+					let invite = await member.voice.channel.createInvite({
+						maxAge: 5 * 60, /* 5 minutes */
+						maxUses: 1,
+						temporary: true,
+						reason: `Requested by ${global.getNameFromMessage(interaction)}`
+					});
+					if (invite) {
+						await targetMember.send(`${member} has invited you to their voice channel: ${invite.url}`);
+						await interaction.followUp({content: 'Intivation sent.', ephemeral: true});
+					} else {
+						await interaction.followUp({content: 'Failed to create invitation.', ephemeral: true});
+					}
+				} else if (confirmation.customId === 'move_to_me') {
+					confirmation.update({
+						components: []
+					});
+					await targetMember.voice.setChannel(member.voice.channelId);
+					await interaction.followUp({content: `${targetMember} moved to your channel.`, ephemeral: true});
+				}
+			} catch (e) {
+				await interaction.editReply({components: []});
+			}
+		}
 	},
 };
