@@ -226,6 +226,7 @@ module.exports = {
 				} else if (channel.type === ChannelType.GuildVoice) {
 					return interaction.editReply({ content: "Not supported.", ephemeral: true });
 				}
+				break;
 			}
 			case 'update': {
 				if (perm < global.PERM_STAFF)
