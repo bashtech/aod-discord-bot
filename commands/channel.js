@@ -224,7 +224,13 @@ module.exports = {
 				if (channel.type === ChannelType.GuildText) {
 					return channel.setTopic(topic, `Requested by ${global.getNameFromMessage(interaction)}`);
 				} else if (channel.type === ChannelType.GuildVoice) {
-					return interaction.editReply({ content: "Not supported.", ephemeral: true });
+					//return interaction.editReply({ content: "Not supported.", ephemeral: true });
+					return interaction.client.rest.put(`/channels/${channel.id}/voice-status`, {
+						body: {
+							status: topic,
+							reason: `Requested by ${global.getNameFromMessage(interaction)}`
+						}
+					});
 				}
 				break;
 			}
