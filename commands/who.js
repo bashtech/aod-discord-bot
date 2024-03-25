@@ -53,7 +53,8 @@ module.exports = {
 						`**Rank**: ${data.rank}\n` +
 						`**Status**: ${data.loaStatus}\n`
 				});
-				if (targetMember.roles.cache.find(r => r.name === global.config.memberRole)) {
+				const memberRoleName = global.config.memberRole;
+				if (targetMember.roles.cache.find(r => r.name === memberRoleName)) {
 					embed.fields.push({
 						name: 'Tracker Link',
 						value: `${global.config.trackerURL}/members/${data.id}`
