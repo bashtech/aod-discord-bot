@@ -10,14 +10,15 @@ const {
 } = require('discord.js');
 
 const typeChoices = [
-	{ name: 'Voice Channel', value: 'voice' },
-	{ name: 'PTT Voice Channel', value: 'ptt' },
-	{ name: 'Join to Create Voice', value: 'jtc' },
+	{ name: 'VAD', value: 'voice' },
+	{ name: 'PTT Only', value: 'ptt' },
+	{ name: 'JTC', value: 'jtc' },
 	{ name: 'Text', value: 'text' },
 ];
 
 const permChoices = [
 	{ name: 'Feed', value: 'feed' },
+	{ name: 'Public', value: 'public' },
 	{ name: 'Guest+', value: 'guest' },
 	{ name: 'Member+', value: 'member' },
 	{ name: 'Role Locked', value: 'role' },
@@ -25,6 +26,11 @@ const permChoices = [
 	{ name: 'Sgt+', value: 'mod' },
 	{ name: 'MSgt+', value: 'staff' },
 	{ name: 'Admin Only', value: 'admin' },
+];
+
+const voiceTypeChoices = [
+	{ name: 'VAD', value: 'voice' },
+	{ name: 'PTT Only', value: 'ptt' },
 ];
 
 function sortAndLimitOptions(options, len, search) {
@@ -62,7 +68,8 @@ module.exports = {
 		.addSubcommand(command => command.setName('update').setDescription('Update the permissions for a channel')
 			.addStringOption(option => option.setName('perm').setDescription('Channel Permissions (default=Member)').setRequired(true).setChoices(...permChoices))
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to update').addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice))
-			.addStringOption(option => option.setName('role').setDescription('Channel Role for role locked channels').setAutocomplete(true)))
+			.addStringOption(option => option.setName('role').setDescription('Channel Role for role locked channels').setAutocomplete(true))
+			.addStringOption(option => option.setName('type').setDescription('Voice Type (ignored for text)').setChoices(...voiceTypeChoices)))
 		.addSubcommand(command => command.setName('rename').setDescription('Rename a channel')
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to rename').setRequired(true).addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice))
 			.addStringOption(option => option.setName('name').setDescription('Channel Name').setRequired(true)))
@@ -239,6 +246,7 @@ module.exports = {
 					return interaction.reply({ content: "You do not have permissions to update channel permissions", ephemeral: true });
 
 				let level = interaction.options.getString('perm') ?? 'member';
+				let type = interaction.options.getString('type') ?? null;
 				let roleName = interaction.options.getString('role');
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 				let channelName = channel.name;
@@ -270,7 +278,7 @@ module.exports = {
 					return interaction.reply({ content: "Role must be provided if Channel Permissions is 'role'", ephemeral: true });
 				}
 				await interaction.deferReply({ ephemeral: true });
-				return global.setChannelPerms(interaction.guild, interaction, member, perm, channel, level, category, officerRole, role);
+				return global.setChannelPerms(interaction.guild, interaction, member, perm, channel, type, level, category, officerRole, role);
 			}
 			case 'rename': {
 				if (perm < global.PERM_DIVISION_COMMANDER)
