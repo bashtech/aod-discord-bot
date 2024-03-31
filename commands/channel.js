@@ -270,7 +270,7 @@ module.exports = {
 					return interaction.reply({ content: "Role must be provided if Channel Permissions is 'role'", ephemeral: true });
 				}
 				await interaction.deferReply({ ephemeral: true });
-				return setChannelPerms(interaction.guild, interaction, member, perm, channel, level, category, officerRole, role);
+				return global.setChannelPerms(interaction.guild, interaction, member, perm, channel, level, category, officerRole, role);
 			}
 			case 'rename': {
 				if (perm < global.PERM_DIVISION_COMMANDER)

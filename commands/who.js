@@ -87,14 +87,11 @@ module.exports = {
 				.setStyle(ButtonStyle.Primary);
 			row.addComponents(invite);
 			if (member.permissions.has(PermissionsBitField.Flags.MoveMembers)) {
-				[targetPerm, targetPermName] = getPermissionLevelForMember(targetMember);
-				if (perm >= targetPerm) {
-					const move = new ButtonBuilder()
-						.setCustomId('move_to_me')
-						.setLabel('Move to your channel')
-						.setStyle(ButtonStyle.Danger);
-					row.addComponents(move);
-				}
+				const move = new ButtonBuilder()
+					.setCustomId('move_to_me')
+					.setLabel('Move to your channel')
+					.setStyle(ButtonStyle.Danger);
+				row.addComponents(move);
 			}
 			components.push(row);
 		}

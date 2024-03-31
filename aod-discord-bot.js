@@ -4064,7 +4064,7 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 					//FIXME what what if the member creates mulitple channels?
 					let tempChannelName = `${newMemberState.member.nickname}'s Channel`;
 					let type = 'voice';
-					let level = 'guest';
+					let level = 'member';
 					let category = guild.channels.resolve(newMemberState.channel.parentId);
 					let officerRoleName = category.name + ' ' + config.discordOfficerSuffix;
 					let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
