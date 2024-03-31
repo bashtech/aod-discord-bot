@@ -1076,7 +1076,7 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions,
 						[PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ManageMessages, FlagSetVoiceChannelStatus]);
 				if (targetMember)
-					permissions = addMemberToPermissions(guild, targetMember, permissions, 
+					permissions = addMemberToPermissions(guild, targetMember, permissions,
 						[PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, FlagSetVoiceChannelStatus], []);
 				break;
 			case 'mod':
@@ -1174,9 +1174,9 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 				//add role permissions if necessary
 				if (divisionOfficerRole)
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions,
-						[PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
+						[PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, FlagSetVoiceChannelStatus]);
 				if (targetMember)
-					permissions = addMemberToPermissions(guild, targetMember, permissions, 
+					permissions = addMemberToPermissions(guild, targetMember, permissions,
 						[PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, FlagSetVoiceChannelStatus], []);
 				break;
 		}
@@ -1210,8 +1210,7 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 				type: channelType,
 				name: name,
 				parent: category,
-				permissionOverwrites:
-				permissions,
+				permissionOverwrites: permissions,
 				bitrate: 96000,
 				reason: `Requested by ${getNameFromMessage(message)}`
 			})
@@ -2568,20 +2567,24 @@ function setDiscordIDForForumUser(forumUser, guildMember) {
 	if (forumUser.discordid == guildMember.user.id)
 		return;
 	console.log(`Updating Discord ID for ${forumUser.name} (${forumUser.id}) Discord Tag ${guildMember.user.tag} from '${forumUser.discordid}' to '${guildMember.user.id}'`);
-	let db = connectToDB();
-	//let tag = db.escape(convertDiscordTag(guildMember.user.tag));
-	let query = `UPDATE ${config.mysql.prefix}userfield SET field20="${guildMember.user.id}" WHERE userid=${forumUser.id}`;
-	db.query(query, function(err, rows, fields) {});
+	if (config.devMode !== true) {
+		let db = connectToDB();
+		//let tag = db.escape(convertDiscordTag(guildMember.user.tag));
+		let query = `UPDATE ${config.mysql.prefix}userfield SET field20="${guildMember.user.id}" WHERE userid=${forumUser.id}`;
+		db.query(query, function(err, rows, fields) {});
+	}
 }
 
 function setDiscordTagForForumUser(forumUser, guildMember) {
 	if (forumUser.discordtag == guildMember.user.tag)
 		return;
 	console.log(`Updating Discord Tag for ${forumUser.name} (${forumUser.id}) Discord ID ${guildMember.user.id} from '${forumUser.discordtag}' to '${guildMember.user.tag}'`);
-	let db = connectToDB();
-	let tag = db.escape(convertDiscordTag(guildMember.user.tag));
-	let query = `UPDATE ${config.mysql.prefix}userfield SET field19=${tag} WHERE field20="${guildMember.user.id}" AND userid=${forumUser.id}`;
-	db.query(query, function(err, rows, fields) {});
+	if (config.devMode !== true) {
+		let db = connectToDB();
+		let tag = db.escape(convertDiscordTag(guildMember.user.tag));
+		let query = `UPDATE ${config.mysql.prefix}userfield SET field19=${tag} WHERE field20="${guildMember.user.id}" AND userid=${forumUser.id}`;
+		db.query(query, function(err, rows, fields) {});
+	}
 	forumUser.discordtag = guildMember.user.tag;
 }
 
@@ -2589,28 +2592,35 @@ function setDiscordStatusForForumUser(forumUser, status) {
 	if (forumUser.discordstatus === status)
 		return;
 	console.log(`Updating Discord Status for ${forumUser.name} (${forumUser.id}) from '${forumUser.discordstatus}' to '${status}'`);
-	let db = connectToDB();
-	let query = `UPDATE ${config.mysql.prefix}userfield SET field24='${status}' WHERE userid=${forumUser.id}`;
-	db.query(query, function(err, rows, fields) {});
+	if (config.devMode !== true) {
+		let db = connectToDB();
+		let query = `UPDATE ${config.mysql.prefix}userfield SET field24='${status}' WHERE userid=${forumUser.id}`;
+		db.query(query, function(err, rows, fields) {});
+	}
 	forumUser.discordstatus = status;
 }
 
+const activityInterval_s = 60 * 60; //60 minutes
 function setDiscordActivityForForumUser(forumUser, activityEpochMs) {
-	activityEpoch = '' + (Math.floor((activityEpochMs / 1000) / 21600) * 21600); //6 hour increments to dampen sql updates
+	activityEpoch = '' + (Math.floor((activityEpochMs / 1000) / activityInterval_s) * activityInterval_s);
 	if (forumUser.discordactivity === activityEpoch)
 		return;
 	console.log(`Updating Discord Activity for ${forumUser.name} (${forumUser.id}) from '${forumUser.discordactivity}' to '${activityEpoch}'`);
-	let db = connectToDB();
-	let query = `UPDATE ${config.mysql.prefix}userfield SET field23='${activityEpoch}' WHERE userid=${forumUser.id}`;
-	db.query(query, function(err, rows, fields) {});
+	if (config.devMode !== true) {
+		let db = connectToDB();
+		let query = `UPDATE ${config.mysql.prefix}userfield SET field23='${activityEpoch}' WHERE userid=${forumUser.id}`;
+		db.query(query, function(err, rows, fields) {});
+	}
 	forumUser.discordactivity = activityEpoch;
 }
 
 function clearDiscordDataForForumUser(forumUser) {
 	console.log(`Clearing Discord data for ${forumUser.name} (${forumUser.id})`);
-	let db = connectToDB();
-	let query = `UPDATE ${config.mysql.prefix}userfield SET field19='', field20='', field23='', field24='' WHERE userid=${forumUser.id}`;
-	db.query(query, function(err, rows, fields) {});
+	if (config.devMode !== true) {
+		let db = connectToDB();
+		let query = `UPDATE ${config.mysql.prefix}userfield SET field19='', field20='', field23='', field24='' WHERE userid=${forumUser.id}`;
+		db.query(query, function(err, rows, fields) {});
+	}
 }
 
 function matchGuildRoleName(guildRole) {
@@ -2623,7 +2633,7 @@ function matchGuildMemberTag(guildMember) {
 }
 
 //do forum sync with discord roles
-async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
+async function doForumSync(message, member, guild, perm, doDaily) {
 	var hrStart = process.hrtime();
 	await guild.roles.fetch()
 		.catch(error => { console.log(error); });
@@ -2746,20 +2756,18 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 						if (role.id !== guestRole.id) {
 							removes++;
 							toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
-							if (!checkOnly) {
-								try {
-									await roleMember.roles.remove(role, reason);
-									if (role.id === memberRole.id) {
-										//we're removing them from AOD, clear the name set from the forums
-										await roleMember.setNickname('', reason);
-										//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
-										if (roleMember.roles.cache.get(guestRole.id))
-											await roleMember.roles.remove(guestRole);
-									}
-								} catch (error) {
-									console.error(`Failed to remove ${role.name} from ${roleMember.user.tag}`);
-									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+							try {
+								await roleMember.roles.remove(role, reason);
+								if (role.id === memberRole.id) {
+									//we're removing them from AOD, clear the name set from the forums
+									await roleMember.setNickname('', reason);
+									//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
+									if (roleMember.roles.cache.get(guestRole.id))
+										await roleMember.roles.remove(guestRole);
 								}
+							} catch (error) {
+								console.error(`Failed to remove ${role.name} from ${roleMember.user.tag}`);
+								notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
 							}
 						}
 					} else {
@@ -2769,13 +2777,11 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 								renames++;
 								toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
 							}
-							if (!checkOnly) {
-								try {
-									await roleMember.setNickname(forumUser.name, reason);
-								} catch (error) {
-									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-									continue;
-								}
+							try {
+								await roleMember.setNickname(forumUser.name, reason);
+							} catch (error) {
+								notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+								continue;
 							}
 						}
 						setDiscordTagForForumUser(forumUser, roleMember);
@@ -2793,14 +2799,12 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 							} else {
 								seenByID[roleMember.id] = forumUser;
 							}
-							if (!checkOnly) {
-								if (roleMember.roles.cache.get(guestRole.id)) {
-									try {
-										await roleMember.roles.remove(guestRole);
-									} catch (error) {
-										notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-										continue;
-									}
+							if (roleMember.roles.cache.get(guestRole.id)) {
+								try {
+									await roleMember.roles.remove(guestRole);
+								} catch (error) {
+									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+									continue;
 								}
 							}
 						} else if (role.id === guestRole.id) {
@@ -2810,14 +2814,12 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 							} else {
 								seenByID[roleMember.id] = forumUser;
 							}
-							if (!checkOnly) {
-								if (roleMember.roles.cache.get(memberRole.id)) {
-									try {
-										await roleMember.roles.remove(memberRole);
-									} catch (error) {
-										notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-										continue;
-									}
+							if (roleMember.roles.cache.get(memberRole.id)) {
+								try {
+									await roleMember.roles.remove(memberRole);
+								} catch (error) {
+									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+									continue;
 								}
 							}
 						}
@@ -2855,14 +2857,12 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 									adds++;
 									toAdd.push(`${guildMember.user.tag} (${forumUser.name})`);
 								}
-								if (!checkOnly) {
-									try {
-										await guildMember.roles.add(role, reason);
-									} catch (error) {
-										console.error(`Failed to add ${role.name} to ${guildMember.user.tag}`);
-										notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-										continue;
-									}
+								try {
+									await guildMember.roles.add(role, reason);
+								} catch (error) {
+									console.error(`Failed to add ${role.name} to ${guildMember.user.tag}`);
+									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+									continue;
 								}
 								if (nickNameChanges[guildMember.user.id] === undefined && guildMember.displayName !== forumUser.name) {
 									nickNameChanges[guildMember.user.id] = true;
@@ -2870,14 +2870,12 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 										renames++;
 										toUpdate.push(`${guildMember.user.tag} (${guildMember.displayName} ==> ${forumUser.name})`);
 									}
-									if (!checkOnly) {
-										try {
-											await guildMember.setNickname(forumUser.name, reason);
-										} catch (error) {
-											console.error(`Failed to rename ${guildMember.user.tag} to ${forumUser.name}`);
-											notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-											continue;
-										}
+									try {
+										await guildMember.setNickname(forumUser.name, reason);
+									} catch (error) {
+										console.error(`Failed to rename ${guildMember.user.tag} to ${forumUser.name}`);
+										notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+										continue;
 									}
 								}
 								setDiscordTagForForumUser(forumUser, guildMember);
@@ -2979,7 +2977,7 @@ async function doForumSync(message, member, guild, perm, checkOnly, doDaily) {
 		}
 	}
 
-	if (doDaily === true && misses > 0) {
+	if ((doDaily === true && (misses > 0 || disconnected > 0)) || duplicates > 0) {
 		if (sgtsChannel) {
 			sgtsChannel.send(`The forum sync process found ${misses} members with no discord account, ${disconnected} members who have left the server, and ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
 		}
@@ -3137,9 +3135,6 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
 			break;
 		}
-		case 'check':
-			doForumSync(message, member, guild, perm, true);
-			break;
 		case 'sync':
 			doForumSync(message, member, guild, perm, false);
 			break;
@@ -3774,7 +3769,6 @@ commands = {
 			"*showmap*: Shows the current synchronization map",
 			"*showroles*: Shows the discord roles eligible for integration",
 			"*showforumgroups*: Shows the forum groups eligible for integration",
-			"*check*: Checks for exceptions between forum groups and mapped discord roles",
 			"*sync*: Adds and removes members from discord roles based on forum groups",
 			"*add \"<role>\" \"<group>\"*: Maps the forum <group> to the discord <role>",
 			"*rem \"<role>\" \"<group>\"*: Removes the forum group from the map for the discord <role>",
@@ -4075,7 +4069,7 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 					let officerRoleName = category.name + ' ' + config.discordOfficerSuffix;
 					let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 					let tempChannel = await addChannel(guild, null, newMemberState.member, perm, tempChannelName, type, level,
-							category, officerRole, null, newMemberState.member);
+						category, officerRole, null, newMemberState.member);
 					if (tempChannel) {
 						newMemberState.member.voice.setChannel(tempChannel).catch(error => {});
 						joinToCreateChannels.tempChannels[tempChannel.id] = newMemberState.member.id;
@@ -4261,7 +4255,7 @@ function forumSyncTimerCallback() {
 	if (lastDate !== null && lastDate !== currentDate)
 		doDaily = true;
 	lastDate = currentDate;
-	doForumSync(null, null, guild, PERM_NONE, false, doDaily);
+	doForumSync(null, null, guild, PERM_NONE, doDaily);
 	if (doDaily)
 		guild.members.prune({ days: 14, reason: 'Forum sync timer' })
 		.catch(error => { notifyRequestError(null, null, guild, error, false); });
