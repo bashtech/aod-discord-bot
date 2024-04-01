@@ -4055,16 +4055,12 @@ client.on('interactionCreate', async interaction => {
 		args.shift(); //first is empty
 		commandName = args.shift();
 		command = client.commands.get(commandName);
-		if (!command) {
-			console.error(`${commandName} not found`);
-			return;
-		}
 	} else {
 		commandName = interaction.commandName;
 		command = client.commands.get(interaction.commandName);
 	}
 	if (!command) {
-		console.error(`${interaction.commandName} not found`);
+		console.error(`${commandName} not found`);
 		return;
 	}
 
