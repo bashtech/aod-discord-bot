@@ -1,6 +1,12 @@
 /* jshint esversion: 11 */
 
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const {
+	SlashCommandBuilder,
+	PermissionFlagsBits,
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle
+} = require('discord.js');
 
 function sortAndLimitOptions(options, len, search) {
 	let count = 0;
@@ -52,7 +58,12 @@ module.exports = {
 			.addSubcommand(command => command.setName('remove_subscribable').setDescription('Remove a subscribable Role')
 				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
 			.addSubcommand(command => command.setName('list').setDescription('List managed Roles'))
-			.addSubcommand(command => command.setName('prune').setDescription('Prune Roles that have been manually removed'))),
+			.addSubcommand(command => command.setName('prune').setDescription('Prune Roles that have been manually removed'))
+			.addSubcommand(command => command.setName('button').setDescription('Add a Get Role button to a channel')
+				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true))
+				.addStringOption(option => option.setName('text').setDescription('Descriptive Message'))
+				.addStringOption(option => option.setName('emoji').setDescription('Button Emoji'))
+				.addChannelOption(option => option.setName('channel').setDescription('Channel to send the button to')))),
 	help: true,
 	checkPerm(commandName, perm, parentName) {
 		if (parentName === 'manage')
@@ -110,6 +121,13 @@ module.exports = {
 			case 'remove_subscribable': {
 				if (focusedOption.name === 'role') {
 					let managedRoles = global.getUserRoles(subCommand === 'remove_assignable');
+					return interaction.respond(sortAndLimitOptions(managedRoles, 25, search));
+				}
+				break;
+			}
+			case 'button': {
+				if (focusedOption.name === 'role') {
+					let managedRoles = global.getUserRoles(false);
 					return interaction.respond(sortAndLimitOptions(managedRoles, 25, search));
 				}
 				break;
@@ -176,7 +194,73 @@ module.exports = {
 					let roleName = interaction.options.getString('role');
 					return global.removeManagedRole(interaction, member, interaction.guild, roleName, subCommand === 'remove_assignable');
 				}
+				case 'button': {
+					let roleName = interaction.options.getString('role');
+					let text = interaction.options.getString('text') ?? '';
+					let emoji = interaction.options.getString('emoji') ?? null;
+					let channel = interaction.options.getChannel('channel') ?? interaction.channel;
+					let role = interaction.guild.roles.cache.find(r => { return r.name == roleName; });
+					if (!role || !global.isManageableRole(role)) {
+						return interaction.reply({ content: `Invalid role.`, ephemeral: true });
+					}
+					let managedRoles = global.getUserRoles(false);
+					if (!managedRoles.includes(role.name)) {
+						return interaction.reply({ content: `Invalid role.`, ephemeral: true });
+					}
+
+					if (emoji) {
+						emoji = interaction.client.emojis.resolveIdentifier(emoji);
+						if (!emoji) {
+							return interaction.reply({ content: `Invalid emoji.`, ephemeral: true });
+						}
+					}
+
+					const get_role = new ButtonBuilder()
+						.setCustomId(`::roles::get_role::${role.id}`)
+						.setLabel(`Get ${roleName} Role`)
+						.setStyle(ButtonStyle.Primary);
+					const remove_role = new ButtonBuilder()
+						.setCustomId(`::roles::remove_role::${role.id}`)
+						.setLabel(`Remove ${roleName} Role`)
+						.setStyle(ButtonStyle.Secondary);
+					if (emoji)
+						get_role.setEmoji(emoji);
+					const row = new ActionRowBuilder()
+						.addComponents(get_role, remove_role);
+					interaction.channel.send({
+						content: text,
+						components: [row]
+					});
+				}
 			}
+		}
+	},
+	async button(interaction, member, perm, permName) {
+		let args = interaction.customId.split('::');
+		if (args.length < 4) {
+			return interaction.reply({ content: `Invalid request.`, ephemeral: true });
+		}
+		let type = args[2];
+		let data = args[3];
+		let role = interaction.guild.roles.resolve(data);
+		if (!role || !global.isManageableRole(role)) {
+			return interaction.reply({ content: `Invalid role.`, ephemeral: true });
+		}
+		switch (type) {
+			case 'get_role': {
+				if (member.roles.resolve(data))
+					return interaction.reply({ content: `${role.name} already assigned.`, ephemeral: true });
+				await interaction.deferReply({ ephemeral: true });
+				return addRemoveRole(interaction, interaction.guild, true, role, member);
+			}
+			case 'remove_role': {
+				if (!member.roles.resolve(data))
+					return interaction.reply({ content: `${role.name} not assigned.`, ephemeral: true });
+				await interaction.deferReply({ ephemeral: true });
+				return addRemoveRole(interaction, interaction.guild, false, role, member);
+			}
+			default:
+				return interaction.reply({ content: `Invalid request.`, ephemeral: true });
 		}
 	}
 };

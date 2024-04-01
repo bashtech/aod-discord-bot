@@ -309,24 +309,27 @@ function returnMessage(message, msg) {
 }
 
 //add or remove a role from a guildMember
-async function addRemoveRole(message, guild, add, roleName, isID, member) {
-	if (!guild)
-		return returnMessage(message, "Invalid Guild");
-	var role;
-	if (isID === true)
-		role = guild.roles.resolve(roleName);
-	else
-		role = guild.roles.cache.find(r => { return r.name == roleName; });
+async function addRemoveRole(message, guild, add, roleData, member) {
+	let role;
+	if (typeof(roleData) === 'object') {
+		role = roleData
+	} else {
+		role = guild.roles.resolve(roleData);
+		if (!role) {
+			role = guild.roles.cache.find(r => { return r.name == roleData; });
+		}
+	}
+
 	if (!role)
-		return returnMessage(message, "Invalid Role");
+		return ephemeralReply(message, "Invalid Role");
 	if (!member)
-		return returnMessage(message, "Please mention a valid member of this server");
+		return ephemeralReply(message, "Please mention a valid member of this server");
 
 	let promise = new Promise(function(resolve, reject) {
 		if (add)
 			member.roles.add(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
 			.then(async function() {
-				await returnMessage(message, "Added " + role.name + " to " + member.user.tag);
+				await ephemeralReply(message, "Added " + role.name + " to " + member.user.tag);
 				resolve();
 			})
 			.catch(error => {
@@ -336,7 +339,7 @@ async function addRemoveRole(message, guild, add, roleName, isID, member) {
 		else
 			member.roles.remove(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
 			.then(async function() {
-				await returnMessage(message, "Removed " + role.name + " from " + member.user.tag);
+				await ephemeralReply(message, "Removed " + role.name + " from " + member.user.tag);
 				resolve();
 			})
 			.catch(error => {
@@ -346,6 +349,7 @@ async function addRemoveRole(message, guild, add, roleName, isID, member) {
 	});
 	return promise;
 }
+global.addRemoveRole = addRemoveRole;
 
 function getStringForPermission(perm) {
 	switch (perm) {
@@ -1038,12 +1042,12 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 
 //aod command processing
 function commandSetAOD(message, member, cmd, args, guild, perm, permName, isDM) {
-	return addRemoveRole(message, guild, cmd === 'addaod', config.memberRole, false, getMemberFromMessageOrArgs(guild, message, args));
+	return addRemoveRole(message, guild, cmd === 'addaod', config.memberRole, getMemberFromMessageOrArgs(guild, message, args));
 }
 
 //guest command processing
 function commandSetGuest(message, member, cmd, args, guild, perm, permName, isDM) {
-	return addRemoveRole(message, guild, cmd === 'addguest', config.guestRole, false, getMemberFromMessageOrArgs(guild, message, args));
+	return addRemoveRole(message, guild, cmd === 'addguest', config.guestRole, getMemberFromMessageOrArgs(guild, message, args));
 }
 
 //purge command processing
@@ -1843,7 +1847,7 @@ async function subUnsubRole(message, member, guild, targetMember, assign, sub, r
 		else
 			return ephemeralReply(message, `Role ${roleName} is not subscribable`);
 	}
-	return addRemoveRole(message, guild, sub, config.roleID, true, targetMember);
+	return addRemoveRole(message, guild, sub, config.roleID, targetMember);
 }
 global.subUnsubRole = subUnsubRole;
 
@@ -1959,7 +1963,7 @@ function isManageableRole(role) {
 		return false;
 	if (role.name == config.memberRole)
 		return false;
-	if (role === guild.roles.everyone)
+	if (role === role.guild.roles.everyone)
 		return false;
 	return true;
 }
@@ -2373,7 +2377,7 @@ function commandMute(message, member, cmd, args, guild, perm, permName, isDM) {
 	var [memberPerm, memberPermName] = getPermissionLevelForMember(targetMember);
 	if (perm <= memberPerm)
 		return message.reply(`You cannot mute ${targetMember.user.tag}.`);
-	return addRemoveRole(message, guild, cmd === 'mute', config.muteRole, false, targetMember);
+	return addRemoveRole(message, guild, cmd === 'mute', config.muteRole, targetMember);
 }
 
 function commandPTT(message, member, cmd, args, guild, perm, permName, isDM) {
@@ -2383,7 +2387,7 @@ function commandPTT(message, member, cmd, args, guild, perm, permName, isDM) {
 	var [memberPerm, memberPermName] = getPermissionLevelForMember(targetMember);
 	if (perm <= memberPerm)
 		return message.reply(`You cannot make ${targetMember.user.tag} PTT.`);
-	return addRemoveRole(message, guild, cmd === 'setptt', config.pttRole, false, targetMember);
+	return addRemoveRole(message, guild, cmd === 'setptt', config.pttRole, targetMember);
 }
 
 //kick command processing
@@ -3444,7 +3448,7 @@ function commandRelayDm(message, member, cmd, args, guild, perm, permName, isDM)
 
 //admin command processing
 function commandSetAdmin(message, member, cmd, args, guild, perm, permName, isDM) {
-	addRemoveRole(message, guild, cmd === 'addadmin', 'Admin', false, getMemberFromMessageOrArgs(guild, message, args));
+	addRemoveRole(message, guild, cmd === 'addadmin', 'Admin', getMemberFromMessageOrArgs(guild, message, args));
 }
 
 //reload command processing
@@ -4037,12 +4041,28 @@ for (const file of commandFiles) {
 	client.commands.set(command.data.name, command);
 }
 client.on('interactionCreate', async interaction => {
+	let command;
+	let commandName;
 	if (interaction.isButton()) {
-		//buttons handled through collectors
-		return;
+		if (!interaction.customId.startsWith('::')) {
+			//generic buttons handled through collectors
+			return;
+		}
+		let args = interaction.customId.split('::');
+		if (args.length < 3) {
+			return;
+		}
+		args.shift(); //first is empty
+		commandName = args.shift();
+		command = client.commands.get(commandName);
+		if (!command) {
+			console.error(`${commandName} not found`);
+			return;
+		}
+	} else {
+		commandName = interaction.commandName;
+		command = client.commands.get(interaction.commandName);
 	}
-
-	const command = client.commands.get(interaction.commandName);
 	if (!command) {
 		console.error(`${interaction.commandName} not found`);
 		return;
@@ -4088,6 +4108,18 @@ client.on('interactionCreate', async interaction => {
 			if (!interaction.responded)
 				interaction.respond([]);
 		}
+	} else if (interaction.isButton()) {
+		try {
+			await command.button(interaction, member, perm, permName);
+			if (!interaction.replied)
+				sendInteractionReply(interaction, { content: "Done", ephemeral: true });
+		} catch (error) {
+			console.error(error);
+			try {
+				sendInteractionReply(interaction, { content: 'There was an error processing this action.', ephemeral: true });
+			} catch (error) {}
+		}
+		return;
 	} else {
 		try {
 			console.error(`Unknown interaction type ${interaction.type}`);
@@ -4285,7 +4317,7 @@ function checkAddDependentRoles(guild, role, member) {
 			}
 			if (add) {
 				//all roles are present
-				addRemoveRole(null, guild, true, potentialRoleIDs[i], true, member);
+				addRemoveRole(null, guild, true, potentialRoleIDs[i], member);
 			}
 		}
 	}
@@ -4300,7 +4332,7 @@ function checkRemoveDependentRoles(guild, role, member) {
 				//recursive remove???
 				continue;
 			}
-			addRemoveRole(null, guild, false, requiredForIDs[i], true, member);
+			addRemoveRole(null, guild, false, requiredForIDs[i], member);
 		}
 	}
 }
