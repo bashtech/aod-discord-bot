@@ -12,7 +12,15 @@
 require("esm-hook");
 
 //include discord.js
-const { Client, GatewayIntentBits, Partials, ChannelType, PermissionsBitField, Collection, InteractionType } = require('discord.js');
+const {
+	Client,
+	GatewayIntentBits,
+	Partials,
+	ChannelType,
+	PermissionsBitField,
+	Collection,
+	InteractionType
+} = require('discord.js');
 
 //include node-fetch using esm-hook
 const fetch = require('node-fetch').default;
@@ -4040,8 +4048,21 @@ client.on('interactionCreate', async interaction => {
 		return;
 	}
 
-	let member = interaction.member;
-	[perm, permName] = getPermissionLevelForMember(member);
+	let member;
+	if (!interaction.inGuild()) {
+		interaction.reply("Not supported");
+		return;
+		/*let guild = client.guilds.resolve(config.guildId);
+		member = guild.members.resolve(interaction.user.id);
+		if (!member) {
+			interaction.reply("You are not a member of the AOD server.");
+			return;
+		}*/
+		//FIXME interaction.guild and interaction.member are readonly
+	} else {
+		member = interaction.member;
+	}
+	let [perm, permName] = getPermissionLevelForMember(member);
 
 	//console.log([interaction, command]);
 	interaction.isInteraction = true;

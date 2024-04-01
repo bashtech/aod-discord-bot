@@ -16,6 +16,9 @@ module.exports = {
 		.setDescription('Get information about a member')
 		.addUserOption(option => option.setName('user').setDescription('User').setRequired(true)),
 	help: true,
+	checkPerm(commandName, perm, parentName) {
+		return perm >= global.PERM_MEMBER;
+	},
 	async execute(interaction, member, perm, permName) {
 		if (perm < global.PERM_MEMBER) {
 			return interaction.reply('You do not have permissions to use this command.');

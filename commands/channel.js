@@ -76,6 +76,22 @@ module.exports = {
 		.addSubcommand(command => command.setName('move').setDescription('Move a channel')
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to move').setRequired(true))),
 	help: true,
+	checkPerm(commandName, perm) {
+		switch (commandName) {
+			case 'channel':
+			case 'topic':
+				return perm >= global.PERM_MEMBER;
+			case 'add':
+				return perm >= global.PERM_RECRUITER;
+			case 'delete':
+			case 'rename':
+			case 'move':
+				return perm >= global.PERM_DIVISION_COMMANDER;
+			case 'update':
+				return perm >= global.PERM_STAFF;
+		}
+		return false;
+	},
 	async autocomplete(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);

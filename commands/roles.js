@@ -54,6 +54,23 @@ module.exports = {
 			.addSubcommand(command => command.setName('list').setDescription('List managed Roles'))
 			.addSubcommand(command => command.setName('prune').setDescription('Prune Roles that have been manually removed'))),
 	help: true,
+	checkPerm(commandName, perm, parentName) {
+		if (parentName === 'manage')
+			return perm >= global.PERM_STAFF;
+		switch (commandName) {
+			case 'roles':
+			case 'sub':
+			case 'unsub':
+			case 'list':
+				return perm >= global.PERM_NONE;
+			case 'assign':
+			case 'unassign':
+			case 'list_user':
+			case 'members':
+				return perm >= global.PERM_MOD;
+		}
+		return false;
+	},
 	async autocomplete(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);
@@ -134,7 +151,7 @@ module.exports = {
 				}
 			}
 		} else if (commandGroup === 'manage') {
-			if (perm < global.PERM_MOD)
+			if (perm < global.PERM_STAFF)
 				return interaction.reply({ content: "You do not have permissions to change managed roles", ephemeral: true });
 			await interaction.deferReply({ ephemeral: true });
 			switch (subCommand) {

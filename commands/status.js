@@ -8,6 +8,9 @@ module.exports = {
 		.setDescription('AOD bot status')
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	help: true,
+	checkPerm(commandName, perm, parentName) {
+		return perm >= global.PERM_ADMIN;
+	},
 	async execute(interaction, member, perm, permName) {
 		let uptimeSeconds = Math.round(interaction.client.uptime / 1000);
 		let now = new Date();
