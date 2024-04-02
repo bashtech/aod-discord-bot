@@ -295,7 +295,7 @@ function ephemeralReply(message, msg) {
 	return promise;
 }
 
-function returnMessage(message, msg) {
+function messageReply(message, msg) {
 	if (message) {
 		if (message.isInteraction)
 			return sendInteractionReply(message, msg);
@@ -309,10 +309,10 @@ function returnMessage(message, msg) {
 }
 
 //add or remove a role from a guildMember
-async function addRemoveRole(message, guild, add, roleData, member) {
+async function addRemoveRole(message, guild, add, roleData, member, assigned) {
 	let role;
 	if (typeof(roleData) === 'object') {
-		role = roleData
+		role = roleData;
 	} else {
 		role = guild.roles.resolve(roleData);
 		if (!role) {
@@ -329,7 +329,10 @@ async function addRemoveRole(message, guild, add, roleData, member) {
 		if (add)
 			member.roles.add(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
 			.then(async function() {
-				await ephemeralReply(message, "Added " + role.name + " to " + member.user.tag);
+				if (assigned === true)
+					await messageReply(message, `Added ${role.name} to ${member}`);
+				else
+					await ephemeralReply(message, `Added ${role.name} to ${member}`);
 				resolve();
 			})
 			.catch(error => {
@@ -339,7 +342,10 @@ async function addRemoveRole(message, guild, add, roleData, member) {
 		else
 			member.roles.remove(role, (message ? `Requested by ${getNameFromMessage(message)}` : 'Automated action'))
 			.then(async function() {
-				await ephemeralReply(message, "Removed " + role.name + " from " + member.user.tag);
+				if (assigned === true)
+					await messageReply(message, `Removed ${role.name} from ${member}`);
+				else
+					await ephemeralReply(message, `Removed ${role.name} from ${member}`);
 				resolve();
 			})
 			.catch(error => {
@@ -1042,12 +1048,12 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 
 //aod command processing
 function commandSetAOD(message, member, cmd, args, guild, perm, permName, isDM) {
-	return addRemoveRole(message, guild, cmd === 'addaod', config.memberRole, getMemberFromMessageOrArgs(guild, message, args));
+	return addRemoveRole(message, guild, cmd === 'addaod', config.memberRole, getMemberFromMessageOrArgs(guild, message, args), true);
 }
 
 //guest command processing
 function commandSetGuest(message, member, cmd, args, guild, perm, permName, isDM) {
-	return addRemoveRole(message, guild, cmd === 'addguest', config.guestRole, getMemberFromMessageOrArgs(guild, message, args));
+	return addRemoveRole(message, guild, cmd === 'addguest', config.guestRole, getMemberFromMessageOrArgs(guild, message, args), true);
 }
 
 //purge command processing
@@ -2377,7 +2383,7 @@ function commandMute(message, member, cmd, args, guild, perm, permName, isDM) {
 	var [memberPerm, memberPermName] = getPermissionLevelForMember(targetMember);
 	if (perm <= memberPerm)
 		return message.reply(`You cannot mute ${targetMember.user.tag}.`);
-	return addRemoveRole(message, guild, cmd === 'mute', config.muteRole, targetMember);
+	return addRemoveRole(message, guild, cmd === 'mute', config.muteRole, targetMember, true);
 }
 
 function commandPTT(message, member, cmd, args, guild, perm, permName, isDM) {
@@ -2387,7 +2393,7 @@ function commandPTT(message, member, cmd, args, guild, perm, permName, isDM) {
 	var [memberPerm, memberPermName] = getPermissionLevelForMember(targetMember);
 	if (perm <= memberPerm)
 		return message.reply(`You cannot make ${targetMember.user.tag} PTT.`);
-	return addRemoveRole(message, guild, cmd === 'setptt', config.pttRole, targetMember);
+	return addRemoveRole(message, guild, cmd === 'setptt', config.pttRole, targetMember, true);
 }
 
 //kick command processing
@@ -3448,7 +3454,7 @@ function commandRelayDm(message, member, cmd, args, guild, perm, permName, isDM)
 
 //admin command processing
 function commandSetAdmin(message, member, cmd, args, guild, perm, permName, isDM) {
-	addRemoveRole(message, guild, cmd === 'addadmin', 'Admin', getMemberFromMessageOrArgs(guild, message, args));
+	addRemoveRole(message, guild, cmd === 'addadmin', 'Admin', getMemberFromMessageOrArgs(guild, message, args), true);
 }
 
 //reload command processing
@@ -4313,7 +4319,7 @@ function checkAddDependentRoles(guild, role, member) {
 			}
 			if (add) {
 				//all roles are present
-				addRemoveRole(null, guild, true, potentialRoleIDs[i], member);
+				addRemoveRole(null, guild, true, potentialRoleIDs[i], member, true);
 			}
 		}
 	}
@@ -4328,7 +4334,7 @@ function checkRemoveDependentRoles(guild, role, member) {
 				//recursive remove???
 				continue;
 			}
-			addRemoveRole(null, guild, false, requiredForIDs[i], member);
+			addRemoveRole(null, guild, false, requiredForIDs[i], member, true);
 		}
 	}
 }
