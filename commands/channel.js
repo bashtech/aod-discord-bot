@@ -131,9 +131,16 @@ module.exports = {
 					if (perm < global.PERM_STAFF && category.children.size >= config.maxChannelsPerCategory)
 						return interaction.reply({ content: "Category is full", ephemeral: true });
 
-					let prefix = category.name.toLowerCase().replace(/\s/g, '-') + '-';
+					let prefix;
+					let divisions = await global.getDivisionsFromTracker();
+					let divisionData = divisions[category.name];
+					if (typeof(divisionData) !== 'undefined') {
+						prefix = divisionData.abbreviation;
+					} else {
+						prefix = category.name.toLowerCase().replace(/\s/g, '-');
+					}
 					if (name.indexOf(prefix) < 0)
-						name = prefix + name;
+						name = prefix + '-' + name;
 				} else {
 					if (type === 'text')
 						return interaction.reply({ content: "A category must be set for text channels", ephemeral: true });
@@ -315,9 +322,17 @@ module.exports = {
 					let officerRole = interaction.guild.roles.cache.find(r => { return r.name == officerRoleName; });
 					if (perm == global.PERM_DIVISION_COMMANDER && (!officerRole || !member.roles.cache.get(officerRole.id)))
 						return interaction.reply({ content: 'You can only rename channels from a division you command', ephemeral: true });
-					let divisionPrefix = category.name.toLowerCase().replace(/\s/g, '-');
-					if (!name.startsWith(divisionPrefix))
-						name = divisionPrefix + '-' + name;
+
+					let prefix;
+					let divisions = await global.getDivisionsFromTracker();
+					let divisionData = divisions[category.name];
+					if (typeof(divisionData) !== 'undefined') {
+						prefix = divisionData.abbreviation;
+					} else {
+						prefix = category.name.toLowerCase().replace(/\s/g, '-');
+					}
+					if (!name.startsWith(prefix))
+						name = prefix + '-' + name;
 				} else {
 					if (perm < PERM_STAFF)
 						return interaction.reply({ content: 'You cannot rename this channel', ephemeral: true });

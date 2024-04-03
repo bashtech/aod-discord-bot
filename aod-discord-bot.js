@@ -294,6 +294,7 @@ function ephemeralReply(message, msg) {
 	});
 	return promise;
 }
+global.ephemeralReply = ephemeralReply;
 
 function messageReply(message, msg) {
 	if (message) {
@@ -1285,13 +1286,14 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 global.addChannel = addChannel;
 
 //voice command processing
-function commandAddChannel(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandAddChannel(message, member, cmd, args, guild, perm, permName, isDM) {
 	let channelCategory;
 	let divisionOfficerRole;
 
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
 
+	let prefix = '';
 	if ((channelCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == args[0].toLowerCase() && c.type == ChannelType.GuildCategory); }))) {
 		//check if this category has an associated officer role
 		let roleName = channelCategory.name + ' ' + config.discordOfficerSuffix;
@@ -1306,6 +1308,14 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 		if (perm < PERM_ADMIN && channelCategory.children.size >= config.maxChannelsPerCategory)
 			return message.reply("Category is full");
 		args.shift();
+
+		let divisions = await global.getDivisionsFromTracker();
+		let divisionData = divisions[channelCategory.name];
+		if (divisionData !== undefined) {
+			prefix = divisionData.abbreviation;
+		} else {
+			prefix = channelCategory.name.toLowerCase().replace(/\s/g, '-');
+		}
 	} else {
 		if (cmd === 'text')
 			return message.reply("A category must be set for text channels");
@@ -1313,6 +1323,7 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 		channelCategory = guild.channels.cache.find(c => { return c.name == config.tempChannelCategory; });
 		if (!channelCategory)
 			return message.reply("Temp channel category not found");
+		prefix = channelCategory.name.toLowerCase().replace(/\s/g, '-');
 	}
 
 	if (args[0] === undefined)
@@ -1345,13 +1356,9 @@ function commandAddChannel(message, member, cmd, args, guild, perm, permName, is
 
 	//check for existing channel
 	let channelName = args.join(' ').toLowerCase().replace(/\s/g, '-');
-	if (channelCategory) {
-		let channelPrefix = channelCategory.name.toLowerCase().replace(/\s/g, '-') + '-';
-		if (channelName.indexOf(channelPrefix) < 0)
-			channelName = channelPrefix + channelName;
-	}
 	if (channelName === undefined || channelName == '')
 		return message.reply("A name must be provided");
+	channelName = prefix + '-' + channelName;
 
 	let existingChannel = guild.channels.cache.find(c => { return c.name == channelName; });
 	if (existingChannel)
@@ -1481,7 +1488,7 @@ function commandRemChannel(message, member, cmd, args, guild, perm, permName, is
 }
 
 //rename channel command processing
-function commandRenameChannel(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandRenameChannel(message, member, cmd, args, guild, perm, permName, isDM) {
 	if (args.length <= 0)
 		return message.reply("A name must be provided");
 
@@ -1516,9 +1523,19 @@ function commandRenameChannel(message, member, cmd, args, guild, perm, permName,
 		divisionOfficerRole = guild.roles.cache.find(r => { return r.name == roleName; });
 		if (perm == PERM_DIVISION_COMMANDER && (!divisionOfficerRole || !member.roles.cache.get(divisionOfficerRole.id)))
 			return message.reply("You may only rename channels from a division you command");
-		let divisionPrefix = channelCategory.name.toLowerCase().replace(/\s/g, '-');
-		if (!newName.startsWith(divisionPrefix))
-			newName = divisionPrefix + '-' + newName;
+
+		let prefix;
+		let divisions = await global.getDivisionsFromTracker();
+		let divisionData = divisions[channelCategory.name];
+		if (divisionData !== undefined) {
+			prefix = divisionData.abbreviation;
+		} else {
+			prefix = channelCategory.name.toLowerCase().replace(/\s/g, '-');
+		}
+
+		if (!newName.startsWith(prefix)) {
+			newName = prefix + '-' + newName;
+		}
 	} else {
 		if (perm < PERM_STAFF)
 			return message.reply("You may not rename this channel");
@@ -1601,25 +1618,72 @@ function getWebhookFromAPI(webhookID)
 }
 */
 
-//adddivision command processing
-async function commandAddDivision(message, member, cmd, args, guild, perm, permName, isDM) {
-	let divisionName = args.join(' ');
-	if (divisionName === undefined || divisionName == '')
-		return message.reply("A name must be provided");
+var _divisions;
+var _lastDivisionsRefresh;
+async function getDivisionsFromTracker() {
+	let promise = new Promise(async function(resolve, reject) {
+		let now = new Date();
+		if (_divisions && ((now - _lastDivisionsRefresh) < (60 * 1000))) {
+			//only refresh once per minute
+			resolve(_divisions);
+		}
+		try {
+			let response = await fetch(`${config.trackerAPIURL}/divisions`, {
+				method: 'get',
+				headers: {
+					'User-Agent': 'Discord Bot',
+					'Accept': 'application/json',
+					'Authorization': `Bearer ${config.trackerAPIToken}`
+				}
+			});
+			let body = await response.json();
+			if (body.data !== undefined) {
+				_divisions = {};
+				_lastDivisionsRefresh = now;
+				let len = body.data.length;
+				for (i = 0; i < len; i++) {
+					let division = body.data[i];
+					_divisions[division.name] = {
+						abbreviation: division.abbreviation,
+						forum_app_id: division.forum_app_id
+					};
+				}
+			}
+			resolve(_divisions);
+		} catch (e) {
+			console.log(e);
+			resolve(_divisions);
+		}
+	});
+	return promise;
+}
+global.getDivisionsFromTracker = getDivisionsFromTracker;
+
+async function addDivision(message, member, perm, guild, divisionName) {
 	let officerRoleName = divisionName + ' ' + config.discordOfficerSuffix;
 	let lcName = divisionName.toLowerCase();
 	let simpleName = lcName.replace(/\s/g, '-');
-	let divisionMembersChannel = simpleName + '-members';
-	let divisionOfficersChannel = simpleName + '-officers';
-	let divisionPublicChannel = simpleName + '-public';
-	let divisionMemberVoiceChannel = simpleName + '-member-voip';
 
 	var divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == ChannelType.GuildCategory); });
 	if (divisionCategory)
-		return message.reply("Division already exists.").catch(() => {});
+		return ephemeralReply(message, "Division category already exists.");
 	var divisionOfficerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 	if (divisionOfficerRole)
-		return message.reply("Division already exists.").catch(() => {});
+		return ephemeralReply(message, "Division officer role already exists.");
+
+	let prefix = simpleName;
+	let divisions = await getDivisionsFromTracker();
+	let divisionData = divisions[divisionName];
+	if (divisionData === undefined) {
+		await ephemeralReply(message, `:warning: ${divisionName} is not defined on the tracker`);
+	} else {
+		prefix = divisionData.abbreviation;
+	}
+
+	let divisionMembersChannel = prefix + '-members';
+	let divisionOfficersChannel = prefix + '-officers';
+	let divisionPublicChannel = prefix + '-public';
+	let divisionMemberVoiceChannel = prefix + '-member-voip';
 
 	try {
 		//create officers role
@@ -1684,27 +1748,40 @@ async function commandAddDivision(message, member, cmd, args, guild, perm, permN
 
 		addForumSyncMap(message, guild, officerRoleName, divisionName + ' ' + config.forumOfficerSuffix);
 
-		return message.reply(`${divisionName} division added`).catch(() => {});
+		return ephemeralReply(message, `${divisionName} division added`);
 	} catch (error) {
 		notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-		return message.reply(`Failed to add ${divisionName} division`).catch(() => {});
+		return ephemeralReply(message, `Failed to add ${divisionName} division`);
 	}
 }
+global.addDivision = addDivision;
 
-//remdivision command processing
-async function commandRemDivision(message, member, cmd, args, guild, perm, permName, isDM) {
+//adddivision command processing
+function commandAddDivision(message, member, cmd, args, guild, perm, permName, isDM) {
 	let divisionName = args.join(' ');
 	if (divisionName === undefined || divisionName == '')
-		return message.reply("A name must be provided");
+		return ephemeralReply(message, "A name must be provided");
+	return addDivision(message, member, perm, guild, divisionName);
+}
+
+async function deleteDivision(message, member, perm, guild, divisionName) {
 	let officerRoleName = divisionName + ' ' + config.discordOfficerSuffix;
+
+	let divisions = await getDivisionsFromTracker();
+	let divisionData = divisions[divisionName];
+	if (divisionData === undefined) {
+		await ephemeralReply(message, `:warning: ${divisionName} is not defined on the tracker`);
+	} else {
+		prefix = divisionData.abbreviation;
+	}
 
 	const divisionCategory = guild.channels.cache.find(c => { return (c.name == divisionName && c.type === ChannelType.GuildCategory); });
 	if (divisionCategory) {
 		if (config.protectedCategories.includes(divisionCategory.name))
-			return message.reply(`${divisionName} is a protected category.`);
+			return ephemeralReply(message, `${divisionName} is a protected category.`);
 
 		//remove channels in category
-		for (var c of divisionCategory.children.cache.values()) {
+		for (let c of divisionCategory.children.cache.values()) {
 			try {
 				await c.setParent(null, `Requested by ${getNameFromMessage(message)}`);
 				await c.delete(`Requested by ${getNameFromMessage(message)}`);
@@ -1720,25 +1797,37 @@ async function commandRemDivision(message, member, cmd, args, guild, perm, permN
 			notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
 		}
 
-		//remove role
-		const role = guild.roles.cache.find(r => { return r.name == officerRoleName; });
-		if (role) {
-			try {
-				await role.delete(`Requested by ${getNameFromMessage(message)}`);
-			} catch (error) {
-				notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-			}
-		}
-
-		if (forumIntegrationConfig[officerRoleName] !== undefined) {
-			delete(forumIntegrationConfig[officerRoleName]);
-			fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
-			getRolesByForumGroup(guild, true);
-		}
-		return message.reply(`${divisionName} division removed`);
+		await ephemeralReply(message, `${divisionName} category removed`);
 	} else {
-		return message.reply(`${divisionName} division not found`);
+		await ephemeralReply(message, `${divisionName} category not found`);
 	}
+
+	const role = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+	if (role) {
+		try {
+			await role.delete(`Requested by ${getNameFromMessage(message)}`);
+		} catch (error) {
+			notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+		}
+		await ephemeralReply(message, `${officerRoleName} role removed`);
+	} else {
+		await ephemeralReply(message, `${officerRoleName} role not found`);
+	}
+
+	if (forumIntegrationConfig[officerRoleName] !== undefined) {
+		delete(forumIntegrationConfig[officerRoleName]);
+		fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
+		getRolesByForumGroup(guild, true);
+	}
+}
+global.deleteDivision = deleteDivision;
+
+//remdivision command processing
+async function commandRemDivision(message, member, cmd, args, guild, perm, permName, isDM) {
+	let divisionName = args.join(' ');
+	if (divisionName === undefined || divisionName == '')
+		return message.reply("A name must be provided");
+	return deleteDivision(message, member, perm, guild, divisionName);
 }
 
 function escapeNameCharacter(ch) {
@@ -3072,18 +3161,14 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 function addForumSyncMap(message, guild, roleName, groupName) {
 	const role = guild.roles.cache.find(r => { return r.name == roleName; });
 	if (!role)
-		return message.reply(`${roleName} role not found`);
+		return ephemeralReply(message, `${roleName} role not found`);
 	let map = forumIntegrationConfig[role.name];
 	if (map && map.permanent)
-		return message.reply(`${roleName} can not be edited`);
+		return ephemeralReply(message, `${roleName} can not be edited`);
 
 	getForumGroups()
 		.then(forumGroups => {
-			var forumGroupId = parseInt(Object.keys(forumGroups).find(k => {
-				if (forumGroups[k] !== groupName)
-					return false;
-				return true;
-			}), 10);
+			var forumGroupId = parseInt(Object.keys(forumGroups).find(k => forumGroups[k] === groupName), 10);
 			if (forumGroupId !== undefined && !isNaN(forumGroupId)) {
 				//don't use the version from our closure to prevent asynchronous stuff from causing problems
 				let map = forumIntegrationConfig[role.name];
@@ -3095,20 +3180,20 @@ function addForumSyncMap(message, guild, roleName, groupName) {
 					};
 					fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
 					getRolesByForumGroup(guild, true);
-					return message.reply(`Mapped group ${groupName} to role ${role.name}`);
+					return ephemeralReply(message, `Mapped group ${groupName} to role ${role.name}`);
 				} else {
 					let index = map.forumGroups.indexOf(forumGroupId);
 					if (index < 0) {
 						map.forumGroups.push(forumGroupId);
 						fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
 						getRolesByForumGroup(guild, true);
-						return message.reply(`Mapped group ${groupName} to role ${role.name}`);
+						return ephemeralReply(message, `Mapped group ${groupName} to role ${role.name}`);
 					} else {
-						return message.reply('Map already exists');
+						return ephemeralReply(message, 'Map already exists');
 					}
 				}
 			} else {
-				return message.reply(`${groupName} group not found`);
+				return ephemeralReply(message, `${groupName} forum group not found`);
 			}
 		})
 		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
@@ -3543,27 +3628,11 @@ function commandSlap(message, member, cmd, args, guild, perm, permName, isDM) {
 async function commandTest(message, member, cmd, args, guild, perm, permName, isDM) {
 	//console.log("test:" + args.join(' '));
 	//message.reply("test: " + args.join(' '));
-
 	/*
-	const muteRole = guild.roles.cache.find(r => { return r.name == config.muteRole; });
-	if (muteRole) {
-		guild.channels.cache.each(async function(c) {
-			if (c.type === ChannelType.GuildText || c.type === ChannelType.GuildVoice) {
-				await c.permissionOverwrites.create(muteRole, {
-					SendMessages: false,
-					CreatePublicThreads: false,
-					CreatePrivateThreads: false,
-					SendMessagesInThreads: false,
-					SendTTSMessages: false,
-					Speak: false,
-					RequestToSpeak: false,
-					AddReactions: false,
-					UseExternalEmojis: false
-				});
-				console.log(`Updated Muted for ${c.name}`);
-			}
-		});
-	}*/
+	let divisions = await getDivisionsFromTracker();
+	console.log(divisions);
+	message.reply('done');
+	*/
 }
 
 //command definitions
