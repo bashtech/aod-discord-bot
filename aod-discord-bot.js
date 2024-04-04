@@ -1645,7 +1645,8 @@ async function getDivisionsFromTracker() {
 					let division = body.data[i];
 					_divisions[division.name] = {
 						abbreviation: division.abbreviation,
-						forum_app_id: division.forum_app_id
+						forum_app_id: division.forum_app_id,
+						officers_channel: division.officers_channel
 					};
 				}
 			}
@@ -2807,9 +2808,11 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 	let adds = 0,
 		removes = 0,
 		renames = 0,
-		misses = 0,
-		disconnected = 0,
-		duplicates = 0;
+		duplicates = 0,
+		total_misses = 0,
+		total_disconnected = 0,
+		misses = {},
+		disconnected = {};
 
 	let nickNameChanges = {};
 	let forumGroups;
@@ -2862,12 +2865,12 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 	let localVoiceStatusUpdates = voiceStatusUpdates;
 	voiceStatusUpdates = {};
 
-	var seenByID = {}; //make sure we don't have users added as both guest and member
-	for (var roleName in forumIntegrationConfig) {
+	let seenByID = {}; //make sure we don't have users added as both guest and member
+	for (let roleName in forumIntegrationConfig) {
 		if (forumIntegrationConfig.hasOwnProperty(roleName)) {
-			var groupMap = forumIntegrationConfig[roleName];
+			let groupMap = forumIntegrationConfig[roleName];
 
-			var role;
+			let role;
 			if (groupMap.roleID === undefined) {
 				//make sure we actually have the roleID in our structure
 				role = guild.roles.cache.find(matchGuildRoleName, roleName);
@@ -3050,11 +3053,17 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 							} else {
 								if (role.id === memberRole.id) {
 									if (forumUser.indexIsId) {
-										disconnected++;
+										if (disconnected[forumUser.division] === undefined)
+											disconnected[forumUser.division] = 0;
+										disconnected[forumUser.division]++;
+										total_disconnected++;
 										leftServer.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
 										setDiscordStatusForForumUser(forumUser, 'disconnected');
 									} else {
-										misses++;
+										if (misses[forumUser.division] === undefined)
+											misses[forumUser.division] = 0;
+										misses[forumUser.division]++;
+										total_misses++;
 										noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
 										setDiscordStatusForForumUser(forumUser, 'never_connected');
 									}
@@ -3140,15 +3149,39 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 		}
 	}
 
-	if ((doDaily === true && (misses > 0 || disconnected > 0)) || duplicates > 0) {
+	//notifications
+	if (doDaily) {
+		let divisions = await global.getDivisionsFromTracker();
+		for (const divisionName in divisions) {
+			if (divisions.hasOwnProperty(divisionName)) {
+				if (misses[divisionName] || disconnected[divisionName]) {
+					const divivisionData = divisions[divisionName];
+					let division_misses = misses[divisionName] ?? 0;
+					let division_disconnected = disconnected[divisionName] ?? 0;
+					let officers_channel = guild.channels.cache.find(c => c.name === divivisionData.officers_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
+					if (officers_channel) {
+						officers_channel.send(`${divisionName} Division: ` +
+							`The forum sync process found ${division_misses} members with no discord account and ` +
+							`${division_disconnected} members who have left the server. ` +
+							`Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status`).catch(() => {});
+					}
+				}
+			}
+		}
+		date = new Date();
+		sgtsChannel.send(`The time is ${date.toISOString()}... Is it time to go to bed?`);
+	}
+	if (duplicates > 0) {
 		if (sgtsChannel) {
-			sgtsChannel.send(`The forum sync process found ${misses} members with no discord account, ${disconnected} members who have left the server, and ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
+			sgtsChannel.send(`The forum sync process found ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
 		}
 	}
 
 	let hrEnd = process.hrtime(hrStart);
 	let hrEndS = sprintf('%.3f', (hrEnd[0] + hrEnd[1] / 1000000000));
-	let msg = `Forum Sync Processing Time: ${hrEndS}s; ${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${misses} members with no discord account, ${disconnected} members who have left the server, ${duplicates} duplicate tags`;
+	let msg = `Forum Sync Processing Time: ${hrEndS}s; ` +
+		`${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${total_misses} members with no discord account, ` +
+		`${total_disconnected} members who have left the server, ${duplicates} duplicate tags`;
 	if (message)
 		sendReplyToMessageAuthor(message, member, msg);
 	if (message || adds || removes || renames)
