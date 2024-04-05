@@ -42,6 +42,9 @@ const fs = require('node:fs');
 //include md5
 var md5 = require('md5');
 
+//include https
+const https = require('node:https');
+
 //include AOD group config
 var forumIntegrationConfig;
 try {
@@ -146,43 +149,11 @@ const client = new Client({
 		Partials.Message,
 		Partials.Channel]
 });
-
+global.client = client;
 
 /*************************************
 	Utility Functions
  *************************************/
-
-Object.defineProperty(global, '__stack', {
-	get: function() {
-		var orig = Error.prepareStackTrace;
-		Error.prepareStackTrace = function(_, stack) {
-			return stack;
-		};
-		var err = new Error();
-		Error.captureStackTrace(err, arguments.callee);
-		var stack = err.stack;
-		Error.prepareStackTrace = orig;
-		return stack;
-	}
-});
-
-Object.defineProperty(global, '__caller_line', {
-	get: function() {
-		return __stack[2].getLineNumber();
-	}
-});
-
-Object.defineProperty(global, '__caller_function', {
-	get: function() {
-		return __stack[2].getFunctionName();
-	}
-});
-
-function asyncWrapper(promise) {
-	return promise
-		.then(data => [null, data])
-		.catch(error => [error, null]);
-}
 
 var rolesByForumGroup = null;
 
@@ -268,6 +239,22 @@ function getMemberFromMessageOrArgs(guild, message, args) {
 		}
 	}
 	return member;
+}
+
+function getChannelFromMessageOrArgs(guild, message, args) {
+	var channel;
+	if (message.mentions && message.mentions.channels)
+		channel = message.mentions.channels.first();
+	if (!channel) {
+		if (args.length > 0) {
+			channel = guild.channels.resolve(args[0]);
+			if (!channel) {
+				let name = args[0];
+				channel = guild.channels.cache.find(c => { return c.name === name; });
+			}
+		}
+	}
+	return channel;
 }
 
 function sendInteractionReply(interaction, data) {
@@ -3155,15 +3142,15 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 		for (const divisionName in divisions) {
 			if (divisions.hasOwnProperty(divisionName)) {
 				if (misses[divisionName] || disconnected[divisionName]) {
-					const divivisionData = divisions[divisionName];
+					const divisionData = divisions[divisionName];
 					let division_misses = misses[divisionName] ?? 0;
 					let division_disconnected = disconnected[divisionName] ?? 0;
-					let officers_channel = guild.channels.cache.find(c => c.name === divivisionData.officers_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
+					let officers_channel = guild.channels.cache.find(c => c.name === divisionData.officers_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
 					if (officers_channel) {
 						officers_channel.send(`${divisionName} Division: ` +
 							`The forum sync process found ${division_misses} members with no discord account and ` +
 							`${division_disconnected} members who have left the server. ` +
-							`Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status`).catch(() => {});
+							`Please check ${config.trackerURL}/divisions/${divisionData.abbreviation}/voice-report`).catch(() => {});
 					}
 				}
 			}
@@ -3394,8 +3381,7 @@ async function commandRelay(message, member, cmd, args, guild, perm, permName, i
 	if (args.length <= 0)
 		return;
 
-	let channelName = args[0].toLowerCase();
-	let channel = guild.channels.cache.find(c => { return (c.name.toLowerCase() == channelName); });
+	let channel = getChannelFromMessageOrArgs(guild, message, args);
 	if (channel)
 		args.shift();
 	else
@@ -3621,6 +3607,67 @@ function commandQuit(message, member, cmd, args, guild, perm, permName, isDM) {
 	client.destroy();
 	process.exit();
 }
+
+//reload slash command processing
+function commandReloadCommands(message, member, cmd, args, guild, perm, permName, isDM) {
+	console.log(`Bot reload slash commands requested by ${getNameFromMessage(message)}`);
+	loadSlashCommands();
+}
+
+//reload API server processing
+var api_https_server;
+var sockets = {},
+	nextSocketId = 0;
+
+function stopAPIServer() {
+	let promise = new Promise(function(resolve, reject) {
+		for (let socketId in sockets) {
+			sockets[socketId].destroy();
+			delete sockets[socketId];
+		}
+		api_https_server.close(() => { resolve(); });
+		setImmediate(function() { api_https_server.emit('close'); });
+	});
+	return promise;
+}
+async function startAPIServer() {
+	try {
+		if (api_https_server) {
+			await stopAPIServer();
+			api_https_server = null;
+			delete require.cache[require.resolve('./api/api.js')];
+		}
+
+		const { api } = require('./api/api.js');
+		let api_server_cert = fs.readFileSync(config.botAPICert);
+		let api_server_key = fs.readFileSync(config.botAPIKey);
+		api_https_server = https.createServer({
+			cert: api_server_cert,
+			key: api_server_key
+		}, api);
+
+		api_https_server.on('error', (error) => {
+			console.log(error);
+		});
+		api_https_server.on('connection', (socket) => {
+			let socketId = nextSocketId++;
+			sockets[socketId] = socket;
+			socket.on('close', function() {
+				delete sockets[socketId];
+			});
+		});
+
+		api_https_server.listen(config.botAPIPort);
+	} catch (error) {
+		console.log(error);
+	}
+}
+
+function commandReloadAPI(message, member, cmd, args, guild, perm, permName, isDM) {
+	console.log(`Bot reload API server requested by ${getNameFromMessage(message)}`);
+	startAPIServer();
+}
+
 
 var timeStrRegEx = /^\s*((\d+)d)?((\d+)h)?((\d+)m)?((\d+)s)?\s*$/; //BE CAREFUL OF CAPTURE GROUPS BELOW
 function processTimeStr(string) {
@@ -4016,6 +4063,20 @@ commands = {
 		callback: commandQuit,
 		dmOnly: true
 	},
+	reloadcommands: {
+		minPermission: PERM_OWNER,
+		args: "",
+		helpText: "Reload slash command files",
+		callback: commandReloadCommands,
+		dmOnly: true
+	},
+	reloadapi: {
+		minPermission: PERM_OWNER,
+		args: "",
+		helpText: "Reload api and restart https server",
+		callback: commandReloadAPI,
+		dmOnly: true
+	},
 	test: {
 		minPermission: PERM_OWNER,
 		args: "",
@@ -4142,12 +4203,24 @@ function logInteraction(command, interaction) {
 }
 
 //Slash Command Processing
-client.commands = new Collection();
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
-for (const file of commandFiles) {
-	const command = require(`./commands/${file}`);
-	client.commands.set(command.data.name, command);
+function loadSlashCommands() {
+	try {
+		if (client.commands)
+			delete client.commands;
+		client.commands = new Collection();
+		const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+		for (const file of commandFiles) {
+			try {
+				delete require.cache[require.resolve(`./commands/${file}`)];
+			} catch (error) {}
+			const command = require(`./commands/${file}`);
+			client.commands.set(command.data.name, command);
+		}
+	} catch (error) {
+		console.log(error);
+	}
 }
+loadSlashCommands();
 client.on('interactionCreate', async interaction => {
 	let command;
 	let commandName;
@@ -4306,7 +4379,7 @@ function convertDiscordTag(discordTag) {
 
 //get forum group for guild member
 function getForumGroupsForMember(member) {
-	var promise = new Promise(function(resolve, reject) {
+	let promise = new Promise(function(resolve, reject) {
 		let db = connectToDB();
 		let query =
 			`SELECT u.userid,u.username,f.field19,f.field20,u.usergroupid,u.membergroupids FROM ${config.mysql.prefix}user AS u ` +
@@ -4338,7 +4411,7 @@ function getForumGroupsForMember(member) {
 }
 
 function setRolesForMember(member, reason) {
-	var promise = new Promise(function(resolve, reject) {
+	let promise = new Promise(function(resolve, reject) {
 		getForumGroupsForMember(member)
 			.then(async function(data) {
 				if (data === undefined || data.groups.length === 0) {
@@ -4572,3 +4645,5 @@ client.on('error', error => { notifyRequestError(null, null, null, error, false)
 //everything is defined, start the client
 client.login(config.token)
 	.catch(console.error);
+
+startAPIServer();

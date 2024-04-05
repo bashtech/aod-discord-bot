@@ -227,7 +227,7 @@ module.exports = {
 						get_role.setEmoji(emoji);
 					const row = new ActionRowBuilder()
 						.addComponents(get_role, remove_role);
-					interaction.channel.send({
+					channel.send({
 						content: text,
 						components: [row]
 					});
