@@ -35,11 +35,11 @@ app.all('*', (req, res, next) => {
 // api router
 ////////////////////////////
 
-const api = express.Router();
-app.use('/api', api);
+const apiRouter = express.Router();
+app.use('/api', apiRouter);
 
 //ensure discord is ready before calling any APIs
-api.all('*', (req, res, next) => {
+apiRouter.all('*', (req, res, next) => {
 	if (!global.client || !global.client.isReady()) {
 		res.status(503).send({ error: 'Discord client not ready' });
 	} else {
@@ -52,8 +52,8 @@ api.all('*', (req, res, next) => {
 // channel router
 ////////////////////////////
 
-const channel = express.Router();
-api.use('/channel', channel);
+const channelRouter = express.Router();
+apiRouter.use('/channel', channelRouter);
 
 function getChannel(guild, channel_id) {
 	let channel = guild.channels.resolve(channel_id);
@@ -63,7 +63,7 @@ function getChannel(guild, channel_id) {
 }
 
 //common channel_id processing
-channel.param('channel_id', (req, res, next, channel_id) => {
+channelRouter.param('channel_id', (req, res, next, channel_id) => {
 	let channel = getChannel(req.guild, channel_id);
 	if (!channel) {
 		res.status(400).send({ error: 'Unknown channel' });
@@ -74,7 +74,7 @@ channel.param('channel_id', (req, res, next, channel_id) => {
 });
 
 //common message_id processing
-channel.param('message_id', async (req, res, next, message_id) => {
+channelRouter.param('message_id', async (req, res, next, message_id) => {
 	if (!req.channel.isTextBased()) {
 		res.status(400).send({ error: 'Channel must be text based' });
 	} else {
@@ -89,7 +89,7 @@ channel.param('message_id', async (req, res, next, message_id) => {
 });
 
 const unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
-channel.post('/:channel_id/message/:message_id/react', async (req, res, next) => {
+channelRouter.post('/:channel_id/message/:message_id/react', async (req, res, next) => {
 	if (!req.body.emoji) {
 		res.status(400).send({ error: 'emoji must be provided' });
 	} else {
@@ -135,7 +135,7 @@ channel.post('/:channel_id/message/:message_id/react', async (req, res, next) =>
 	next();
 });
 
-channel.get('/:channel_id/message/:message_id', (req, res, next) => {
+channelRouter.get('/:channel_id/message/:message_id', (req, res, next) => {
 	res.send({
 		id: req.message.id,
 		content: req.message.content,
@@ -147,7 +147,7 @@ channel.get('/:channel_id/message/:message_id', (req, res, next) => {
 	next();
 });
 
-channel.post('/:channel_id/message/:message_id', (req, res, next) => {
+channelRouter.post('/:channel_id/message/:message_id', (req, res, next) => {
 	if (req.message.author.id !== global.client.user.id) {
 		res.status(403).send({ error: 'Cannot edit messages authored by other users' });
 	} else if (!req.body.content && !req.body.embeds) {
@@ -162,7 +162,7 @@ channel.post('/:channel_id/message/:message_id', (req, res, next) => {
 	next();
 });
 
-channel.delete('/:channel_id/message/:message_id', async (req, res, next) => {
+channelRouter.delete('/:channel_id/message/:message_id', async (req, res, next) => {
 	if (req.message.author.id !== global.client.user.id) {
 		res.status(403).send({ error: 'Cannot delete messages authored by other users' });
 	} else {
@@ -213,7 +213,7 @@ function getChannelType(channel) {
 			return 'unknown';
 	}
 }
-channel.get('/:channel_id', (req, res, next) => {
+channelRouter.get('/:channel_id', (req, res, next) => {
 	let children = [];
 	if (req.channel.children) {
 		req.channel.children.cache.forEach(c => {
@@ -232,7 +232,7 @@ channel.get('/:channel_id', (req, res, next) => {
 	});
 });
 
-channel.post('/:channel_id', async (req, res, next) => {
+channelRouter.post('/:channel_id', async (req, res, next) => {
 	if (!req.body.content && !req.body.embeds) {
 		res.status(400).send({ error: 'content or embeds must be provided' });
 	} else {
@@ -253,10 +253,10 @@ channel.post('/:channel_id', async (req, res, next) => {
 // emoji router
 ////////////////////////////
 
-const emoji = express.Router();
-api.use('/emoji', emoji);
+const emojiRouter = express.Router();
+apiRouter.use('/emoji', emojiRouter);
 
-emoji.get('/', async (req, res, next) => {
+emojiRouter.get('/', async (req, res, next) => {
 	let emojis = {};
 	global.client.emojis.cache.forEach(function(emoji, id) {
 		emojis[emoji.name] = {
@@ -274,21 +274,21 @@ emoji.get('/', async (req, res, next) => {
 ////////////////////////////
 
 //respond 404 to unprocessed get request
-api.get('*', (req, res, next) => {
+apiRouter.get('*', (req, res, next) => {
 	if (!res.writableEnded)
 		res.status(404).send({ error: 'No endpoint' });
 	next();
 });
 
 //respond 400 to all other unprocessed requests
-api.all('*', (req, res, next) => {
+apiRouter.all('*', (req, res, next) => {
 	if (!res.writableEnded)
 		res.status(400).send({ error: 'No endpoint' });
 	next();
 });
 
 //log reqs
-api.all('*', (req, res) => {
+apiRouter.all('*', (req, res) => {
 	console.log(`API: [${req.client_ip}] ${res.statusCode} ${req.method} ${req.path}`);
 });
 
