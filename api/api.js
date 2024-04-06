@@ -1,12 +1,13 @@
 /* jshint esversion: 11 */
 
 const express = require('express');
+const {
+	ChannelType
+} = require('discord.js');
+
 const app = express();
-
 app.disable('x-powered-by');
-
-//parse application/json input data
-app.use(express.json());
+app.use(express.json()); //parse application/json input data
 
 //WARNING: handlers are processed in the order of definition
 
@@ -66,8 +67,6 @@ channel.param('channel_id', (req, res, next, channel_id) => {
 	let channel = getChannel(req.guild, channel_id);
 	if (!channel) {
 		res.status(400).send({ error: 'Unknown channel' });
-	} else if (!channel.isTextBased()) {
-		res.status(400).send({ error: 'Channel must be text based' });
 	} else {
 		req.channel = channel;
 	}
@@ -76,11 +75,15 @@ channel.param('channel_id', (req, res, next, channel_id) => {
 
 //common message_id processing
 channel.param('message_id', async (req, res, next, message_id) => {
-	let message = await req.channel.messages.fetch(message_id).catch(() => {});
-	if (!message) {
-		res.status(400).send({ error: 'Unknown message' });
+	if (!req.channel.isTextBased()) {
+		res.status(400).send({ error: 'Channel must be text based' });
 	} else {
-		req.message = message;
+		let message = await req.channel.messages.fetch(message_id).catch(() => {});
+		if (!message) {
+			res.status(400).send({ error: 'Unknown message' });
+		} else {
+			req.message = message;
+		}
 	}
 	next();
 });
@@ -167,6 +170,66 @@ channel.delete('/:channel_id/message/:message_id', async (req, res, next) => {
 		res.send({ id: req.message.id });
 	}
 	next();
+});
+
+
+function getChannelType(channel) {
+	switch (channel.type) {
+		case ChannelType.AnnouncementThread:
+			return 'announcementThread';
+		case ChannelType.DM:
+			return 'dm';
+		case ChannelType.GroupDM:
+			return 'groupDM';
+		case ChannelType.GuildAnnouncement:
+			return 'announcement';
+		case ChannelType.GuildCategory:
+			return 'category';
+		case ChannelType.GuildDirectory:
+			return 'directory';
+		case ChannelType.GuildForum:
+			return 'forum';
+		case ChannelType.GuildMedia:
+			return 'media';
+		case ChannelType.GuildNews:
+			return 'news';
+		case ChannelType.GuildNewsThread:
+			return 'newsThread';
+		case ChannelType.GuildPrivateThread:
+			return 'privateThread';
+		case ChannelType.GuildPublicThread:
+			return 'publicThread';
+		case ChannelType.GuildStageVoice:
+			return 'stageVoice';
+		case ChannelType.GuildText:
+			return 'text';
+		case ChannelType.GuildVoice:
+			return 'voice';
+		case ChannelType.PrivateThread:
+			return 'privateThread';
+		case ChannelType.PublicThread:
+			return 'publicThread';
+		default:
+			return 'unknown';
+	}
+}
+channel.get('/:channel_id', (req, res, next) => {
+	let children = [];
+	if (req.channel.children) {
+		req.channel.children.cache.forEach(c => {
+			children.push({
+				name: c.name,
+				id: c.id,
+				type: getChannelType(c)
+			});
+		});
+	}
+	res.send({
+		name: req.channel.name,
+		id: req.channel.id,
+		type: getChannelType(req.channel),
+		children: children
+	});
 });
 
 channel.post('/:channel_id', async (req, res, next) => {
