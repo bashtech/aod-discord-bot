@@ -1,25 +1,18 @@
 /* jshint esversion: 11 */
 
 const express = require('express');
-const api = express();
+const app = express();
 
-api.disable('x-powered-by');
+app.disable('x-powered-by');
 
 //parse application/json input data
-api.use(express.json());
+app.use(express.json());
 
-function getChannel(guild, channel_id) {
-	let channel = guild.channels.resolve(channel_id);
-	if (!channel)
-		channel = guild.channels.cache.find(c => c.name === channel_id);
-	return channel;
-}
-
-//handlers are processed in the order of definition
+//WARNING: handlers are processed in the order of definition
 
 //check Authorization header
-api.all('*', (req, res, next) => {
-	//all ress are json
+app.all('*', (req, res, next) => {
+	//all responses are json
 	res.type('application/json');
 	req.client_ip = /*req.headers['x-forwarded-for'] ||*/ req.socket.remoteAddress;
 	if (!global.config.botAPIAllowedIPs.length || global.config.botAPIAllowedIPs.includes(req.client_ip)) {
@@ -37,8 +30,15 @@ api.all('*', (req, res, next) => {
 	res.status(401).send({ error: 'Not authorized' });
 });
 
+////////////////////////////
+// api router
+////////////////////////////
+
+const api = express.Router();
+app.use('/api', api);
+
 //ensure discord is ready before calling any APIs
-api.all('/api/*', (req, res, next) => {
+api.all('*', (req, res, next) => {
 	if (!global.client || !global.client.isReady()) {
 		res.status(503).send({ error: 'Discord client not ready' });
 	} else {
@@ -47,8 +47,22 @@ api.all('/api/*', (req, res, next) => {
 	next();
 });
 
+////////////////////////////
+// channel router
+////////////////////////////
+
+const channel = express.Router();
+api.use('/channel', channel);
+
+function getChannel(guild, channel_id) {
+	let channel = guild.channels.resolve(channel_id);
+	if (!channel)
+		channel = guild.channels.cache.find(c => c.name === channel_id);
+	return channel;
+}
+
 //common channel_id processing
-api.param('channel_id', (req, res, next, channel_id) => {
+channel.param('channel_id', (req, res, next, channel_id) => {
 	let channel = getChannel(req.guild, channel_id);
 	if (!channel) {
 		res.status(400).send({ error: 'Unknown channel' });
@@ -61,7 +75,7 @@ api.param('channel_id', (req, res, next, channel_id) => {
 });
 
 //common message_id processing
-api.param('message_id', async (req, res, next, message_id) => {
+channel.param('message_id', async (req, res, next, message_id) => {
 	let message = await req.channel.messages.fetch(message_id).catch(() => {});
 	if (!message) {
 		res.status(400).send({ error: 'Unknown message' });
@@ -72,7 +86,7 @@ api.param('message_id', async (req, res, next, message_id) => {
 });
 
 const unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
-api.post('/api/channel/:channel_id/message/:message_id/react', async (req, res, next) => {
+channel.post('/:channel_id/message/:message_id/react', async (req, res, next) => {
 	if (!req.body.emoji) {
 		res.status(400).send({ error: 'emoji must be provided' });
 	} else {
@@ -118,7 +132,7 @@ api.post('/api/channel/:channel_id/message/:message_id/react', async (req, res, 
 	next();
 });
 
-api.get('/api/channel/:channel_id/message/:message_id', (req, res, next) => {
+channel.get('/:channel_id/message/:message_id', (req, res, next) => {
 	res.send({
 		id: req.message.id,
 		content: req.message.content,
@@ -130,7 +144,7 @@ api.get('/api/channel/:channel_id/message/:message_id', (req, res, next) => {
 	next();
 });
 
-api.post('/api/channel/:channel_id/message/:message_id', (req, res, next) => {
+channel.post('/:channel_id/message/:message_id', (req, res, next) => {
 	if (req.message.author.id !== global.client.user.id) {
 		res.status(403).send({ error: 'Cannot edit messages authored by other users' });
 	} else if (!req.body.content && !req.body.embeds) {
@@ -145,7 +159,7 @@ api.post('/api/channel/:channel_id/message/:message_id', (req, res, next) => {
 	next();
 });
 
-api.delete('/api/channel/:channel_id/message/:message_id', async (req, res, next) => {
+channel.delete('/:channel_id/message/:message_id', async (req, res, next) => {
 	if (req.message.author.id !== global.client.user.id) {
 		res.status(403).send({ error: 'Cannot delete messages authored by other users' });
 	} else {
@@ -155,7 +169,7 @@ api.delete('/api/channel/:channel_id/message/:message_id', async (req, res, next
 	next();
 });
 
-api.post('/api/channel/:channel_id', async (req, res, next) => {
+channel.post('/:channel_id', async (req, res, next) => {
 	if (!req.body.content && !req.body.embeds) {
 		res.status(400).send({ error: 'content or embeds must be provided' });
 	} else {
@@ -172,7 +186,14 @@ api.post('/api/channel/:channel_id', async (req, res, next) => {
 	next();
 });
 
-api.get('/api/emoji', async (req, res, next) => {
+////////////////////////////
+// emoji router
+////////////////////////////
+
+const emoji = express.Router();
+api.use('/emoji', emoji);
+
+emoji.get('/', async (req, res, next) => {
 	let emojis = {};
 	global.client.emojis.cache.forEach(function(emoji, id) {
 		emojis[emoji.name] = {
@@ -184,6 +205,10 @@ api.get('/api/emoji', async (req, res, next) => {
 	res.send(emojis);
 	next();
 });
+
+////////////////////////////
+// Post processing
+////////////////////////////
 
 //respond 404 to unprocessed get request
 api.get('*', (req, res, next) => {
@@ -205,5 +230,5 @@ api.all('*', (req, res) => {
 });
 
 module.exports = {
-	api: api
+	api: app
 };

@@ -3155,8 +3155,6 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 				}
 			}
 		}
-		date = new Date();
-		sgtsChannel.send(`The time is ${date.toISOString()}... Is it time to go to bed?`);
 	}
 	if (duplicates > 0) {
 		if (sgtsChannel) {
