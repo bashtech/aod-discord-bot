@@ -49,33 +49,16 @@ apiRouter.all('*', (req, res, next) => {
 });
 
 ////////////////////////////
-// channel router
+// message router
 ////////////////////////////
 
-const channelRouter = express.Router();
-apiRouter.use('/channel', channelRouter);
-
-function getChannel(guild, channel_id) {
-	let channel = guild.channels.resolve(channel_id);
-	if (!channel)
-		channel = guild.channels.cache.find(c => c.name === channel_id);
-	return channel;
-}
-
-//common channel_id processing
-channelRouter.param('channel_id', (req, res, next, channel_id) => {
-	let channel = getChannel(req.guild, channel_id);
-	if (!channel) {
-		res.status(400).send({ error: 'Unknown channel' });
-	} else {
-		req.channel = channel;
-	}
-	next();
-});
+const messageRouter = express.Router();
 
 //common message_id processing
-channelRouter.param('message_id', async (req, res, next, message_id) => {
-	if (!req.channel.isTextBased()) {
+messageRouter.param('message_id', async (req, res, next, message_id) => {
+	if (!req.channel) {
+		res.status(400).send({ error: 'No channel' });
+	} else if (!req.channel.isTextBased()) {
 		res.status(400).send({ error: 'Channel must be text based' });
 	} else {
 		let message = await req.channel.messages.fetch(message_id).catch(() => {});
@@ -89,7 +72,7 @@ channelRouter.param('message_id', async (req, res, next, message_id) => {
 });
 
 const unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
-channelRouter.post('/:channel_id/message/:message_id/react', async (req, res, next) => {
+messageRouter.post('/:message_id/react', async (req, res, next) => {
 	if (!req.body.emoji) {
 		res.status(400).send({ error: 'emoji must be provided' });
 	} else {
@@ -135,7 +118,7 @@ channelRouter.post('/:channel_id/message/:message_id/react', async (req, res, ne
 	next();
 });
 
-channelRouter.get('/:channel_id/message/:message_id', (req, res, next) => {
+messageRouter.get('/:message_id', (req, res, next) => {
 	res.send({
 		id: req.message.id,
 		content: req.message.content,
@@ -147,7 +130,7 @@ channelRouter.get('/:channel_id/message/:message_id', (req, res, next) => {
 	next();
 });
 
-channelRouter.post('/:channel_id/message/:message_id', (req, res, next) => {
+messageRouter.post('/:message_id', (req, res, next) => {
 	if (req.message.author.id !== global.client.user.id) {
 		res.status(403).send({ error: 'Cannot edit messages authored by other users' });
 	} else if (!req.body.content && !req.body.embeds) {
@@ -162,7 +145,7 @@ channelRouter.post('/:channel_id/message/:message_id', (req, res, next) => {
 	next();
 });
 
-channelRouter.delete('/:channel_id/message/:message_id', async (req, res, next) => {
+messageRouter.delete('/:message_id', async (req, res, next) => {
 	if (req.message.author.id !== global.client.user.id) {
 		res.status(403).send({ error: 'Cannot delete messages authored by other users' });
 	} else {
@@ -172,6 +155,31 @@ channelRouter.delete('/:channel_id/message/:message_id', async (req, res, next) 
 	next();
 });
 
+////////////////////////////
+// channel router
+////////////////////////////
+
+const channelRouter = express.Router();
+apiRouter.use('/channel', channelRouter);
+channelRouter.use('/:channel_id/message', messageRouter);
+
+function getChannel(guild, channel_id) {
+	let channel = guild.channels.resolve(channel_id);
+	if (!channel)
+		channel = guild.channels.cache.find(c => c.name === channel_id);
+	return channel;
+}
+
+//common channel_id processing
+channelRouter.param('channel_id', (req, res, next, channel_id) => {
+	let channel = getChannel(req.guild, channel_id);
+	if (!channel) {
+		res.status(400).send({ error: 'Unknown channel' });
+	} else {
+		req.channel = channel;
+	}
+	next();
+});
 
 function getChannelType(channel) {
 	switch (channel.type) {
@@ -213,7 +221,7 @@ function getChannelType(channel) {
 			return 'unknown';
 	}
 }
-channelRouter.get('/:channel_id', (req, res, next) => {
+channelRouter.get('/:channel_id', async (req, res, next) => {
 	let children = [];
 	if (req.channel.children) {
 		req.channel.children.cache.forEach(c => {
@@ -237,6 +245,61 @@ channelRouter.post('/:channel_id', async (req, res, next) => {
 		res.status(400).send({ error: 'content or embeds must be provided' });
 	} else {
 		let message = await req.channel.send({
+			content: req.body.content,
+			embeds: req.body.embeds
+		}).catch(() => {});
+		if (message) {
+			res.send({ id: message.id });
+		} else {
+			res.status(500).send({ error: 'Failed to send message' });
+		}
+	}
+	next();
+});
+
+////////////////////////////
+// member router
+////////////////////////////
+
+const memberRouter = express.Router();
+apiRouter.use('/member', memberRouter);
+memberRouter.use('/:member_id/message', messageRouter);
+
+function getMember(guild, member_id) {
+	let member = guild.members.resolve(member_id);
+	if (!member)
+		member = guild.members.cache.find(m => m.user.tag === member_id);
+	return member;
+}
+
+//common member_id processing
+memberRouter.param('member_id', (req, res, next, member_id) => {
+	let member = getMember(req.guild, member_id);
+	if (!member) {
+		res.status(400).send({ error: 'Unknown member' });
+	} else {
+		req.member = member;
+		req.channel = member.dmChannel;
+	}
+	next();
+});
+
+memberRouter.get('/:member_id', async (req, res, next) => {
+	res.send({
+		id: req.member.id,
+		bot: req.member.bot,
+		displayName: req.member.displayName,
+		userName: req.member.user.username,
+		tag: req.member.user.tag
+	});
+	next();
+});
+
+memberRouter.post('/:member_id', async (req, res, next) => {
+	if (!req.body.content && !req.body.embeds) {
+		res.status(400).send({ error: 'content or embeds must be provided' });
+	} else {
+		let message = await req.member.send({
 			content: req.body.content,
 			embeds: req.body.embeds
 		}).catch(() => {});
