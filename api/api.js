@@ -41,9 +41,21 @@ app.use('/api', apiRouter);
 //ensure discord is ready before calling any APIs
 apiRouter.all('*', (req, res, next) => {
 	if (!global.client || !global.client.isReady()) {
+		console.log(`API: [${req.client_ip}] Discord client not ready`);
 		res.status(503).send({ error: 'Discord client not ready' });
+		return;
 	} else {
 		req.guild = global.client.guilds.resolve(config.guildId);
+	}
+	let requested_by_hdr = req.get('X-Requested-By');
+	if (requested_by_hdr) {
+		//FIXME: should this be required?
+		req.reqMember = getMember(req.guild, requested_by_hdr);
+		if (!req.reqMember) {
+			console.log(`API: [${req.client_ip}] Unknown requestor`);
+			res.status(400).send({ error: 'Unknown requestor' });
+			return;
+		}
 	}
 	next();
 });
@@ -352,7 +364,10 @@ apiRouter.all('*', (req, res, next) => {
 
 //log reqs
 apiRouter.all('*', (req, res) => {
-	console.log(`API: [${req.client_ip}] ${res.statusCode} ${req.method} ${req.path}`);
+	if (req.reqMember)
+		console.log(`API: [${req.client_ip} ${req.reqMember.user.tag}] ${res.statusCode} ${req.method} ${req.path}`);
+	else
+		console.log(`API: [${req.client_ip}] ${res.statusCode} ${req.method} ${req.path}`);
 });
 
 module.exports = {
