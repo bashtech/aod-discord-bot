@@ -84,8 +84,11 @@ messageRouter.param('message_id', async (req, res, next, message_id) => {
 });
 
 const unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
+const unicodeHexRegEx = /&#x([0-9a-fA-F]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
 messageRouter.post('/:message_id/react', async (req, res, next) => {
+	let emjoiId;
 	if (!req.body.emoji) {
+		console.log(req.body);
 		res.status(400).send({ error: 'emoji must be provided' });
 	} else {
 		let emoji = global.client.emojis.resolve(req.body.emoji);
@@ -100,13 +103,26 @@ messageRouter.post('/:message_id/react', async (req, res, next) => {
 				else
 					return String.fromCharCode(code);
 			});
-			let emojiId = global.client.emojis.resolveIdentifier(req.body.emoji) ?? '';
-			emoji = decodeURI(emojiId);
+			req.body.emoji = req.body.emoji.replace(unicodeHexRegEx, function() {
+				//arguments[0] = full unicode
+				//arguments[1] = hex
+				//arguments[2] = index of match
+				let code = parseInt(arguments[1], 16);
+				if (code > 0xffff)
+					return String.fromCodePoint(code);
+				else
+					return String.fromCharCode(code);
+			});
+			emojiId = global.client.emojis.resolveIdentifier(req.body.emoji);
+			if (emojiId)
+				emojiId = decodeURIComponent(emojiId);
+		} else {
+			emjoiId = emoji.id;
 		}
-		if (!emoji) {
+		if (!emojiId) {
 			res.status(400).send({ error: 'Unknown emoji' });
 		} else {
-			let reaction = req.message.reactions.cache.get(emoji.id);
+			let reaction = req.message.reactions.cache.get(emojiId);
 			if (req.body.exclusive) {
 				if (req.message.author.id !== global.client.user.id) {
 					res.status(403).send({ error: 'Cannot clear reactions on messages authored by other users' });
@@ -115,9 +131,9 @@ messageRouter.post('/:message_id/react', async (req, res, next) => {
 				}
 				await req.message.reactions.removeAll();
 			} else if (reaction && reaction.users.resolve(global.client.user.id)) {
-				await reaction.users.remove(global.client.user.id);
+				await reaction.users.remove(global.client.user.id).catch(() => {});
 			} else {
-				reaction = await req.message.react(emoji).catch(() => {});
+				reaction = await req.message.react(emojiId).catch((err) => {});
 				if (!reaction) {
 					res.status(500).send({ error: `Failed to add reaction` });
 					next();
@@ -173,7 +189,9 @@ messageRouter.delete('/:message_id', async (req, res, next) => {
 
 const channelRouter = express.Router();
 apiRouter.use('/channel', channelRouter);
+apiRouter.use('/channels', channelRouter);
 channelRouter.use('/:channel_id/message', messageRouter);
+channelRouter.use('/:channel_id/messages', messageRouter);
 
 function getChannel(guild, channel_id) {
 	let channel = guild.channels.resolve(channel_id);
@@ -259,7 +277,7 @@ channelRouter.post('/:channel_id', async (req, res, next) => {
 		let message = await req.channel.send({
 			content: req.body.content,
 			embeds: req.body.embeds
-		}).catch(() => {});
+		}).catch((err) => { console.log(req.body);console.log(err);});
 		if (message) {
 			res.send({ id: message.id });
 		} else {
@@ -275,7 +293,9 @@ channelRouter.post('/:channel_id', async (req, res, next) => {
 
 const memberRouter = express.Router();
 apiRouter.use('/member', memberRouter);
+apiRouter.use('/members', memberRouter);
 memberRouter.use('/:member_id/message', messageRouter);
+memberRouter.use('/:member_id/messages', messageRouter);
 
 function getMember(guild, member_id) {
 	let member = guild.members.resolve(member_id);
