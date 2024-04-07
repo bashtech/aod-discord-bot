@@ -276,10 +276,7 @@ function ephemeralReply(message, msg) {
 			return message.reply(msg);
 		}
 	}
-	let promise = new Promise(function(resolve, reject) {
-		resolve();
-	});
-	return promise;
+	return Promise.resolve();
 }
 global.ephemeralReply = ephemeralReply;
 
@@ -290,10 +287,7 @@ function messageReply(message, msg) {
 		else
 			return message.reply(msg);
 	}
-	let promise = new Promise(function(resolve, reject) {
-		resolve();
-	});
-	return promise;
+	return Promise.resolve();
 }
 
 //add or remove a role from a guildMember
@@ -669,10 +663,7 @@ function notifyRequestError(message, member, guild, error, showError) {
 function sendMessageToMember(member, data) {
 	if (member)
 		return member.send(data).catch(() => {});
-	var promise = new Promise(function(resolve, reject) {
-		reject();
-	});
-	return promise;
+	return Promise.reject();
 }
 
 //send a reply as DM to the author of a message (if available) and return a promise
@@ -688,10 +679,7 @@ function sendReplyToMessageAuthor(message, member, data) {
 			return sendMessageToMember(member, data);
 		}
 	}
-	var promise = new Promise(function(resolve, reject) {
-		reject();
-	});
-	return promise;
+	return Promise.reject();
 }
 
 //send a list of items as DM to the author of a message
@@ -720,10 +708,7 @@ async function sendListToMessageAuthor(message, member, guild, title, list, foot
 	}
 	if (embed.description.length)
 		return sendReplyToMessageAuthor(message, member, { embeds: [embed] });
-	let promise = new Promise(function(resolve, reject) {
-		resolve();
-	});
-	return promise;
+	return Promise.resolve();
 }
 
 //help command processing
@@ -1217,9 +1202,9 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 	//get channel permissions
 	let permissions = await getChannelPermissions(guild, message, perm, level, type, officerRole, role, targetMember);
 	if (!permissions) {
-		ephemeralReply(message, 'Failed to get permissions for channel');
-		let promise = new Promise(function(resolve, reject) { reject(); });
-		return promise;
+		let err = 'Failed to get permissions for channel';
+		ephemeralReply(message, err);
+		return Promise.reject(err);
 	}
 
 	let channelType = ChannelType.GuildText;
@@ -1241,7 +1226,7 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 				bitrate: 96000,
 				reason: `Requested by ${getNameFromMessage(message)}`
 			})
-			.then(async function(c) {
+			.then(async (c) => {
 				if (channelType === ChannelType.GuildVoice) {
 					//make sure someone gets into the channel
 					if (category.name == config.tempChannelCategory)
@@ -1263,9 +1248,11 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 
 				resolve(c);
 			})
-			.then(async function(error) {
-				notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-				reject();
+			.catch(error => {
+				console.log(error);
+				let err = 'Failed to create channel';
+				ephemeralReply(message, err);
+				reject(err);
 			});
 	});
 	return promise;
@@ -1632,6 +1619,7 @@ async function getDivisionsFromTracker() {
 					let division = body.data[i];
 					_divisions[division.name] = {
 						abbreviation: division.abbreviation,
+						slug: division.slug,
 						forum_app_id: division.forum_app_id,
 						officers_channel: division.officers_channel
 					};
