@@ -172,7 +172,7 @@ module.exports = {
 			}
 			case 'officer_channel': {
 				let name = interaction.options.getString('name');
-				let channel = interaction.options.getChannel('channel');
+				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 
 				await interaction.deferReply({ ephemeral: true });
 				let divisions = await global.getDivisionsFromTracker();
