@@ -264,16 +264,21 @@ function sendInteractionReply(interaction, data) {
 		return interaction.editReply(data);
 	else
 		return interaction.reply(data);
-
 }
 global.sendInteractionReply = sendInteractionReply;
 
 function ephemeralReply(message, msg) {
 	if (message) {
 		if (message.isInteraction) {
-			return sendInteractionReply(message, { content: msg, ephemeral: true });
+			if (typeof(msg) === 'object')
+				return sendInteractionReply(message, { embeds: [msg], ephemeral: true });
+			else
+				return sendInteractionReply(message, { content: msg, ephemeral: true });
 		} else {
-			return message.reply(msg);
+			if (typeof(msg) === 'object')
+				return message.reply(message, { embeds: [msg] });
+			else
+				return message.reply(msg);
 		}
 	}
 	return Promise.resolve();
@@ -1621,7 +1626,8 @@ async function getDivisionsFromTracker() {
 						abbreviation: division.abbreviation,
 						slug: division.slug,
 						forum_app_id: division.forum_app_id,
-						officer_channel: division.officer_channel
+						officer_channel: division.officer_channel,
+						icon: division.icon
 					};
 				}
 			}

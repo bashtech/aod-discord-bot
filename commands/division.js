@@ -34,6 +34,8 @@ module.exports = {
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true)))
 		.addSubcommand(command => command.setName('delete').setDescription('Delete an exiting division')
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true)))
+		.addSubcommand(command => command.setName('info').setDescription('Show division information')
+			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true)))
 		.addSubcommand(command => command.setName('prefix').setDescription('Update division channel prefix')
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
 			.addStringOption(option => option.setName('old_prefix').setDescription('Old Prefix (if not the division name)'))
@@ -52,6 +54,7 @@ module.exports = {
 		switch (subCommand) {
 			case 'add':
 			case 'delete':
+			case 'info':
 			case 'prefix':
 			case 'officer_channel': {
 				if (focusedOption.name === 'name') {
@@ -59,7 +62,9 @@ module.exports = {
 					let options = [];
 					for (const divisionName in divisions) {
 						if (divisions.hasOwnProperty(divisionName)) {
-							if (interaction.guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory)) {
+							if (subCommand === 'info') {
+								options.push(divisionName);
+							} else if (interaction.guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory)) {
 								if (subCommand === 'delete' || subCommand === 'prefix' || subCommand === 'officer_channel') {
 									options.push(divisionName);
 								}
@@ -124,6 +129,50 @@ module.exports = {
 				} catch (e) {
 					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
 				}
+				break;
+			}
+			case 'info': {
+				let name = interaction.options.getString('name');
+
+				await interaction.deferReply({ ephemeral: true });
+				let divisions = await global.getDivisionsFromTracker();
+				let divisionData = divisions[name];
+				if (typeof(divisionData) === 'undefined') {
+					return global.ephemeralReply(interaction, `${name} division is not defined on the tracker`);
+				}
+
+				let embed = {
+					description: `**${name} Division Information**`,
+					thumbnail: { url: divisionData ? divisionData.icon : "" },
+					fields: []
+				};
+
+				let category = interaction.guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildCategory);
+				embed.fields.push({
+					name: "Category",
+					value: category ? `${category}` : 'Not Found'
+				});
+
+				let officer_channel = interaction.guild.channels.resolve(divisionData.officer_channel);
+				embed.fields.push({
+					name: "Officer Channel",
+					value: officer_channel ? `${officer_channel}` : 'Not Found'
+				});
+
+				let roleName = name + ' ' + global.config.discordOfficerSuffix;
+				let officerRole = interaction.guild.roles.cache.find(r => { return r.name == roleName; });
+				if (officerRole) {
+					let officers = '';
+					officerRole.members.each(m => {
+						officers += `${m}\n`;
+					});
+					embed.fields.push({
+						name: "Officers",
+						value: officers
+					});
+				}
+
+				await global.ephemeralReply(interaction, embed);
 				break;
 			}
 			case 'prefix': {
