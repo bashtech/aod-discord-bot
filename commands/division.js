@@ -37,7 +37,10 @@ module.exports = {
 		.addSubcommand(command => command.setName('prefix').setDescription('Update division channel prefix')
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
 			.addStringOption(option => option.setName('old_prefix').setDescription('Old Prefix (if not the division name)'))
-			.addStringOption(option => option.setName('new_prefix').setDescription('New Prefix (if division name does not match tracker)'))),
+			.addStringOption(option => option.setName('new_prefix').setDescription('New Prefix (if division name does not match tracker)')))
+		.addSubcommand(command => command.setName('officer_channel').setDescription('Update division channel prefix')
+			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
+			.addChannelOption(option => option.setName('channel').setDescription('Channel Name'))),
 	help: true,
 	checkPerm(commandName, perm) {
 		return perm >= global.PERM_STAFF;
@@ -49,14 +52,15 @@ module.exports = {
 		switch (subCommand) {
 			case 'add':
 			case 'delete':
-			case 'prefix': {
+			case 'prefix':
+			case 'officer_channel': {
 				if (focusedOption.name === 'name') {
 					let divisions = await global.getDivisionsFromTracker();
 					let options = [];
 					for (const divisionName in divisions) {
 						if (divisions.hasOwnProperty(divisionName)) {
 							if (interaction.guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory)) {
-								if (subCommand === 'delete' || subCommand === 'prefix') {
+								if (subCommand === 'delete' || subCommand === 'prefix' || subCommand === 'officer_channel') {
 									options.push(divisionName);
 								}
 							} else {
@@ -165,6 +169,23 @@ module.exports = {
 					}
 				}
 				return global.ephemeralReply(interaction, reply);
+			}
+			case 'officer_channel': {
+				let name = interaction.options.getString('name');
+				let channel = interaction.options.getChannel('channel');
+
+				await interaction.deferReply({ ephemeral: true });
+				let divisions = await global.getDivisionsFromTracker();
+				let divisionData = divisions[name];
+				if (typeof(divisionData) === 'undefined') {
+					return global.ephemeralReply(interaction, `${name} division is not defined on the tracker`);
+				}
+				if (!channel.parent || channel.parent.name !== name) {
+					return global.ephemeralReply(interaction, `Officer Channel must be a channel in the division category`);
+				}
+
+				await global.updateTrackerDivisionOfficerChannel(divisionData, channel);
+				break;
 			}
 		}
 	}

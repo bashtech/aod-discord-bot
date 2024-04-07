@@ -1621,7 +1621,7 @@ async function getDivisionsFromTracker() {
 						abbreviation: division.abbreviation,
 						slug: division.slug,
 						forum_app_id: division.forum_app_id,
-						officers_channel: division.officers_channel
+						officer_channel: division.officer_channel
 					};
 				}
 			}
@@ -1634,6 +1634,34 @@ async function getDivisionsFromTracker() {
 	return promise;
 }
 global.getDivisionsFromTracker = getDivisionsFromTracker;
+
+async function updateTrackerDivisionData(divisionData, data) {
+	let promise = new Promise(async function(resolve, reject) {
+		let response = await fetch(`${config.trackerAPIURL}/divisions/${divisionData.slug}`, {
+			method: 'post',
+			body: JSON.stringify(data),
+			headers: {
+				'User-Agent': 'Discord Bot',
+				'Content-Type': 'application/json',
+				'Accept': 'application/json',
+				'Authorization': `Bearer ${config.trackerAPIToken}`
+			}
+		}).catch(err => {
+			console.log(err);
+			reject('Failed to update divsision data');
+		});
+		await response.json(); //wait for content to finish
+		resolve();
+	});
+	return promise;
+}
+
+function updateTrackerDivisionOfficerChannel(divisionData, channel) {
+	return updateTrackerDivisionData(divisionData, { officer_channel: channel.id })
+		.then(function() { divisionData.officer_channel = channel.id; })
+		.catch(() => {});
+}
+global.updateTrackerDivisionOfficerChannel = updateTrackerDivisionOfficerChannel;
 
 async function addDivision(message, member, perm, guild, divisionName) {
 	let officerRoleName = divisionName + ' ' + config.discordOfficerSuffix;
@@ -1723,6 +1751,8 @@ async function addDivision(message, member, perm, guild, divisionName) {
 			.catch(e => { console.log(e); });
 
 		addForumSyncMap(message, guild, officerRoleName, divisionName + ' ' + config.forumOfficerSuffix);
+		if (divisionData)
+			updateTrackerDivisionOfficerChannel(divisionData, officersChannel);
 
 		return ephemeralReply(message, `${divisionName} division added`);
 	} catch (error) {
@@ -3133,9 +3163,9 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 					const divisionData = divisions[divisionName];
 					let division_misses = misses[divisionName] ?? 0;
 					let division_disconnected = disconnected[divisionName] ?? 0;
-					let officers_channel = guild.channels.cache.find(c => c.name === divisionData.officers_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
-					if (officers_channel) {
-						officers_channel.send(`${divisionName} Division: ` +
+					let officer_channel = guild.channels.cache.find(c => c.name === divisionData.officer_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
+					if (officer_channel) {
+						officer_channel.send(`${divisionName} Division: ` +
 							`The forum sync process found ${division_misses} members with no discord account and ` +
 							`${division_disconnected} members who have left the server. ` +
 							`Please check ${config.trackerURL}/divisions/${divisionData.abbreviation}/voice-report`).catch(() => {});

@@ -277,7 +277,8 @@ channelRouter.post('/:channel_id', async (req, res, next) => {
 		let message = await req.channel.send({
 			content: req.body.content,
 			embeds: req.body.embeds
-		}).catch((err) => { console.log(req.body);console.log(err);});
+		}).catch((err) => { console.log(req.body);
+			console.log(err); });
 		if (message) {
 			res.send({ id: message.id });
 		} else {
