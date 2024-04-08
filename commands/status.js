@@ -8,7 +8,7 @@ module.exports = {
 		.setDescription('AOD bot status')
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	help: true,
-	checkPerm(commandName, perm, parentName) {
+	checkPerm(perm, commandName, parentName) {
 		return perm >= global.PERM_ADMIN;
 	},
 	async execute(interaction, member, perm, permName) {

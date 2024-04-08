@@ -28,7 +28,7 @@ function sortAndLimitOptions(options, len, search) {
 function buildSubCommandList(command, cmdOption, parentName, prefix, perm) {
 	if (cmdOption.type === ApplicationCommandOptionType.Subcommand) {
 		if (typeof(command.checkPerm) === 'function') {
-			if (command.checkPerm(cmdOption.name, perm, parentName) !== true) {
+			if (command.checkPerm(perm, cmdOption.name, parentName) !== true) {
 				return [];
 			}
 		}

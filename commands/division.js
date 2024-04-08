@@ -44,7 +44,7 @@ module.exports = {
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
 			.addChannelOption(option => option.setName('channel').setDescription('Channel Name'))),
 	help: true,
-	checkPerm(commandName, perm) {
+	checkPerm(perm, commandName) {
 		return perm >= global.PERM_STAFF;
 	},
 	async autocomplete(interaction, member, perm, permName) {
@@ -83,9 +83,6 @@ module.exports = {
 	},
 	async execute(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
-		if (!module.exports.checkPerm(subCommand, perm)) {
-			return global.ephemeralReply(interaction, 'You do not have permission for this command');
-		}
 		switch (subCommand) {
 			case 'add': {
 				let name = interaction.options.getString('name');

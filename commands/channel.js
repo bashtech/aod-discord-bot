@@ -76,7 +76,7 @@ module.exports = {
 		.addSubcommand(command => command.setName('move').setDescription('Move a channel')
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to move').setRequired(true))),
 	help: true,
-	checkPerm(commandName, perm) {
+	checkPerm(perm, commandName, parentName) {
 		switch (commandName) {
 			case 'channel':
 			case 'topic':
@@ -110,9 +110,6 @@ module.exports = {
 		const subCommand = interaction.options.getSubcommand();
 		switch (subCommand) {
 			case 'add': {
-				if (perm < global.PERM_RECRUITER)
-					return interaction.reply({ content: "You do not have permissions to create channels", ephemeral: true });
-
 				let name = interaction.options.getString('name').toLowerCase().replace(/\s/g, '-');
 				let type = interaction.options.getString('type') ?? 'voice';
 				let level = interaction.options.getString('perm') ?? 'member';
@@ -172,9 +169,6 @@ module.exports = {
 				return global.addChannel(interaction.guild, interaction, member, perm, name, type, level, category, officerRole, role);
 			}
 			case 'delete': {
-				if (perm < global.PERM_DIVISION_COMMANDER)
-					return interaction.reply({ content: "You do not have permissions to delete channels", ephemeral: true });
-
 				let channel = interaction.options.getChannel('channel');
 				let channelName = channel.name;
 				if (global.config.protectedChannels.includes(channelName))
@@ -265,9 +259,6 @@ module.exports = {
 				break;
 			}
 			case 'update': {
-				if (perm < global.PERM_STAFF)
-					return interaction.reply({ content: "You do not have permissions to update channel permissions", ephemeral: true });
-
 				let level = interaction.options.getString('perm') ?? 'member';
 				let type = interaction.options.getString('type') ?? null;
 				let roleName = interaction.options.getString('role');
@@ -304,9 +295,6 @@ module.exports = {
 				return global.setChannelPerms(interaction.guild, interaction, member, perm, channel, type, level, category, officerRole, role);
 			}
 			case 'rename': {
-				if (perm < global.PERM_DIVISION_COMMANDER)
-					return interaction.reply({ content: "You do not have permissions to rename channels", ephemeral: true });
-
 				let name = interaction.options.getString('name').toLowerCase().replace(/\s/g, '-');
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 				let channelName = channel.name;
@@ -347,9 +335,6 @@ module.exports = {
 				return interaction.editReply({ content: `#${channelName} renamed to ${channel}`, ephemeral: true });
 			}
 			case 'move': {
-				if (perm < global.PERM_DIVISION_COMMANDER)
-					return interaction.reply({ content: "You do not have permissions to move channels", ephemeral: true });
-
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 				let category = channel.parent;
 				if (category) {

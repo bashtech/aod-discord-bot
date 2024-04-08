@@ -4297,9 +4297,25 @@ client.on('interactionCreate', async interaction => {
 	}
 	let [perm, permName] = getPermissionLevelForMember(member);
 
-	//console.log([interaction, command]);
 	interaction.isInteraction = true;
 	if (interaction.isChatInputCommand()) {
+		if (command.execute === undefined) {
+			console.log(`No execute callback defined for ${commandName}`);
+			return;
+		}
+		if (command.checkPerm !== undefined) {
+			const subCommandGroup = interaction.options.getSubcommandGroup(false);
+			const subCommand = interaction.options.getSubcommand(false);
+			let result = false;
+			if (subCommand) {
+				result = command.checkPerm(perm, subCommand, subCommandGroup);
+			} else {
+				result = command.checkPerm(perm, commandName);
+			}
+			if (!result) {
+				return ephemeralReply(interaction, 'You do not have permission for this command');
+			}
+		}
 		try {
 			logInteraction(command, interaction);
 			await command.execute(interaction, member, perm, permName);
@@ -4312,6 +4328,10 @@ client.on('interactionCreate', async interaction => {
 			} catch (error) {}
 		}
 	} else if (interaction.isAutocomplete()) {
+		if (command.autocomplete === undefined) {
+			console.log(`No autocomplete callback defined for ${commandName}`);
+			return;
+		}
 		try {
 			await command.autocomplete(interaction, member, perm, permName);
 			if (!interaction.responded)
@@ -4322,6 +4342,10 @@ client.on('interactionCreate', async interaction => {
 				interaction.respond([]);
 		}
 	} else if (interaction.isButton()) {
+		if (command.button === undefined) {
+			console.log(`No button callback defined for ${commandName}`);
+			return;
+		}
 		try {
 			await command.button(interaction, member, perm, permName);
 			if (!interaction.replied)
@@ -4332,7 +4356,17 @@ client.on('interactionCreate', async interaction => {
 				sendInteractionReply(interaction, { content: 'There was an error processing this action.', ephemeral: true });
 			} catch (error) {}
 		}
-		return;
+	} else if (interaction.isContextMenuCommand()) {
+		if (command.menu === undefined) {
+			console.log(`No menu callback defined for ${commandName}`);
+			return;
+		}
+		if (command.checkMenuPerm !== undefined) {
+			let result = command.checkMenuPerm(perm, commandName);
+			if (!result) {
+				return ephemeralReply(interaction, 'You do not have permission for this menu option');
+			}
+		}
 	} else {
 		try {
 			console.error(`Unknown interaction type ${interaction.type}`);

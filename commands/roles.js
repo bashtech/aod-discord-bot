@@ -65,7 +65,7 @@ module.exports = {
 				.addStringOption(option => option.setName('emoji').setDescription('Button Emoji'))
 				.addChannelOption(option => option.setName('channel').setDescription('Channel to send the button to')))),
 	help: true,
-	checkPerm(commandName, perm, parentName) {
+	checkPerm(perm, commandName, parentName) {
 		if (parentName === 'manage')
 			return perm >= global.PERM_STAFF;
 		switch (commandName) {
@@ -143,14 +143,10 @@ module.exports = {
 					return global.listRoles(interaction, member, interaction.guild, member, false);
 				}
 				case 'list_user': {
-					if (perm < global.PERM_MOD)
-						return interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
 					let targetMember = interaction.options.getMember('user');
 					return global.listRoles(interaction, member, interaction.guild, targetMember, true);
 				}
 				case 'members': {
-					if (perm < global.PERM_MOD)
-						return interaction.reply({ content: "You do not have permissions to show role members", ephemeral: true });
 					let role = interaction.options.getRole('role');
 					return global.listMembers(interaction, member, interaction.guild, role.name);
 				}
@@ -161,16 +157,12 @@ module.exports = {
 				}
 				case 'assign':
 				case 'unassign': {
-					if (perm < global.PERM_MOD)
-						return interaction.reply({ content: "You do not have permissions to assign roles", ephemeral: true });
 					let targetMember = interaction.options.getMember('user');
 					let roleName = interaction.options.getString('role');
 					return global.subUnsubRole(interaction, targetMember, interaction.guild, targetMember, true, subCommand === 'assign', roleName);
 				}
 			}
 		} else if (commandGroup === 'manage') {
-			if (perm < global.PERM_STAFF)
-				return interaction.reply({ content: "You do not have permissions to change managed roles", ephemeral: true });
 			await interaction.deferReply({ ephemeral: true });
 			switch (subCommand) {
 				case 'list': {
