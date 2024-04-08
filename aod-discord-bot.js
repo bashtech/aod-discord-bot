@@ -4227,11 +4227,15 @@ function logInteraction(command, interaction) {
 		return;
 	let cmd = [interaction.commandName];
 	let options = [];
-	interaction.options.data.forEach(o => {
-		let parsed = parseInteractionData(o);
-		cmd = cmd.concat(parsed.cmd);
-		options = options.concat(parsed.options);
-	});
+	if (interaction.isContextMenuCommand()) {
+		options.push(interaction.targetId);
+	} else {
+		interaction.options.data.forEach(o => {
+			let parsed = parseInteractionData(o);
+			cmd = cmd.concat(parsed.cmd);
+			options = options.concat(parsed.options);
+		});
+	}
 
 	cmd = '["' + cmd.join('" > "') + '"]';
 	options = command.noOptionsLog === true ? '' : ' options:[' + options.join(', ') + ']';
@@ -4320,11 +4324,11 @@ client.on('interactionCreate', async interaction => {
 			logInteraction(command, interaction);
 			await command.execute(interaction, member, perm, permName);
 			if (!interaction.replied)
-				sendInteractionReply(interaction, { content: "Done", ephemeral: true });
+				ephemeralReply(interaction, "Done");
 		} catch (error) {
 			console.error(error);
 			try {
-				sendInteractionReply(interaction, { content: 'There was an error while executing your command', ephemeral: true });
+				ephemeralReply(interaction, 'There was an error while executing your command');
 			} catch (error) {}
 		}
 	} else if (interaction.isAutocomplete()) {
@@ -4349,11 +4353,11 @@ client.on('interactionCreate', async interaction => {
 		try {
 			await command.button(interaction, member, perm, permName);
 			if (!interaction.replied)
-				sendInteractionReply(interaction, { content: "Done", ephemeral: true });
+				ephemeralReply(interaction, "Done");
 		} catch (error) {
 			console.error(error);
 			try {
-				sendInteractionReply(interaction, { content: 'There was an error processing this action.', ephemeral: true });
+				ephemeralReply(interaction, 'There was an error processing this action.');
 			} catch (error) {}
 		}
 	} else if (interaction.isContextMenuCommand()) {
@@ -4367,11 +4371,23 @@ client.on('interactionCreate', async interaction => {
 				return ephemeralReply(interaction, 'You do not have permission for this menu option');
 			}
 		}
+		try {
+			logInteraction(command, interaction);
+			await command.menu(interaction, member, perm, permName);
+			if (!interaction.replied)
+				sendInteractionReply(interaction, { content: "Done", ephemeral: true });
+		} catch (error) {
+			console.error(error);
+			try {
+				ephemeralReply(interaction, 'There was an error while executing your command');
+			} catch (error) {}
+		}
 	} else {
 		try {
 			console.error(`Unknown interaction type ${interaction.type}`);
-			if (interaction.isRepliable())
-				sendInteractionReply(interaction, { content: 'Unknown interaction type', ephemeral: true });
+			if (interaction.isRepliable()) {
+				ephemeralReply(interaction, 'Unknown interaction type');
+			}
 		} catch (error) {}
 	}
 });
