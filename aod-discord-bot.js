@@ -1597,6 +1597,14 @@ function getWebhookFromAPI(webhookID)
 }
 */
 
+const fetchTimeout = (url, ms, { signal, ...options } = {}) => {
+	const controller = new AbortController();
+	const promise = fetch(url, { signal: controller.signal, ...options });
+	if (signal) signal.addEventListener("abort", () => controller.abort());
+	const timeout = setTimeout(() => controller.abort(), ms);
+	return promise.finally(() => clearTimeout(timeout));
+};
+
 var _divisions;
 var _lastDivisionsRefresh;
 async function getDivisionsFromTracker() {
@@ -1607,7 +1615,7 @@ async function getDivisionsFromTracker() {
 			resolve(_divisions);
 		}
 		try {
-			let response = await fetch(`${config.trackerAPIURL}/divisions`, {
+			let response = await fetchTimeout(`${config.trackerAPIURL}/divisions`, 1000, {
 				method: 'get',
 				headers: {
 					'User-Agent': 'Discord Bot',
@@ -1643,7 +1651,7 @@ global.getDivisionsFromTracker = getDivisionsFromTracker;
 
 async function updateTrackerDivisionData(divisionData, data) {
 	let promise = new Promise(async function(resolve, reject) {
-		let response = await fetch(`${config.trackerAPIURL}/divisions/${divisionData.slug}`, {
+		let response = await fetchTimeout(`${config.trackerAPIURL}/divisions/${divisionData.slug}`, 1000, {
 			method: 'post',
 			body: JSON.stringify(data),
 			headers: {
@@ -2748,11 +2756,17 @@ function setDiscordIDForForumUser(forumUser, guildMember) {
 		let query = `UPDATE ${config.mysql.prefix}userfield SET field20="${guildMember.user.id}" WHERE userid=${forumUser.id}`;
 		db.query(query, function(err, rows, fields) {});
 	}
+	forumUser.discordid = guildMember.user.id;
 }
 
 function setDiscordTagForForumUser(forumUser, guildMember) {
 	if (forumUser.discordtag == guildMember.user.tag)
 		return;
+	//handle the case where someone gave us their ID directly
+	if (forumUser.discordtag == guildMember.user.id) {
+		forumUser.indexIsId = true;
+		setDiscordIDForForumUser(forumUser, guildMember);
+	}
 	console.log(`Updating Discord Tag for ${forumUser.name} (${forumUser.id}) Discord ID ${guildMember.user.id} from '${forumUser.discordtag}' to '${guildMember.user.tag}'`);
 	if (config.devMode !== true) {
 		let db = connectToDB();
@@ -3174,7 +3188,7 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 						officer_channel.send(`${divisionName} Division: ` +
 							`The forum sync process found ${division_misses} members with no discord account and ` +
 							`${division_disconnected} members who have left the server. ` +
-							`Please check ${config.trackerURL}/divisions/${divisionData.abbreviation}/voice-report`).catch(() => {});
+							`Please check ${config.trackerURL}/divisions/${divisionData.slug}/voice-report`).catch(() => {});
 					}
 				}
 			}
