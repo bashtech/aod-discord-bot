@@ -3183,7 +3183,9 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 					const divisionData = divisions[divisionName];
 					let division_misses = misses[divisionName] ?? 0;
 					let division_disconnected = disconnected[divisionName] ?? 0;
-					let officer_channel = guild.channels.cache.find(c => c.name === divisionData.officer_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
+					let officer_channel = guild.channels.resolve(divisionData.officer_channel);
+					if (!officer_channel)
+						officer_channel = guild.channels.cache.find(c => c.name === divisionData.officer_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
 					if (officer_channel) {
 						officer_channel.send(`${divisionName} Division: ` +
 							`The forum sync process found ${division_misses} members with no discord account and ` +
