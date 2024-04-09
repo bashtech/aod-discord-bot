@@ -104,7 +104,7 @@ module.exports = {
 		}
 
 		interaction.replied = true; //avoid common reply
-		const response = await interaction.editReply({ embeds: [embed], components: components, ephemeral: true });
+		const response = await global.ephemeralReply(interaction, { embeds: [embed], components: components}, true);
 		if (components.length) {
 			const filter = (i) => (i.customId === 'send_invite' || i.customId === 'move_to_me') && i.user.id === interaction.user.id;
 			try {
@@ -121,19 +121,19 @@ module.exports = {
 					});
 					if (invite) {
 						await targetMember.send(`${member} has invited you to their voice channel: ${invite.url}`);
-						await interaction.followUp({content: 'Intivation sent.', ephemeral: true});
+						await global.ephemeralReply(interaction, {content: 'Intivation sent'});
 					} else {
-						await interaction.followUp({content: 'Failed to create invitation.', ephemeral: true});
+						await global.ephemeralReply(interaction, {content: 'Failed to create invitation.'});
 					}
 				} else if (confirmation.customId === 'move_to_me') {
 					confirmation.update({
 						components: []
 					});
 					await targetMember.voice.setChannel(member.voice.channelId);
-					await interaction.followUp({content: `${targetMember} moved to your channel.`, ephemeral: true});
+					await global.ephemeralReply(interaction, {content: `${targetMember} moved to your channel.`});
 				}
 			} catch (e) {
-				await interaction.editReply({components: []});
+				await global.ephemeralReply(interaction, {components: []}, true);
 			}
 		}
 	},

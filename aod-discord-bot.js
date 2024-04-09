@@ -257,28 +257,37 @@ function getChannelFromMessageOrArgs(guild, message, args) {
 	return channel;
 }
 
-function sendInteractionReply(interaction, data) {
+function sendInteractionReply(interaction, data, edit) {
 	if (interaction.replied)
-		return interaction.followUp(data);
+		if (edit === true)
+			return interaction.editReply(data).catch(()=>{});
+		else
+			return interaction.followUp(data).catch(()=>{});
 	else if (interaction.deferred)
-		return interaction.editReply(data);
+		return interaction.editReply(data).catch(()=>{});
 	else
-		return interaction.reply(data);
+		return interaction.reply(data).catch(()=>{});
 }
 global.sendInteractionReply = sendInteractionReply;
 
-function ephemeralReply(message, msg) {
+function ephemeralReply(message, msg, edit) {
 	if (message) {
 		if (message.isInteraction) {
-			if (typeof(msg) === 'object')
-				return sendInteractionReply(message, { embeds: [msg], ephemeral: true });
-			else
-				return sendInteractionReply(message, { content: msg, ephemeral: true });
+			if (typeof(msg) === 'object') {
+				if (msg.embeds !== undefined || msg.components !== undefined) {
+					msg.ephemeral = true;
+					return sendInteractionReply(message, msg, edit);
+				} else {
+					return sendInteractionReply(message, { embeds: [msg], ephemeral: true }, edit);
+				}
+			} else {
+				return sendInteractionReply(message, { content: msg, ephemeral: true }, edit);
+			}
 		} else {
 			if (typeof(msg) === 'object')
-				return message.reply(message, { embeds: [msg] });
+				return message.reply(message, { embeds: [msg] }).catch(()=>{});
 			else
-				return message.reply(msg);
+				return message.reply(msg).catch(()=>{});
 		}
 	}
 	return Promise.resolve();
