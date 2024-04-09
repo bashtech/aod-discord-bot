@@ -3190,7 +3190,7 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 						officer_channel.send(`${divisionName} Division: ` +
 							`The forum sync process found ${division_misses} members with no discord account and ` +
 							`${division_disconnected} members who have left the server. ` +
-							`Please check ${config.trackerURL}/divisions/${divisionData.slug}/voice-report`).catch(() => {});
+							`Please check the [${divisionName} Voice Report](${config.trackerURL}/divisions/${divisionData.slug}/voice-report)`).catch(() => {});
 					}
 				}
 			}
