@@ -2,6 +2,8 @@
 
 const {
 	SlashCommandBuilder,
+	ContextMenuCommandBuilder,
+	ApplicationCommandType,
 	PermissionFlagsBits,
 	PermissionsBitField,
 	ChannelType,
@@ -15,6 +17,11 @@ module.exports = {
 		.setName('who')
 		.setDescription('Get information about a member')
 		.addUserOption(option => option.setName('user').setDescription('User').setRequired(true)),
+	menuCommands: [
+		new ContextMenuCommandBuilder()
+			.setName('Who')
+			.setType(ApplicationCommandType.User)
+	],
 	help: true,
 	checkPerm(perm, commandName) {
 		return perm >= global.PERM_MEMBER;
@@ -130,4 +137,7 @@ module.exports = {
 			}
 		}
 	},
+	async menu(interaction, member, perm, permName) {
+		return module.exports.execute(interaction, member, perm, permName);
+	}
 };

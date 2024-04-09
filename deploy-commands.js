@@ -10,8 +10,17 @@ const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('
 for (const file of commandFiles) {
 	const command = require(`./commands/${file}`);
 	commands.push(command.data.toJSON());
-	if (command.global === true)
+	if (command.global === true) {
 		globalCommands.push(command.data.toJSON());
+	}
+	if (command.menuCommands) {
+		command.menuCommands.forEach(m => {
+			commands.push(m.toJSON());
+			if (command.global === true) {
+				globalCommands.push(m.toJSON());
+			}
+		});
+	}
 }
 
 const rest = new REST({ version: '9' }).setToken(token);

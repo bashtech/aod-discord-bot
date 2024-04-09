@@ -4247,9 +4247,14 @@ function logInteraction(command, interaction) {
 //Slash Command Processing
 function loadSlashCommands() {
 	try {
-		if (client.commands)
+		if (client.commands) {
 			delete client.commands;
+		}
+		if (client.menuMap) {
+			delete client.menuMap;
+		}
 		client.commands = new Collection();
+		client.menuMap = {};
 		const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 		for (const file of commandFiles) {
 			try {
@@ -4257,6 +4262,11 @@ function loadSlashCommands() {
 			} catch (error) {}
 			const command = require(`./commands/${file}`);
 			client.commands.set(command.data.name, command);
+			if (command.menuCommands) {
+				command.menuCommands.forEach(m => {
+					client.menuMap[m.name] = command.data.name;
+				});
+			}
 		}
 	} catch (error) {
 		console.log(error);
@@ -4277,6 +4287,9 @@ client.on('interactionCreate', async interaction => {
 		}
 		args.shift(); //first is empty
 		commandName = args.shift();
+		command = client.commands.get(commandName);
+	} else if (interaction.isContextMenuCommand()) {
+		commandName = client.menuMap[interaction.commandName];
 		command = client.commands.get(commandName);
 	} else {
 		commandName = interaction.commandName;
