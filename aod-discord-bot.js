@@ -19,7 +19,8 @@ const {
 	ChannelType,
 	PermissionsBitField,
 	Collection,
-	InteractionType
+	InteractionType,
+	OverwriteType
 } = require('discord.js');
 
 //include node-fetch using esm-hook
@@ -260,13 +261,13 @@ function getChannelFromMessageOrArgs(guild, message, args) {
 function sendInteractionReply(interaction, data, edit) {
 	if (interaction.replied)
 		if (edit === true)
-			return interaction.editReply(data).catch(()=>{});
+			return interaction.editReply(data).catch(() => {});
 		else
-			return interaction.followUp(data).catch(()=>{});
+			return interaction.followUp(data).catch(() => {});
 	else if (interaction.deferred)
-		return interaction.editReply(data).catch(()=>{});
+		return interaction.editReply(data).catch(() => {});
 	else
-		return interaction.reply(data).catch(()=>{});
+		return interaction.reply(data).catch(() => {});
 }
 global.sendInteractionReply = sendInteractionReply;
 
@@ -285,9 +286,9 @@ function ephemeralReply(message, msg, edit) {
 			}
 		} else {
 			if (typeof(msg) === 'object')
-				return message.reply(message, { embeds: [msg] }).catch(()=>{});
+				return message.reply(message, { embeds: [msg] }).catch(() => {});
 			else
-				return message.reply(msg).catch(()=>{});
+				return message.reply(msg).catch(() => {});
 		}
 	}
 	return Promise.resolve();
@@ -1212,6 +1213,106 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 	return promise;
 }
 
+function getPermissionDetails(permBitField) {
+	return {
+		view: permBitField.has(PermissionsBitField.Flags.ViewChannel),
+		connect: permBitField.has(PermissionsBitField.Flags.Connect),
+		send: permBitField.has(PermissionsBitField.Flags.SendMessages),
+		manage: permBitField.has(PermissionsBitField.Flags.ManageMessages)
+	};
+}
+
+function getChannelRole(guild, channel) {
+	let subRoles = getUserRoles(false);
+	let channelRole;
+	let overwrite = channel.permissionOverwrites.cache.find(o => {
+		if (o.type === OverwriteType.Role) {
+			let role = guild.roles.resolve(o.id);
+			if (role) {
+				if (subRoles.includes(role.name)) {
+					channelRole = role;
+					return true;
+				}
+			}
+		}
+		return false;
+	});
+	return channelRole;
+}
+
+function getChannelInfo(guild, channel, officerRole) {
+	let promise = new Promise(async function(resolve, reject) {
+		const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
+		const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
+		const modRole = guild.roles.cache.find(r => { return r.name == config.modRoles[0]; });
+		const staffRole = guild.roles.cache.find(r => { return r.name == config.staffRoles[0]; });
+		//const adminRole = guild.roles.cache.find(r => { return r.name == config.adminRoles[0]; });
+		const channelRole = getChannelRole(guild, channel);
+
+		const everyonePerms = await channel.permissionsFor(guild.roles.everyone);
+		const guestPerms = await channel.permissionsFor(guestRole);
+		const memberPerms = await channel.permissionsFor(memberRole);
+		const channelRolePerms = (channelRole ? await channel.permissionsFor(channelRole) : null);
+		const officerPerms = (officerRole ? await channel.permissionsFor(officerRole) : null);
+		const modPerms = await channel.permissionsFor(modRole);
+		const staffPerms = await channel.permissionsFor(staffRole);
+
+		let type = 'Text';
+		if (channel.isVoiceBased()) {
+			if (joinToCreateChannels.joinToCreateChannels[channel.id] === 1) {
+				type = 'JTC';
+			} else if (memberPerms && !memberPerms.has(PermissionsBitField.Flags.UseVAD)) {
+				type = 'PTT';
+			} else {
+				type = 'VAD';
+			}
+		}
+
+		let perm = 'Public';
+		if (everyonePerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			if (!everyonePerms.has(PermissionsBitField.Flags.SendMessages)) {
+				perm = 'Feed';
+			}
+		} else if (guestPerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			perm = 'Guest';
+		} else if (memberPerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			perm = 'Member';
+		} else if (channelRolePerms && channelRolePerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			perm = 'Role';
+		} else if (officerPerms && officerPerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			perm = 'Officer';
+		} else if (modPerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			perm = 'Mod';
+		} else if (staffPerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			perm = 'Staff';
+		} else {
+			perm = 'Admin';
+		}
+
+		let details = {};
+		details.everyone = getPermissionDetails(everyonePerms);
+		details.guest = getPermissionDetails(guestPerms);
+		details.member = getPermissionDetails(memberPerms);
+		if (channelRole) {
+			details.role = getPermissionDetails(channelRolePerms);
+			details.role.role = channelRole;
+		}
+		if (officerRole) {
+			details.officer = getPermissionDetails(officerPerms);
+		}
+		details.mod = getPermissionDetails(modPerms);
+		details.staff = getPermissionDetails(staffPerms);
+
+		resolve({
+			type: type,
+			perm: perm,
+			details: details
+		});
+	});
+	return promise;
+}
+global.getChannelInfo = getChannelInfo;
+
 async function addChannel(guild, message, member, perm, name, type, level, category, officerRole, role, targetMember) {
 	//get channel permissions
 	let permissions = await getChannelPermissions(guild, message, perm, level, type, officerRole, role, targetMember);
@@ -1359,8 +1460,9 @@ async function setChannelPerms(guild, message, member, perm, channel, type, leve
 	//get channel permissions
 	if (channel.isVoiceBased()) {
 		if (type !== 'voice' && type !== 'ptt') {
-			let everyonePerms = await channel.permissionsFor(guild.roles.everyone);
-			if (everyonePerms && !everyonePerms.has(PermissionsBitField.Flags.UseVAD)) {
+			const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
+			const memberPerms = await channel.permissionsFor(memberRole);
+			if (memberPerms && !memberPerms.has(PermissionsBitField.Flags.UseVAD)) {
 				type = 'ptt';
 			} else {
 				type = 'voice';
@@ -2914,22 +3016,23 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 				role = guild.roles.resolve(groupMap.roleID);
 
 			if (role) {
+				let isMemberRole = (role.id === memberRole.id);
+				let isGuestRole = (role.id === guestRole.id);
 				let usersByIDOrDiscriminator;
 				try {
-					usersByIDOrDiscriminator = await getForumUsersForGroups(groupMap.forumGroups, (role.id === memberRole.id));
+					usersByIDOrDiscriminator = await getForumUsersForGroups(groupMap.forumGroups, isMemberRole);
 				} catch (error) {
 					notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
 					continue;
 				}
 
 				date = new Date();
+				let epochMs = date.getTime();
 				fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  Sync ${role.name}\n`, 'utf8');
 				let embed = {
 					title: `Sync ${role.name}`,
 					fields: []
 				};
-
-				//console.log(`${date.toISOString()} Start processing ${role.name} role members`);
 
 				//for each guild member with the role
 				//   track them by tag so we can easily access them again later
@@ -2953,12 +3056,12 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 					}
 
 					if (forumUser === undefined) {
-						if (role.id !== guestRole.id) {
+						if (!isGuestRole) {
 							removes++;
 							toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
 							try {
 								await roleMember.roles.remove(role, reason);
-								if (role.id === memberRole.id) {
+								if (isMemberRole) {
 									//we're removing them from AOD, clear the name set from the forums
 									await roleMember.setNickname('', reason);
 									//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
@@ -2971,28 +3074,31 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 							}
 						}
 					} else {
-						if (nickNameChanges[roleMember.user.id] === undefined && roleMember.displayName !== forumUser.name) {
-							nickNameChanges[roleMember.user.id] = true;
-							if (role.id !== guestRole.id) {
-								renames++;
-								toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
+						if (isMemberRole || isGuestRole) {
+							if (nickNameChanges[roleMember.user.id] === undefined && roleMember.displayName !== forumUser.name) {
+								nickNameChanges[roleMember.user.id] = true;
+								if (!isGuestRole) {
+									renames++;
+									toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
+								}
+								try {
+									await roleMember.setNickname(forumUser.name, reason);
+								} catch (error) {
+									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+									continue;
+								}
 							}
-							try {
-								await roleMember.setNickname(forumUser.name, reason);
-							} catch (error) {
-								notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-								continue;
-							}
+							setDiscordTagForForumUser(forumUser, roleMember);
+							setDiscordStatusForForumUser(forumUser, 'connected');
 						}
-						setDiscordTagForForumUser(forumUser, roleMember);
-						setDiscordStatusForForumUser(forumUser, 'connected');
-						if (roleMember.voice.channel)
-							setDiscordActivityForForumUser(forumUser, date.getTime());
-						else if (localVoiceStatusUpdates[roleMember.id])
-							setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[roleMember.id]);
 
-						//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
-						if (role.id === memberRole.id) {
+						if (isMemberRole) {
+							if (roleMember.voice.channel)
+								setDiscordActivityForForumUser(forumUser, epochMs);
+							else if (localVoiceStatusUpdates[roleMember.id])
+								setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[roleMember.id]);
+
+							//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
 							if (seenByID[roleMember.id] !== undefined) {
 								duplicateTag.push(`${roleMember.user.tag} (${forumUser.name}) -- First seen user ${seenByID[roleMember.id].name}`);
 								duplicates++;
@@ -3007,31 +3113,20 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 									continue;
 								}
 							}
-						} else if (role.id === guestRole.id) {
+						} else if (isGuestRole) {
 							if (seenByID[roleMember.id] !== undefined) {
 								duplicateTag.push(`${roleMember.user.tag} (${forumUser.name}) -- First seen user ${seenByID[roleMember.id].name}`);
 								duplicates++;
 							} else {
 								seenByID[roleMember.id] = forumUser;
 							}
-							if (roleMember.roles.cache.get(memberRole.id)) {
-								try {
-									await roleMember.roles.remove(memberRole);
-								} catch (error) {
-									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-									continue;
-								}
-							}
 						}
 					}
 				}
 
-				//date = new Date();
-				//console.log(`${date.toISOString()} Start processing ${role.name} forum members`);
-
 				//for each forum member mapped to the role
 				//   if we haven't already seen the guild member
-				//       if there is a guild member record, at them to the role and make sure the nickname is valid
+				//       if there is a guild member record, add them to the role and make sure the nickname is valid
 				//       otherwise, mark them as an error and move on
 				let toAdd = [];
 				let noAccount = [];
@@ -3053,7 +3148,7 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 								}
 							}
 							if (guildMember) {
-								if (role.id !== guestRole.id) {
+								if (!isGuestRole) {
 									adds++;
 									toAdd.push(`${guildMember.user.tag} (${forumUser.name})`);
 								}
@@ -3066,7 +3161,7 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 								}
 								if (nickNameChanges[guildMember.user.id] === undefined && guildMember.displayName !== forumUser.name) {
 									nickNameChanges[guildMember.user.id] = true;
-									if (role.id !== guestRole.id) {
+									if (!isGuestRole) {
 										renames++;
 										toUpdate.push(`${guildMember.user.tag} (${guildMember.displayName} ==> ${forumUser.name})`);
 									}
@@ -3079,13 +3174,15 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 									}
 								}
 								setDiscordTagForForumUser(forumUser, guildMember);
-								setDiscordStatusForForumUser(forumUser, 'connected');
-								if (guildMember.voice.channel)
-									setDiscordActivityForForumUser(forumUser, date.getTime());
-								else if (localVoiceStatusUpdates[guildMember.id])
-									setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[guildMember.id]);
+								if (isMemberRole) {
+									setDiscordStatusForForumUser(forumUser, 'connected');
+									if (guildMember.voice.channel)
+										setDiscordActivityForForumUser(forumUser, epochMs);
+									else if (localVoiceStatusUpdates[guildMember.id])
+										setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[guildMember.id]);
+								}
 							} else {
-								if (role.id === memberRole.id) {
+								if (isMemberRole) {
 									if (forumUser.indexIsId) {
 										if (disconnected[forumUser.division] === undefined)
 											disconnected[forumUser.division] = 0;
@@ -3101,7 +3198,7 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 										noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
 										setDiscordStatusForForumUser(forumUser, 'never_connected');
 									}
-								} else if (role.id === guestRole.id) {
+								} else if (isGuestRole) {
 									//We don't need to constantly reprocess old AOD members who have left or forum guests who visited discord once
 									clearDiscordDataForForumUser(forumUser);
 								}
@@ -3110,10 +3207,7 @@ async function doForumSync(message, member, guild, perm, doDaily) {
 					}
 				}
 
-				//date = new Date();
-				//console.log(`${date.toISOString()} Done processing ${role.name}`);
-
-				if (role.id !== guestRole.id) {
+				if (!isGuestRole) {
 					let sendMessage = false;
 					if (toAdd.length) {
 						sendMessage = true;

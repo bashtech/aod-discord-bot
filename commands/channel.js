@@ -74,13 +74,16 @@ module.exports = {
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to rename').setRequired(true).addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice))
 			.addStringOption(option => option.setName('name').setDescription('Channel Name').setRequired(true)))
 		.addSubcommand(command => command.setName('move').setDescription('Move a channel')
-			.addChannelOption(option => option.setName('channel').setDescription('Channel to move').setRequired(true))),
+			.addChannelOption(option => option.setName('channel').setDescription('Channel to move').setRequired(true)))
+		.addSubcommand(command => command.setName('info').setDescription('Channel information')
+			.addChannelOption(option => option.setName('channel').setDescription('Channel'))),
 	help: true,
 	checkPerm(perm, commandName, parentName) {
 		switch (commandName) {
 			case 'channel':
 			case 'topic':
 				return perm >= global.PERM_MEMBER;
+			case 'info':
 			case 'add':
 				return perm >= global.PERM_RECRUITER;
 			case 'delete':
@@ -393,6 +396,47 @@ module.exports = {
 						return await interaction.editReply({ content: 'Timeout', components: [], ephemeral: true });
 					}
 				}
+				break;
+			}
+			case 'info': {
+				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
+				let officerRole;
+				let category = channel.parent;
+				if (category) {
+					//check if this category has an associated officer role
+					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+					officerRole = interaction.guild.roles.cache.find(r => { return r.name == officerRoleName; });
+				}
+
+				await interaction.deferReply({ ephemeral: true });
+				info = await global.getChannelInfo(interaction.guild, channel, officerRole);
+
+				let embed = {
+					description: `**Information for ${channel}**`,
+					fields: [{
+						name: 'Channel Type',
+						value: info.type
+					}, {
+						name: 'Permission Level',
+						value: info.perm
+					}],
+				};
+
+				if (officerRole) {
+					embed.fields.push({
+						name: 'Officer Role',
+						value: `${officerRole}`
+					});
+				}
+
+				if (info.details.role) {
+					embed.fields.push({
+						name: 'Channel Role',
+						value: `${info.details.role.role}`
+					});
+				}
+
+				await global.ephemeralReply(interaction, embed);
 				break;
 			}
 		}
