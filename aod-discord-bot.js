@@ -1061,19 +1061,33 @@ function commandPurge(message, member, cmd, args, guild, perm, permName, isDM) {
 		.catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
 }
 
-var channelPermissionLevels = ['feed', 'guest', 'member', 'role', 'officer', 'mod', 'staff', 'admin'];
+var channelPermissionLevels = ['public', 'feed', 'guest', 'member', 'role', 'officer', 'mod', 'staff', 'admin'];
 var FlagSetVoiceChannelStatus = 1n << 48n; //FIXME Replace with officiel flag
 
 async function getChannelPermissions(guild, message, perm, level, type, divisionOfficerRole, additionalRole, targetMember) {
 	let promise = new Promise(async function(resolve, reject) {
 		//@everyone permissions
 		let defaultAllow = [];
-		let defaultDeny = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect];
+		let defaultDeny = [
+			PermissionsBitField.Flags.ViewChannel,
+			PermissionsBitField.Flags.Connect
+		];
 		//default role permissions
-		let allow = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect];
+		let allow = [
+			PermissionsBitField.Flags.ViewChannel,
+			PermissionsBitField.Flags.Connect
+		];
 		let deny = [];
 		if (type === 'ptt')
 			defaultDeny.push(PermissionsBitField.Flags.UseVAD);
+		let officerAllow = allow.concat([
+			PermissionsBitField.Flags.ManageMessages,
+			PermissionsBitField.Flags.MoveMembers,
+			FlagSetVoiceChannelStatus
+		]);
+		let memberAllow = allow.concat([
+			FlagSetVoiceChannelStatus
+		]);
 
 		var permissions;
 		switch (level) {
@@ -1091,11 +1105,9 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 				permissions = getPermissionsForEveryone(guild, defaultAllow, defaultDeny, allow, deny);
 				//add role permissions if necessary
 				if (divisionOfficerRole) {
-					let officerAllow = allow.concat([PermissionsBitField.Flags.ManageMessages, FlagSetVoiceChannelStatus]);
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
 				}
 				if (targetMember) {
-					let memberAllow = allow.concat([FlagSetVoiceChannelStatus]);
 					permissions = addMemberToPermissions(guild, targetMember, permissions, memberAllow, deny);
 				}
 				break;
@@ -1109,11 +1121,9 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 				permissions = getPermissionsForGuest(guild, defaultAllow, defaultDeny, allow, deny);
 				//add role permissions if necessary
 				if (divisionOfficerRole) {
-					let officerAllow = allow.concat([PermissionsBitField.Flags.ManageMessages, FlagSetVoiceChannelStatus]);
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
 				}
 				if (targetMember) {
-					let memberAllow = allow.concat([FlagSetVoiceChannelStatus]);
 					permissions = addMemberToPermissions(guild, targetMember, permissions, memberAllow, deny);
 				}
 				break;
@@ -1179,7 +1189,6 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 				});
 				//add role permissions if necessary
 				if (divisionOfficerRole) {
-					let officerAllow = allow.concat([PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages]);
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
 				}
 				break;
@@ -1199,11 +1208,9 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 				permissions = getPermissionsForMembers(guild, defaultAllow, defaultDeny, allow, deny);
 				//add role permissions if necessary
 				if (divisionOfficerRole) {
-					let officerAllow = allow.concat([PermissionsBitField.Flags.ManageMessages, FlagSetVoiceChannelStatus]);
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
 				}
 				if (targetMember) {
-					let memberAllow = allow.concat([FlagSetVoiceChannelStatus]);
 					permissions = addMemberToPermissions(guild, targetMember, permissions, memberAllow, deny);
 				}
 				break;
