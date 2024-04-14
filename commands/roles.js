@@ -57,6 +57,9 @@ module.exports = {
 				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
 			.addSubcommand(command => command.setName('remove_subscribable').setDescription('Remove a subscribable Role')
 				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
+			.addSubcommand(command => command.setName('rename').setDescription('Rename a managed role')
+				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true))
+				.addStringOption(option => option.setName('name').setDescription('New role name').setRequired(true)))
 			.addSubcommand(command => command.setName('list').setDescription('List managed Roles'))
 			.addSubcommand(command => command.setName('prune').setDescription('Prune Roles that have been manually removed'))
 			.addSubcommand(command => command.setName('button').setDescription('Add a Get Role button to a channel')
@@ -125,6 +128,13 @@ module.exports = {
 				}
 				break;
 			}
+			case 'rename': {
+				if (focusedOption.name === 'role') {
+					let managedRoles = global.getUserRoles(true).concat(global.getUserRoles(false));
+					return interaction.respond(sortAndLimitOptions(managedRoles, 25, search));
+				}
+				break;
+			}
 			case 'button': {
 				if (focusedOption.name === 'role') {
 					let managedRoles = global.getUserRoles(false);
@@ -185,6 +195,11 @@ module.exports = {
 				case 'remove_subscribable': {
 					let roleName = interaction.options.getString('role');
 					return global.removeManagedRole(interaction, member, interaction.guild, roleName, subCommand === 'remove_assignable');
+				}
+				case 'rename': {
+					let roleName = interaction.options.getString('role');
+					let newRoleName = interaction.options.getString('name');
+					return global.renameManagedRole(interaction, member, interaction.guild, roleName, newRoleName);
 				}
 				case 'button': {
 					let roleName = interaction.options.getString('role');

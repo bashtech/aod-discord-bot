@@ -2146,7 +2146,7 @@ function saveRolesConfigFile() {
 	fs.writeFileSync(config.managedRoles, JSON.stringify(managedRoles), 'utf8');
 }
 
-async function doAddManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, role, isNew) {
+async function doAddManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, role, isNew, commonString) {
 	if (rolesConfig[roleName] === undefined) {
 		rolesConfig[roleName] = {
 			roleID: role.id,
@@ -2165,7 +2165,7 @@ async function doAddManagedRole(message, guild, rolesConfig, otherRolesConfig, r
 	}
 }
 
-async function doRemoveManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName) {
+async function doRemoveManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, commonString) {
 	if (rolesConfig[roleName] === undefined) {
 		return ephemeralReply(message, `Role ${roleName} is not managed`);
 	} else {
@@ -2176,6 +2176,35 @@ async function doRemoveManagedRole(message, guild, rolesConfig, otherRolesConfig
 		if (deleteRole && role)
 			await role.delete(`Requested by ${getNameFromMessage(message)}`);
 		return ephemeralReply(message, `Role ${roleName} removed from ${commonString} roles`);
+	}
+}
+
+async function doRenameManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, newRoleName) {
+	if (rolesConfig[roleName] === undefined) {
+		return ephemeralReply(message, `Role ${roleName} is not managed`);
+	} else {
+		if (rolesConfig[newRoleName] !== undefined || otherRolesConfig[newRoleName] ||
+			guild.roles.cache.find(r => r.name === newRoleName)) {
+			return ephemeralReply(message, `Role ${newRoleName} already exists`);
+		}
+
+		let role = guild.roles.resolve(rolesConfig[roleName].roleID);
+		let renamed = true;
+		await role.setName(newRoleName)
+			.then(() => {
+				rolesConfig[newRoleName] = rolesConfig[roleName];
+				delete rolesConfig[roleName];
+				if (otherRolesConfig[roleName] !== undefined) {
+					otherRolesConfig[newRoleName] = otherRolesConfig[roleName];
+					delete otherRolesConfig[roleName];
+				}
+				saveRolesConfigFile();
+			})
+			.catch(error => {
+				console.log(error);
+				ephemeralReply(message, `Failed to rename ${roleName}`);
+			});
+		return ephemeralReply(message, `Role ${roleName} renamed to ${newRoleName}`);
 	}
 }
 
@@ -2278,7 +2307,7 @@ async function addManagedRole(message, member, guild, roleName, create, assign) 
 		commonString = 'subscribable';
 	}
 
-	let role = guild.roles.cache.find(r => { return r.name == roleName; });
+	let role = guild.roles.cache.find(r => r.name == roleName);
 	if (role) {
 		if (create) {
 			return ephemeralReply(message, `Role ${roleName} already exists.`);
@@ -2298,7 +2327,7 @@ async function addManagedRole(message, member, guild, roleName, create, assign) 
 		roleName = role.name; //in case discord alters
 	}
 
-	return doAddManagedRole(message, guild, rolesConfig, null, roleName, role, create);
+	return doAddManagedRole(message, guild, rolesConfig, null, roleName, role, create, commonString);
 }
 global.addManagedRole = addManagedRole;
 
@@ -2313,9 +2342,24 @@ async function removeManagedRole(message, member, guild, roleName, assign) {
 		commonString = 'subscribable';
 	}
 
-	return doRemoveManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName);
+	return doRemoveManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, commonString);
 }
 global.removeManagedRole = removeManagedRole;
+
+async function renameManagedRole(message, member, guild, roleName, newRoleName) {
+	if (managedRoles.assignable[roleName] !== undefined) {
+		rolesConfig = managedRoles.assignable;
+		otherRolesConfig = managedRoles.subscribable;
+	} else if (managedRoles.subscribable[roleName] !== undefined) {
+		rolesConfig = managedRoles.subscribable;
+		otherRolesConfig = managedRoles.assignable;
+	} else {
+		return ephemeralReply(message, `Role ${roleName} is not manageable`);
+	}
+
+	return doRenameManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, newRoleName);
+}
+global.renameManagedRole = renameManagedRole;
 
 //subrole command processing
 async function commandSubRoles(message, member, cmd, args, guild, perm, permName, isDM) {
