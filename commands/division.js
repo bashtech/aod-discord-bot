@@ -38,9 +38,9 @@ module.exports = {
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true)))
 		.addSubcommand(command => command.setName('prefix').setDescription('Update division channel prefix')
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
-			.addStringOption(option => option.setName('old_prefix').setDescription('Old Prefix (if not the division name)'))
-			.addStringOption(option => option.setName('new_prefix').setDescription('New Prefix (if division name does not match tracker)')))
-		.addSubcommand(command => command.setName('officer_channel').setDescription('Update division channel prefix')
+			.addStringOption(option => option.setName('old-prefix').setDescription('Old Prefix (if not the division name)'))
+			.addStringOption(option => option.setName('new-prefix').setDescription('New Prefix (if division name does not match tracker)')))
+		.addSubcommand(command => command.setName('officer-channel').setDescription('Update division channel prefix')
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
 			.addChannelOption(option => option.setName('channel').setDescription('Channel Name'))),
 	help: true,
@@ -56,7 +56,7 @@ module.exports = {
 			case 'delete':
 			case 'info':
 			case 'prefix':
-			case 'officer_channel': {
+			case 'officer-channel': {
 				if (focusedOption.name === 'name') {
 					let divisions = await global.getDivisionsFromTracker();
 					let options = [];
@@ -65,7 +65,7 @@ module.exports = {
 							if (subCommand === 'info') {
 								options.push(divisionName);
 							} else if (interaction.guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory)) {
-								if (subCommand === 'delete' || subCommand === 'prefix' || subCommand === 'officer_channel') {
+								if (subCommand === 'delete' || subCommand === 'prefix' || subCommand === 'officer-channel') {
 									options.push(divisionName);
 								}
 							} else {
@@ -174,8 +174,8 @@ module.exports = {
 			}
 			case 'prefix': {
 				let name = interaction.options.getString('name');
-				let old_prefix = interaction.options.getString('old_prefix');
-				let new_prefix = interaction.options.getString('new_prefix');
+				let old_prefix = interaction.options.getString('old-prefix');
+				let new_prefix = interaction.options.getString('new-prefix');
 
 				if (global.config.protectedCategories.includes(name)) {
 					return global.ephemeralReply(interaction, `${name} is a protected category`);
@@ -216,7 +216,7 @@ module.exports = {
 				}
 				return global.ephemeralReply(interaction, reply);
 			}
-			case 'officer_channel': {
+			case 'officer-channel': {
 				let name = interaction.options.getString('name');
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 

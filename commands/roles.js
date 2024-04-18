@@ -30,7 +30,7 @@ module.exports = {
 		.setName('roles')
 		.setDescription('Manage user roles')
 		.addSubcommand(command => command.setName('list').setDescription('Lists your current and available subscribable roles'))
-		.addSubcommand(command => command.setName('list_user').setDescription('Lists current and available assignable roles for another user')
+		.addSubcommand(command => command.setName('list-user').setDescription('Lists current and available assignable roles for another user')
 			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true)))
 		.addSubcommand(command => command.setName('members').setDescription('Show members of a role')
 			.addRoleOption(option => option.setName('role').setDescription('Role').setRequired(true)))
@@ -47,15 +47,15 @@ module.exports = {
 		.addSubcommandGroup(command => command.setName('manage').setDescription('Manage Roles')
 			.addSubcommand(command => command.setName('add_assignable').setDescription('Add an existing Role as assignable')
 				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
-			.addSubcommand(command => command.setName('add_subscribable').setDescription('Add an existing Role as subscribable')
+			.addSubcommand(command => command.setName('add-subscribable').setDescription('Add an existing Role as subscribable')
 				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
-			.addSubcommand(command => command.setName('create_assignable').setDescription('Create a new Role as assignable')
+			.addSubcommand(command => command.setName('create-assignable').setDescription('Create a new Role as assignable')
 				.addStringOption(option => option.setName('role').setDescription('Role').setRequired(true)))
-			.addSubcommand(command => command.setName('create_subscribable').setDescription('Create a new Role as subscribable')
+			.addSubcommand(command => command.setName('create-subscribable').setDescription('Create a new Role as subscribable')
 				.addStringOption(option => option.setName('role').setDescription('Role').setRequired(true)))
-			.addSubcommand(command => command.setName('remove_assignable').setDescription('Remove an assignable Role')
+			.addSubcommand(command => command.setName('remove-assignable').setDescription('Remove an assignable Role')
 				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
-			.addSubcommand(command => command.setName('remove_subscribable').setDescription('Remove a subscribable Role')
+			.addSubcommand(command => command.setName('remove-subscribable').setDescription('Remove a subscribable Role')
 				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true)))
 			.addSubcommand(command => command.setName('rename').setDescription('Rename a managed role')
 				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true))
@@ -79,7 +79,7 @@ module.exports = {
 				return perm >= global.PERM_NONE;
 			case 'assign':
 			case 'unassign':
-			case 'list_user':
+			case 'list-user':
 			case 'members':
 				return perm >= global.PERM_MOD;
 		}
@@ -105,8 +105,8 @@ module.exports = {
 					return interaction.respond(sortAndLimitOptions(global.getUserRoles(true, targetMember, subCommand !== 'assign'), 25, search));
 				break;
 			}
-			case 'add_assignable':
-			case 'add_subscribable': {
+			case 'add-assignable':
+			case 'add-subscribable': {
 				if (focusedOption.name === 'role') {
 					let managedRoles = global.getUserRoles(subCommand === 'add_assignable');
 					let guildRoles = [];
@@ -120,8 +120,8 @@ module.exports = {
 				}
 				break;
 			}
-			case 'remove_assignable':
-			case 'remove_subscribable': {
+			case 'remove-assignable':
+			case 'remove-subscribable': {
 				if (focusedOption.name === 'role') {
 					let managedRoles = global.getUserRoles(subCommand === 'remove_assignable');
 					return interaction.respond(sortAndLimitOptions(managedRoles, 25, search));
@@ -152,7 +152,7 @@ module.exports = {
 				case 'list': {
 					return global.listRoles(interaction, member, interaction.guild, member, false);
 				}
-				case 'list_user': {
+				case 'list-user': {
 					let targetMember = interaction.options.getMember('user');
 					return global.listRoles(interaction, member, interaction.guild, targetMember, true);
 				}
@@ -181,18 +181,18 @@ module.exports = {
 				case 'prune': {
 					return global.pruneManagedRoles(interaction, member, interaction.guild);
 				}
-				case 'add_assignable':
-				case 'add_subscribable': {
+				case 'add-assignable':
+				case 'add-subscribable': {
 					let roleName = interaction.options.getString('role');
 					return global.addManagedRole(interaction, member, interaction.guild, roleName, false, subCommand === 'add_assignable');
 				}
-				case 'create_assignable':
-				case 'create_subscribable': {
+				case 'create-assignable':
+				case 'create-subscribable': {
 					let roleName = interaction.options.getString('role');
 					return global.addManagedRole(interaction, member, interaction.guild, roleName, true, subCommand === 'create_assignable');
 				}
-				case 'remove_assignable':
-				case 'remove_subscribable': {
+				case 'remove-assignable':
+				case 'remove-subscribable': {
 					let roleName = interaction.options.getString('role');
 					return global.removeManagedRole(interaction, member, interaction.guild, roleName, subCommand === 'remove_assignable');
 				}
