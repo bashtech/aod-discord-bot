@@ -73,7 +73,7 @@ module.exports = {
 					return;
 				}
 				if (typeof(command.checkPerm) === 'function') {
-					if (command.checkPerm(name, perm) !== true) {
+					if (command.checkPerm(perm, name) !== true) {
 						return;
 					}
 				}
