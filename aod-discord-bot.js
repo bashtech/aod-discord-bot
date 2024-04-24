@@ -4430,6 +4430,24 @@ function logInteraction(command, interaction) {
 	console.log(`${getNameFromMessage(interaction)} executed: cmd:${cmd}${options}`);
 }
 
+function sortAndLimitOptions(options, len, search) {
+	let count = 0;
+	return options
+		.sort()
+		.filter(o => {
+			if (count >= len) {
+				return false;
+			} else if (o.toLowerCase().includes(search)) {
+				count++;
+				return true;
+			} else {
+				return false;
+			}
+		})
+		.map(o => ({ name: o, value: o }));
+}
+global.sortAndLimitOptions = sortAndLimitOptions;
+
 //Slash Command Processing
 function loadSlashCommands() {
 	try {

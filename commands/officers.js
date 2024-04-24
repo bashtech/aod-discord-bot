@@ -2,23 +2,6 @@
 
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 
-function sortAndLimitOptions(options, len, search) {
-	let count = 0;
-	return options
-		.sort()
-		.filter(o => {
-			if (count >= len) {
-				return false;
-			} else if (o.toLowerCase().startsWith(search)) {
-				count++;
-				return true;
-			} else {
-				return false;
-			}
-		})
-		.map(o => ({ name: o, value: o }));
-}
-
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('officers')
@@ -35,7 +18,7 @@ module.exports = {
 					guildRoles.push(role.name);
 				}
 			}
-			return interaction.respond(sortAndLimitOptions(guildRoles, 25, search));
+			return interaction.respond(global.sortAndLimitOptions(guildRoles, 25, search));
 		}
 	},
 	async execute(interaction, member, perm, permName) {

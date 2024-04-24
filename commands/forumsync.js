@@ -5,23 +5,6 @@ const {
 	PermissionFlagsBits
 } = require('discord.js');
 
-function sortAndLimitOptions(options, len, search) {
-	let count = 0;
-	return options
-		.sort()
-		.filter(o => {
-			if (count >= len) {
-				return false;
-			} else if (o.toLowerCase().includes(search)) {
-				count++;
-				return true;
-			} else {
-				return false;
-			}
-		})
-		.map(o => ({ name: o, value: o }));
-}
-
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('forumsync')
@@ -52,13 +35,13 @@ module.exports = {
 					let roles = interaction.guild.roles.cache
 						.filter(r => r.name.endsWith(global.config.discordOfficerSuffix))
 						.map(r => r.name);
-					await interaction.respond(sortAndLimitOptions(roles, 25, search));
+					await interaction.respond(global.sortAndLimitOptions(roles, 25, search));
 				} else if (focusedOption.name === 'group') {
 					let forumGroups = await global.getForumGroups();
 					if (forumGroups) {
 						forumGroups = Object.values(forumGroups)
 							.filter(g => g.endsWith(global.config.forumOfficerSuffix));
-						await interaction.respond(sortAndLimitOptions(forumGroups, 25, search));
+						await interaction.respond(global.sortAndLimitOptions(forumGroups, 25, search));
 					}
 				}
 			}

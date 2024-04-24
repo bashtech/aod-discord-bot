@@ -33,23 +33,6 @@ const voiceTypeChoices = [
 	{ name: 'PTT Only', value: 'ptt' },
 ];
 
-function sortAndLimitOptions(options, len, search) {
-	let count = 0;
-	return options
-		.sort()
-		.filter(o => {
-			if (count >= len) {
-				return false;
-			} else if (o.toLowerCase().startsWith(search)) {
-				count++;
-				return true;
-			} else {
-				return false;
-			}
-		})
-		.map(o => ({ name: o, value: o }));
-}
-
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('channel')
@@ -103,7 +86,7 @@ module.exports = {
 			case 'add':
 			case 'update': {
 				if (focusedOption.name === 'role') {
-					await interaction.respond(sortAndLimitOptions(global.getUserRoles(false, null).concat(global.getUserRoles(true, null)), 25, search));
+					await interaction.respond(global.sortAndLimitOptions(global.getUserRoles(false, null).concat(global.getUserRoles(true, null)), 25, search));
 				}
 				break;
 			}

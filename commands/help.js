@@ -8,23 +8,6 @@ function objectWithNameSort(a, b) {
 	return 0;
 }
 
-function sortAndLimitOptions(options, len, search) {
-	let count = 0;
-	return options
-		.sort()
-		.filter(o => {
-			if (count >= len) {
-				return false;
-			} else if (o.toLowerCase().startsWith(search)) {
-				count++;
-				return true;
-			} else {
-				return false;
-			}
-		})
-		.map(o => ({ name: o, value: o }));
-}
-
 function buildSubCommandList(command, cmdOption, parentName, prefix, perm) {
 	if (cmdOption.type === ApplicationCommandOptionType.Subcommand) {
 		if (typeof(command.checkPerm) === 'function') {
@@ -58,7 +41,7 @@ module.exports = {
 				commands.push(name);
 			}
 		});
-		await interaction.respond(sortAndLimitOptions(commands, 25, search));
+		await interaction.respond(global.sortAndLimitOptions(commands, 25, search));
 	},
 	async execute(interaction, member, perm, permName) {
 		let filter = interaction.options.getString('command') ?? null;

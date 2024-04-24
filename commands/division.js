@@ -9,23 +9,6 @@ const {
 	ButtonStyle
 } = require('discord.js');
 
-function sortAndLimitOptions(options, len, search) {
-	let count = 0;
-	return options
-		.sort()
-		.filter(o => {
-			if (count >= len) {
-				return false;
-			} else if (o.toLowerCase().startsWith(search)) {
-				count++;
-				return true;
-			} else {
-				return false;
-			}
-		})
-		.map(o => ({ name: o, value: o }));
-}
-
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('division')
@@ -75,7 +58,7 @@ module.exports = {
 							}
 						}
 					}
-					await interaction.respond(sortAndLimitOptions(options, 25, search));
+					await interaction.respond(global.sortAndLimitOptions(options, 25, search));
 				}
 				break;
 			}
