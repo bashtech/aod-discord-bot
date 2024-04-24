@@ -54,6 +54,7 @@ try {
 	console.log(error);
 	forumIntegrationConfig = {};
 }
+global.forumIntegrationConfig = forumIntegrationConfig;
 
 //include saved timers
 var savedTimers;
@@ -2744,7 +2745,10 @@ async function commandTracker(message, member, cmd, args, guild, perm, permName,
 function getForumGroups() {
 	var promise = new Promise(function(resolve, reject) {
 		let db = connectToDB();
-		let query = `SELECT usergroupid AS id,title AS name FROM ${config.mysql.prefix}usergroup WHERE title LIKE "AOD%" OR title LIKE "%Officers" OR title LIKE "Division CO" or title LIKE "Division XO"`;
+		let query = `SELECT usergroupid AS id,title AS name FROM ${config.mysql.prefix}usergroup ` +
+			`WHERE title LIKE "AOD%" OR title LIKE "%Officers" ` +
+			`OR title LIKE "Division CO" OR title LIKE "Division XO" ` +
+			`OR title LIKE "Registered Users"`;
 		db.query(query, function(err, rows, fields) {
 			if (err)
 				return reject(err);
@@ -2759,6 +2763,7 @@ function getForumGroups() {
 	});
 	return promise;
 }
+global.getForumGroups = getForumGroups;
 
 const unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
 function convertForumDiscordName(discordName) {
@@ -2984,466 +2989,508 @@ function matchGuildMemberTag(guildMember) {
 }
 
 //do forum sync with discord roles
-async function doForumSync(message, member, guild, perm, doDaily) {
-	var hrStart = process.hrtime();
-	await guild.roles.fetch()
-		.catch(error => { console.log(error); });
-	const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
-	const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
-	const sgtsChannel = guild.channels.cache.find(c => { return c.name === 'aod-sergeants'; });
-	const reason = (message ? `Requested by ${getNameFromMessage(message)}` : 'Periodic Sync');
-	let adds = 0,
-		removes = 0,
-		renames = 0,
-		duplicates = 0,
-		total_misses = 0,
-		total_disconnected = 0,
-		misses = {},
-		disconnected = {};
+function doForumSync(message, member, guild, perm, doDaily) {
+	let promise = new Promise(async function(resolve, reject) {
+		var hrStart = process.hrtime();
+		await guild.roles.fetch()
+			.catch(error => { console.log(error); });
+		const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
+		const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
+		const sgtsChannel = guild.channels.cache.find(c => { return c.name === 'aod-sergeants'; });
+		const reason = (message ? `Requested by ${getNameFromMessage(message)}` : 'Periodic Sync');
+		let adds = 0,
+			removes = 0,
+			renames = 0,
+			duplicates = 0,
+			total_misses = 0,
+			total_disconnected = 0,
+			misses = {},
+			disconnected = {};
 
-	let nickNameChanges = {};
-	let forumGroups;
-	try {
-		forumGroups = await getForumGroups();
-	} catch (error) {
-		return notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-	}
-
-	let date = new Date();
-	try {
-		fs.writeFileSync(config.syncLogFile, `${date.toISOString()}  Forum sync started\n`, 'utf8');
-	} catch (e) {
-		console.error(e);
-	}
-
-	let online = 0,
-		offline = 0,
-		idle = 0,
-		dnd = 0,
-		total = 0;
-	await guild.members.fetch()
-		.catch(error => { console.log(error); });
-	guild.members.cache.forEach(function(m) {
-		if (!m.presence) {
-			offline++;
-		} else {
-			switch (m.presence.status) {
-				case 'idle':
-					idle++;
-					break;
-				case 'offline':
-					offline++;
-					break;
-				case 'dnd':
-					dnd++;
-					break;
-				default:
-					online++;
-			}
+		let nickNameChanges = {};
+		let forumGroups;
+		try {
+			forumGroups = await getForumGroups();
+		} catch (e) {
+			console.error(e);
+			resolve();
 		}
-		total++;
-	});
-	try {
-		fs.writeFileSync(config.populationLogFile, `${online}/${idle}/${dnd}/${total}\n`, 'utf8');
-	} catch (e) {
-		console.error(e);
-	}
 
-	let localVoiceStatusUpdates = voiceStatusUpdates;
-	voiceStatusUpdates = {};
+		let date = new Date();
+		try {
+			fs.writeFileSync(config.syncLogFile, `${date.toISOString()}  Forum sync started\n`, 'utf8');
+		} catch (e) {
+			console.error(e);
+		}
 
-	let seenByID = {}; //make sure we don't have users added as both guest and member
-	for (let roleName in forumIntegrationConfig) {
-		if (forumIntegrationConfig.hasOwnProperty(roleName)) {
-			let groupMap = forumIntegrationConfig[roleName];
-
-			let role;
-			if (groupMap.roleID === undefined) {
-				//make sure we actually have the roleID in our structure
-				role = guild.roles.cache.find(matchGuildRoleName, roleName);
-				if (role)
-					groupMap.roleID = role.id;
-			} else
-				role = guild.roles.resolve(groupMap.roleID);
-
-			if (role) {
-				let isMemberRole = (role.id === memberRole.id);
-				let isGuestRole = (role.id === guestRole.id);
-				let usersByIDOrDiscriminator;
-				try {
-					usersByIDOrDiscriminator = await getForumUsersForGroups(groupMap.forumGroups, isMemberRole);
-				} catch (error) {
-					notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-					continue;
+		let online = 0,
+			offline = 0,
+			idle = 0,
+			dnd = 0,
+			total = 0;
+		await guild.members.fetch()
+			.catch(error => { console.log(error); });
+		guild.members.cache.forEach(function(m) {
+			if (!m.presence) {
+				offline++;
+			} else {
+				switch (m.presence.status) {
+					case 'idle':
+						idle++;
+						break;
+					case 'offline':
+						offline++;
+						break;
+					case 'dnd':
+						dnd++;
+						break;
+					default:
+						online++;
 				}
+			}
+			total++;
+		});
+		try {
+			fs.writeFileSync(config.populationLogFile, `${online}/${idle}/${dnd}/${total}\n`, 'utf8');
+		} catch (e) {
+			console.error(e);
+		}
 
-				date = new Date();
-				let epochMs = date.getTime();
-				fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  Sync ${role.name}\n`, 'utf8');
-				let embed = {
-					title: `Sync ${role.name}`,
-					fields: []
-				};
+		let localVoiceStatusUpdates = voiceStatusUpdates;
+		voiceStatusUpdates = {};
 
-				//for each guild member with the role
-				//   track them by tag so we can easily access them again later
-				//   if their tags aren't configured on the forums, mark for removal
-				//   make sure anyone remaining has a valid nickname
-				let toRemove = [];
-				let toUpdate = [];
-				let membersByID = {};
-				let duplicateTag = [];
-				for (let roleMember of role.members.values()) {
-					membersByID[roleMember.user.id] = roleMember;
-					let forumUser = usersByIDOrDiscriminator[roleMember.user.id];
-					if (forumUser === undefined) {
-						forumUser = usersByIDOrDiscriminator[roleMember.user.tag];
-						if (forumUser !== undefined) {
-							forumUser.indexIsId = true;
-							usersByIDOrDiscriminator[roleMember.user.id] = forumUser;
-							delete usersByIDOrDiscriminator[roleMember.user.tag];
-							setDiscordIDForForumUser(forumUser, roleMember);
-						}
+		let seenByID = {}; //make sure we don't have users added as both guest and member
+		for (let roleName in forumIntegrationConfig) {
+			if (forumIntegrationConfig.hasOwnProperty(roleName)) {
+				let groupMap = forumIntegrationConfig[roleName];
+
+				let role;
+				if (groupMap.roleID === undefined) {
+					//make sure we actually have the roleID in our structure
+					role = guild.roles.cache.find(matchGuildRoleName, roleName);
+					if (role)
+						groupMap.roleID = role.id;
+				} else
+					role = guild.roles.resolve(groupMap.roleID);
+
+				if (role) {
+					let isMemberRole = (role.id === memberRole.id);
+					let isGuestRole = (role.id === guestRole.id);
+					let usersByIDOrDiscriminator;
+					try {
+						usersByIDOrDiscriminator = await getForumUsersForGroups(groupMap.forumGroups, isMemberRole);
+					} catch (error) {
+						notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+						continue;
 					}
 
-					if (forumUser === undefined) {
-						if (!isGuestRole) {
-							removes++;
-							toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
-							try {
-								await roleMember.roles.remove(role, reason);
-								if (isMemberRole) {
-									//we're removing them from AOD, clear the name set from the forums
-									await roleMember.setNickname('', reason);
-									//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
-									if (roleMember.roles.cache.get(guestRole.id))
-										await roleMember.roles.remove(guestRole);
-								}
-							} catch (error) {
-								console.error(`Failed to remove ${role.name} from ${roleMember.user.tag}`);
-								notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+					date = new Date();
+					let epochMs = date.getTime();
+					fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  Sync ${role.name}\n`, 'utf8');
+					let embed = {
+						title: `Sync ${role.name}`,
+						fields: []
+					};
+
+					//for each guild member with the role
+					//   track them by tag so we can easily access them again later
+					//   if their tags aren't configured on the forums, mark for removal
+					//   make sure anyone remaining has a valid nickname
+					let toRemove = [];
+					let toUpdate = [];
+					let membersByID = {};
+					let duplicateTag = [];
+					for (let roleMember of role.members.values()) {
+						membersByID[roleMember.user.id] = roleMember;
+						let forumUser = usersByIDOrDiscriminator[roleMember.user.id];
+						if (forumUser === undefined) {
+							forumUser = usersByIDOrDiscriminator[roleMember.user.tag];
+							if (forumUser !== undefined) {
+								forumUser.indexIsId = true;
+								usersByIDOrDiscriminator[roleMember.user.id] = forumUser;
+								delete usersByIDOrDiscriminator[roleMember.user.tag];
+								setDiscordIDForForumUser(forumUser, roleMember);
 							}
 						}
-					} else {
-						if (isMemberRole || isGuestRole) {
-							if (nickNameChanges[roleMember.user.id] === undefined && roleMember.displayName !== forumUser.name) {
-								nickNameChanges[roleMember.user.id] = true;
-								if (!isGuestRole) {
-									renames++;
-									toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
-								}
+
+						if (forumUser === undefined) {
+							if (!isGuestRole) {
+								removes++;
+								toRemove.push(`${roleMember.user.tag} (${roleMember.displayName})`);
 								try {
-									await roleMember.setNickname(forumUser.name, reason);
+									await roleMember.roles.remove(role, reason);
+									if (isMemberRole) {
+										//we're removing them from AOD, clear the name set from the forums
+										await roleMember.setNickname('', reason);
+										//Members shouldn't have been guests... lest there be a strange permission thing when AOD members are removed
+										if (roleMember.roles.cache.get(guestRole.id))
+											await roleMember.roles.remove(guestRole);
+									}
 								} catch (error) {
-									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-									continue;
+									console.error(`Failed to remove ${role.name} from ${roleMember.user.tag}`);
 								}
 							}
-							setDiscordTagForForumUser(forumUser, roleMember);
-							setDiscordStatusForForumUser(forumUser, 'connected');
-						}
-
-						if (isMemberRole) {
-							if (roleMember.voice.channel)
-								setDiscordActivityForForumUser(forumUser, epochMs);
-							else if (localVoiceStatusUpdates[roleMember.id])
-								setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[roleMember.id]);
-
-							//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
-							if (seenByID[roleMember.id] !== undefined) {
-								duplicateTag.push(`${roleMember.user.tag} (${forumUser.name}) -- First seen user ${seenByID[roleMember.id].name}`);
-								duplicates++;
-							} else {
-								seenByID[roleMember.id] = forumUser;
-							}
-							if (roleMember.roles.cache.get(guestRole.id)) {
-								try {
-									await roleMember.roles.remove(guestRole);
-								} catch (error) {
-									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-									continue;
-								}
-							}
-						} else if (isGuestRole) {
-							if (seenByID[roleMember.id] !== undefined) {
-								duplicateTag.push(`${roleMember.user.tag} (${forumUser.name}) -- First seen user ${seenByID[roleMember.id].name}`);
-								duplicates++;
-							} else {
-								seenByID[roleMember.id] = forumUser;
-							}
-						}
-					}
-				}
-
-				//for each forum member mapped to the role
-				//   if we haven't already seen the guild member
-				//       if there is a guild member record, add them to the role and make sure the nickname is valid
-				//       otherwise, mark them as an error and move on
-				let toAdd = [];
-				let noAccount = [];
-				let leftServer = [];
-				for (let u in usersByIDOrDiscriminator) {
-					if (usersByIDOrDiscriminator.hasOwnProperty(u)) {
-						if (membersByID[u] === undefined) {
-							let forumUser = usersByIDOrDiscriminator[u];
-							//don't add members who are pending
-							if (forumUser.pending)
-								continue;
-
-							let guildMember = guild.members.resolve(u);
-							if ((guildMember === undefined || guildMember === null) && !forumUser.indexIsId) {
-								guildMember = guild.members.cache.find(matchGuildMemberTag, u);
-								if (guildMember) {
-									//don't update the list, we're done processing
-									setDiscordIDForForumUser(forumUser, guildMember);
-								}
-							}
-							if (guildMember) {
-								if (!isGuestRole) {
-									adds++;
-									toAdd.push(`${guildMember.user.tag} (${forumUser.name})`);
-								}
-								try {
-									await guildMember.roles.add(role, reason);
-								} catch (error) {
-									console.error(`Failed to add ${role.name} to ${guildMember.user.tag}`);
-									notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-									continue;
-								}
-								if (nickNameChanges[guildMember.user.id] === undefined && guildMember.displayName !== forumUser.name) {
-									nickNameChanges[guildMember.user.id] = true;
+						} else {
+							if (isMemberRole || isGuestRole) {
+								if (nickNameChanges[roleMember.user.id] === undefined && roleMember.displayName !== forumUser.name) {
+									nickNameChanges[roleMember.user.id] = true;
 									if (!isGuestRole) {
 										renames++;
-										toUpdate.push(`${guildMember.user.tag} (${guildMember.displayName} ==> ${forumUser.name})`);
+										toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
 									}
 									try {
-										await guildMember.setNickname(forumUser.name, reason);
+										await roleMember.setNickname(forumUser.name, reason);
 									} catch (error) {
-										console.error(`Failed to rename ${guildMember.user.tag} to ${forumUser.name}`);
-										notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
-										continue;
+										console.error(`Failed to set nickname for ${roleMember.user.tag}`);
 									}
 								}
-								setDiscordTagForForumUser(forumUser, guildMember);
-								if (isMemberRole) {
-									setDiscordStatusForForumUser(forumUser, 'connected');
-									if (guildMember.voice.channel)
-										setDiscordActivityForForumUser(forumUser, epochMs);
-									else if (localVoiceStatusUpdates[guildMember.id])
-										setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[guildMember.id]);
+								setDiscordTagForForumUser(forumUser, roleMember);
+								setDiscordStatusForForumUser(forumUser, 'connected');
+							}
+
+							if (isMemberRole) {
+								if (roleMember.voice.channel)
+									setDiscordActivityForForumUser(forumUser, epochMs);
+								else if (localVoiceStatusUpdates[roleMember.id])
+									setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[roleMember.id]);
+
+								//Members shouldn't also be guests... lest there be a strange permission thing when AOD members are removed
+								if (seenByID[roleMember.id] !== undefined) {
+									duplicateTag.push(`${roleMember.user.tag} (${forumUser.name}) -- First seen user ${seenByID[roleMember.id].name}`);
+									duplicates++;
+								} else {
+									seenByID[roleMember.id] = forumUser;
 								}
-							} else {
-								if (isMemberRole) {
-									if (forumUser.indexIsId) {
-										if (disconnected[forumUser.division] === undefined)
-											disconnected[forumUser.division] = 0;
-										disconnected[forumUser.division]++;
-										total_disconnected++;
-										leftServer.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
-										setDiscordStatusForForumUser(forumUser, 'disconnected');
-									} else {
-										if (misses[forumUser.division] === undefined)
-											misses[forumUser.division] = 0;
-										misses[forumUser.division]++;
-										total_misses++;
-										noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
-										setDiscordStatusForForumUser(forumUser, 'never_connected');
+								if (roleMember.roles.cache.get(guestRole.id)) {
+									try {
+										await roleMember.roles.remove(guestRole);
+									} catch (error) {
+										console.error(`Failed to remove ${guestRole.name} from ${roleMember.user.tag}`);
 									}
-								} else if (isGuestRole) {
-									//We don't need to constantly reprocess old AOD members who have left or forum guests who visited discord once
-									clearDiscordDataForForumUser(forumUser);
+								}
+							} else if (isGuestRole) {
+								if (seenByID[roleMember.id] !== undefined) {
+									duplicateTag.push(`${roleMember.user.tag} (${forumUser.name}) -- First seen user ${seenByID[roleMember.id].name}`);
+									duplicates++;
+								} else {
+									seenByID[roleMember.id] = forumUser;
 								}
 							}
 						}
 					}
-				}
 
-				if (!isGuestRole) {
-					let sendMessage = false;
-					if (toAdd.length) {
-						sendMessage = true;
-						fs.appendFileSync(config.syncLogFile, `\tMembers to add (${toAdd.length}):\n\t\t`, 'utf8');
-						fs.appendFileSync(config.syncLogFile, toAdd.join('\n\t\t') + "\n", 'utf8');
-						if (message)
-							embed.fields.push({
-								name: `Members to add (${toAdd.length})`,
-								value: truncateStr(toAdd.join(', '), 1024)
-							});
+					//for each forum member mapped to the role
+					//   if we haven't already seen the guild member
+					//       if there is a guild member record, add them to the role and make sure the nickname is valid
+					//       otherwise, mark them as an error and move on
+					let toAdd = [];
+					let noAccount = [];
+					let leftServer = [];
+					for (let u in usersByIDOrDiscriminator) {
+						if (usersByIDOrDiscriminator.hasOwnProperty(u)) {
+							if (membersByID[u] === undefined) {
+								let forumUser = usersByIDOrDiscriminator[u];
+								//don't add members who are pending
+								if (forumUser.pending)
+									continue;
+
+								let guildMember = guild.members.resolve(u);
+								if ((guildMember === undefined || guildMember === null) && !forumUser.indexIsId) {
+									guildMember = guild.members.cache.find(matchGuildMemberTag, u);
+									if (guildMember) {
+										//don't update the list, we're done processing
+										setDiscordIDForForumUser(forumUser, guildMember);
+									}
+								}
+								if (guildMember) {
+									if (!isGuestRole) {
+										adds++;
+										toAdd.push(`${guildMember.user.tag} (${forumUser.name})`);
+									}
+									try {
+										await guildMember.roles.add(role, reason);
+									} catch (error) {
+										console.error(`Failed to add ${role.name} to ${guildMember.user.tag}`);
+									}
+									if (nickNameChanges[guildMember.user.id] === undefined && guildMember.displayName !== forumUser.name) {
+										nickNameChanges[guildMember.user.id] = true;
+										if (!isGuestRole) {
+											renames++;
+											toUpdate.push(`${guildMember.user.tag} (${guildMember.displayName} ==> ${forumUser.name})`);
+										}
+										try {
+											await guildMember.setNickname(forumUser.name, reason);
+										} catch (error) {
+											console.error(`Failed to rename ${guildMember.user.tag} to ${forumUser.name}`);
+										}
+									}
+									setDiscordTagForForumUser(forumUser, guildMember);
+									if (isMemberRole) {
+										setDiscordStatusForForumUser(forumUser, 'connected');
+										if (guildMember.voice.channel)
+											setDiscordActivityForForumUser(forumUser, epochMs);
+										else if (localVoiceStatusUpdates[guildMember.id])
+											setDiscordActivityForForumUser(forumUser, localVoiceStatusUpdates[guildMember.id]);
+									}
+								} else {
+									if (isMemberRole) {
+										if (forumUser.indexIsId) {
+											if (disconnected[forumUser.division] === undefined)
+												disconnected[forumUser.division] = 0;
+											disconnected[forumUser.division]++;
+											total_disconnected++;
+											leftServer.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
+											setDiscordStatusForForumUser(forumUser, 'disconnected');
+										} else {
+											if (misses[forumUser.division] === undefined)
+												misses[forumUser.division] = 0;
+											misses[forumUser.division]++;
+											total_misses++;
+											noAccount.push(`${u} (${forumUser.name} -- ${forumUser.division})`);
+											setDiscordStatusForForumUser(forumUser, 'never_connected');
+										}
+									} else if (isGuestRole) {
+										//We don't need to constantly reprocess old AOD members who have left or forum guests who visited discord once
+										clearDiscordDataForForumUser(forumUser);
+									}
+								}
+							}
+						}
 					}
-					if (noAccount.length) {
-						sendMessage = true;
-						fs.appendFileSync(config.syncLogFile, `\tMembers to add with no discord user (${noAccount.length}):\n\t\t`, 'utf8');
-						fs.appendFileSync(config.syncLogFile, noAccount.join('\n\t\t') + "\n", 'utf8');
-						if (message)
-							embed.fields.push({
-								name: `Members to add with no discord user (${noAccount.length})`,
-								value: truncateStr(noAccount.join(', '), 1024)
-							});
-					}
-					if (leftServer.length) {
-						sendMessage = true;
-						fs.appendFileSync(config.syncLogFile, `\tMembers who have left server (${leftServer.length}):\n\t\t`, 'utf8');
-						fs.appendFileSync(config.syncLogFile, leftServer.join('\n\t\t') + "\n", 'utf8');
-						if (message)
-							embed.fields.push({
-								name: `Members who have left server (${leftServer.length})`,
-								value: truncateStr(leftServer.join(', '), 1024)
-							});
-					}
-					if (toRemove.length) {
-						sendMessage = true;
-						fs.appendFileSync(config.syncLogFile, `\tMembers to remove (${toRemove.length}):\n\t\t`, 'utf8');
-						fs.appendFileSync(config.syncLogFile, toRemove.join('\n\t\t') + "\n", 'utf8');
-						if (message)
-							embed.fields.push({
-								name: `Members to remove (${toRemove.length})`,
-								value: truncateStr(toRemove.join(', '), 1024)
-							});
-					}
-					if (toUpdate.length) {
-						sendMessage = true;
-						fs.appendFileSync(config.syncLogFile, `\tMembers to rename (${toUpdate.length}):\n\t\t`, 'utf8');
-						fs.appendFileSync(config.syncLogFile, toUpdate.join('\n\t\t') + "\n", 'utf8');
-						if (message)
-							embed.fields.push({
-								name: `Members to rename (${toUpdate.length})`,
-								value: truncateStr(toUpdate.join(', '), 1024)
-							});
-					}
-					if (duplicateTag.length) {
-						sendMessage = true;
-						fs.appendFileSync(config.syncLogFile, `\tDuplicate Tags (${duplicateTag.length}):\n\t\t`, 'utf8');
-						fs.appendFileSync(config.syncLogFile, duplicateTag.join('\n\t\t') + "\n", 'utf8');
-						if (message)
-							embed.fields.push({
-								name: `Duplicate Tags (${duplicateTag.length})`,
-								value: truncateStr(duplicateTag.join(', '), 1024)
-							});
-					}
-					if (message && sendMessage) {
-						sendReplyToMessageAuthor(message, member, { embeds: [embed] });
+
+					if (!isGuestRole) {
+						let sendMessage = false;
+						if (toAdd.length) {
+							sendMessage = true;
+							fs.appendFileSync(config.syncLogFile, `\tMembers to add (${toAdd.length}):\n\t\t`, 'utf8');
+							fs.appendFileSync(config.syncLogFile, toAdd.join('\n\t\t') + "\n", 'utf8');
+							if (message)
+								embed.fields.push({
+									name: `Members to add (${toAdd.length})`,
+									value: truncateStr(toAdd.join(', '), 1024)
+								});
+						}
+						if (noAccount.length) {
+							sendMessage = true;
+							fs.appendFileSync(config.syncLogFile, `\tMembers to add with no discord user (${noAccount.length}):\n\t\t`, 'utf8');
+							fs.appendFileSync(config.syncLogFile, noAccount.join('\n\t\t') + "\n", 'utf8');
+							if (message)
+								embed.fields.push({
+									name: `Members to add with no discord user (${noAccount.length})`,
+									value: truncateStr(noAccount.join(', '), 1024)
+								});
+						}
+						if (leftServer.length) {
+							sendMessage = true;
+							fs.appendFileSync(config.syncLogFile, `\tMembers who have left server (${leftServer.length}):\n\t\t`, 'utf8');
+							fs.appendFileSync(config.syncLogFile, leftServer.join('\n\t\t') + "\n", 'utf8');
+							if (message)
+								embed.fields.push({
+									name: `Members who have left server (${leftServer.length})`,
+									value: truncateStr(leftServer.join(', '), 1024)
+								});
+						}
+						if (toRemove.length) {
+							sendMessage = true;
+							fs.appendFileSync(config.syncLogFile, `\tMembers to remove (${toRemove.length}):\n\t\t`, 'utf8');
+							fs.appendFileSync(config.syncLogFile, toRemove.join('\n\t\t') + "\n", 'utf8');
+							if (message)
+								embed.fields.push({
+									name: `Members to remove (${toRemove.length})`,
+									value: truncateStr(toRemove.join(', '), 1024)
+								});
+						}
+						if (toUpdate.length) {
+							sendMessage = true;
+							fs.appendFileSync(config.syncLogFile, `\tMembers to rename (${toUpdate.length}):\n\t\t`, 'utf8');
+							fs.appendFileSync(config.syncLogFile, toUpdate.join('\n\t\t') + "\n", 'utf8');
+							if (message)
+								embed.fields.push({
+									name: `Members to rename (${toUpdate.length})`,
+									value: truncateStr(toUpdate.join(', '), 1024)
+								});
+						}
+						if (duplicateTag.length) {
+							sendMessage = true;
+							fs.appendFileSync(config.syncLogFile, `\tDuplicate Tags (${duplicateTag.length}):\n\t\t`, 'utf8');
+							fs.appendFileSync(config.syncLogFile, duplicateTag.join('\n\t\t') + "\n", 'utf8');
+							if (message)
+								embed.fields.push({
+									name: `Duplicate Tags (${duplicateTag.length})`,
+									value: truncateStr(duplicateTag.join(', '), 1024)
+								});
+						}
+						if (message && sendMessage) {
+							sendReplyToMessageAuthor(message, member, { embeds: [embed] });
+						}
 					}
 				}
 			}
 		}
-	}
 
-	//notifications
-	if (doDaily) {
-		let divisions = await global.getDivisionsFromTracker();
-		for (const divisionName in divisions) {
-			if (divisions.hasOwnProperty(divisionName)) {
-				if (misses[divisionName] || disconnected[divisionName]) {
-					const divisionData = divisions[divisionName];
-					let division_misses = misses[divisionName] ?? 0;
-					let division_disconnected = disconnected[divisionName] ?? 0;
-					let officer_channel = guild.channels.resolve(divisionData.officer_channel);
-					if (!officer_channel)
-						officer_channel = guild.channels.cache.find(c => c.name === divisionData.officer_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
-					if (officer_channel) {
-						officer_channel.send(`${divisionName} Division: ` +
-							`The forum sync process found ${division_misses} members with no discord account and ` +
-							`${division_disconnected} members who have left the server. ` +
-							`Please check the [${divisionName} Voice Report](${config.trackerURL}/divisions/${divisionData.slug}/voice-report)`).catch(() => {});
+		//notifications
+		if (doDaily) {
+			let divisions = await global.getDivisionsFromTracker();
+			for (const divisionName in divisions) {
+				if (divisions.hasOwnProperty(divisionName)) {
+					if (misses[divisionName] || disconnected[divisionName]) {
+						const divisionData = divisions[divisionName];
+						let division_misses = misses[divisionName] ?? 0;
+						let division_disconnected = disconnected[divisionName] ?? 0;
+						let officer_channel = guild.channels.resolve(divisionData.officer_channel);
+						if (!officer_channel)
+							officer_channel = guild.channels.cache.find(c => c.name === divisionData.officer_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
+						if (officer_channel) {
+							officer_channel.send(`${divisionName} Division: ` +
+								`The forum sync process found ${division_misses} members with no discord account and ` +
+								`${division_disconnected} members who have left the server. ` +
+								`Please check the [${divisionName} Voice Report](${config.trackerURL}/divisions/${divisionData.slug}/voice-report)`).catch(() => {});
+						}
 					}
 				}
 			}
 		}
-	}
-	if (duplicates > 0) {
-		if (sgtsChannel) {
-			sgtsChannel.send(`The forum sync process found ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
+		if (duplicates > 0) {
+			if (sgtsChannel) {
+				sgtsChannel.send(`The forum sync process found ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
+			}
 		}
-	}
 
-	let hrEnd = process.hrtime(hrStart);
-	let hrEndS = sprintf('%.3f', (hrEnd[0] + hrEnd[1] / 1000000000));
-	let msg = `Forum Sync Processing Time: ${hrEndS}s; ` +
-		`${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${total_misses} members with no discord account, ` +
-		`${total_disconnected} members who have left the server, ${duplicates} duplicate tags`;
-	if (message)
-		sendReplyToMessageAuthor(message, member, msg);
-	if (message || adds || removes || renames)
-		console.log(msg);
-	date = new Date();
-	fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  ${msg}\n`, 'utf8');
+		let hrEnd = process.hrtime(hrStart);
+		let hrEndS = sprintf('%.3f', (hrEnd[0] + hrEnd[1] / 1000000000));
+		let msg = `Forum Sync Processing Time: ${hrEndS}s; ` +
+			`${adds} roles added, ${removes} roles removed, ${renames} members renamed, ${total_misses} members with no discord account, ` +
+			`${total_disconnected} members who have left the server, ${duplicates} duplicate tags`;
+		if (message)
+			sendReplyToMessageAuthor(message, member, msg);
+		if (message || adds || removes || renames)
+			console.log(msg);
+		date = new Date();
+		fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  ${msg}\n`, 'utf8');
+		resolve();
+	});
+	return promise;
 }
+global.doForumSync = doForumSync;
 
 
 function addForumSyncMap(message, guild, roleName, groupName) {
-	const role = guild.roles.cache.find(r => { return r.name == roleName; });
-	if (!role)
-		return ephemeralReply(message, `${roleName} role not found`);
-	let map = forumIntegrationConfig[role.name];
-	if (map && map.permanent)
-		return ephemeralReply(message, `${roleName} can not be edited`);
+	let promise = new Promise(async function(resolve, reject) {
+		const role = guild.roles.cache.find(r => { return r.name == roleName; });
+		if (!role) {
+			await ephemeralReply(message, `${roleName} role not found`);
+			resolve();
+			return;
+		}
+		let map = forumIntegrationConfig[role.name];
+		if (map && map.permanent) {
+			await ephemeralReply(message, `${roleName} can not be edited`);
+			resolve();
+			return;
+		}
 
-	getForumGroups()
-		.then(forumGroups => {
-			var forumGroupId = parseInt(Object.keys(forumGroups).find(k => forumGroups[k] === groupName), 10);
-			if (forumGroupId !== undefined && !isNaN(forumGroupId)) {
-				//don't use the version from our closure to prevent asynchronous stuff from causing problems
-				let map = forumIntegrationConfig[role.name];
-				if (map === undefined) {
-					forumIntegrationConfig[role.name] = {
-						permanent: false,
-						forumGroups: [forumGroupId],
-						roleID: `${role.id}`
-					};
+		let forumGroups = await getForumGroups()
+			.catch(console.log);
+		var forumGroupId = parseInt(Object.keys(forumGroups).find(k => forumGroups[k] === groupName), 10);
+		if (forumGroupId !== undefined && !isNaN(forumGroupId)) {
+			//don't use the version from our closure to prevent asynchronous stuff from causing problems
+			let map = forumIntegrationConfig[role.name];
+			if (map === undefined) {
+				forumIntegrationConfig[role.name] = {
+					permanent: false,
+					forumGroups: [forumGroupId],
+					roleID: `${role.id}`
+				};
+				fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
+				getRolesByForumGroup(guild, true); //update cache
+				await ephemeralReply(message, `Mapped group ${groupName} to role ${role.name}`);
+			} else {
+				let index = map.forumGroups.indexOf(forumGroupId);
+				if (index < 0) {
+					map.forumGroups.push(forumGroupId);
 					fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
 					getRolesByForumGroup(guild, true);
-					return ephemeralReply(message, `Mapped group ${groupName} to role ${role.name}`);
+					await ephemeralReply(message, `Mapped group ${groupName} to role ${role.name}`);
 				} else {
-					let index = map.forumGroups.indexOf(forumGroupId);
-					if (index < 0) {
-						map.forumGroups.push(forumGroupId);
-						fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
-						getRolesByForumGroup(guild, true);
-						return ephemeralReply(message, `Mapped group ${groupName} to role ${role.name}`);
-					} else {
-						return ephemeralReply(message, 'Map already exists');
-					}
+					await ephemeralReply(message, 'Map already exists');
 				}
-			} else {
-				return ephemeralReply(message, `${groupName} forum group not found`);
 			}
-		})
-		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+		} else {
+			await ephemeralReply(message, `${groupName} forum group not found`);
+		}
+		resolve();
+	});
+	return promise;
 }
+global.addForumSyncMap = addForumSyncMap;
 
 function removeForumSyncMap(message, guild, roleName, groupName) {
-	const role = guild.roles.cache.find(r => { return r.name == roleName; });
-	if (!role)
-		return message.reply(`${roleName} role not found`);
-	let map = forumIntegrationConfig[role.name];
-	if (!map)
-		return message.reply('Map does not exist');
-	if (map.permanent)
-		return message.reply(`${roleName} can not be edited`);
+	let promise = new Promise(async function(resolve, reject) {
+		const role = guild.roles.cache.find(r => { return r.name == roleName; });
+		if (!role) {
+			await ephemeralReply(message, `${roleName} role not found`);
+			resolve();
+			return;
+		}
+		let map = forumIntegrationConfig[role.name];
+		if (!map) {
+			await ephemeralReply(message, 'Map does not exist');
+			resolve();
+			return;
+		}
+		if (map.permanent) {
+			await ephemeralReply(message, `${roleName} can not be edited`);
+			resolve();
+			return;
+		}
 
-	getForumGroups()
-		.then(forumGroups => {
-			var forumGroupId = parseInt(Object.keys(forumGroups).find(k => {
-				if (forumGroups[k] !== groupName)
-					return false;
-				return true;
-			}), 10);
+		let forumGroups = await getForumGroups()
+			.catch(console.log);
+		let forumGroupId = parseInt(Object.keys(forumGroups).find(k => {
+			if (forumGroups[k] !== groupName)
+				return false;
+			return true;
+		}), 10);
 
-			let map = forumIntegrationConfig[role.name];
-			let index = map.forumGroups.indexOf(forumGroupId);
-			if (index < 0) {
-				return message.reply('Map does not exist');
-			} else {
-				map.forumGroups.splice(index, 1);
-				if (map.forumGroups.length === 0)
-					delete forumIntegrationConfig[role.name];
-				fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
-				getRolesByForumGroup(guild, true);
-				return message.reply(`Removed map of group ${groupName} to role ${role.name}`);
-			}
-		})
-		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+		let index = map.forumGroups.indexOf(forumGroupId);
+		if (index < 0) {
+			await ephemeralReply(message, 'Map does not exist');
+		} else {
+			map.forumGroups.splice(index, 1);
+			if (map.forumGroups.length === 0)
+				delete forumIntegrationConfig[role.name];
+			fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
+			getRolesByForumGroup(guild, true); //update cache
+			await ephemeralReply(message, `Removed map of group ${groupName} to role ${role.name}`);
+		}
+		resolve();
+	});
+	return promise;
 }
+global.removeForumSyncMap = removeForumSyncMap;
+
+function pruneForumSyncMap(message, guild) {
+	let promise = new Promise(async function(resolve, reject) {
+		let doWrite = false;
+		let reply = "";
+		Object.keys(forumIntegrationConfig).forEach(roleName => {
+			const role = guild.roles.cache.find(r => { return r.name == roleName; });
+			if (!role) {
+				reply += `Remove map for deleted role ${roleName}\n`;
+				delete forumIntegrationConfig[roleName];
+				doWrite = true;
+			}
+		});
+		if (doWrite) {
+			fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
+			getRolesByForumGroup(guild, true); //update cache
+		}
+		reply += "Prune complete.";
+		ephemeralReply(message, reply);
+	});
+	return promise;
+}
+global.pruneForumSyncMap = pruneForumSyncMap;
 
 //forum sync command processing
 function commandForumSync(message, member, cmd, args, guild, perm, permName, isDM) {
@@ -3534,22 +3581,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 			break;
 		}
 		case 'prune': {
-			let doWrite = false;
-			let reply = "";
-			Object.keys(forumIntegrationConfig).forEach(roleName => {
-				const role = guild.roles.cache.find(r => { return r.name == roleName; });
-				if (!role) {
-					reply += `Remove map for deleted role ${roleName}\n`;
-					delete forumIntegrationConfig[roleName];
-					doWrite = true;
-				}
-			});
-			if (doWrite) {
-				fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
-				getRolesByForumGroup(guild, true);
-			}
-			reply += "Prune complete.";
-			sendReplyToMessageAuthor(message, member, reply);
+			pruneForumSyncMap(message, guild);
 			break;
 		}
 		default: {
