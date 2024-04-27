@@ -69,13 +69,13 @@ const messageRouter = express.Router();
 //common message_id processing
 messageRouter.param('message_id', async (req, res, next, message_id) => {
 	if (!req.channel) {
-		res.status(400).send({ error: 'No channel' });
+		res.status(404).send({ error: 'No channel' });
 	} else if (!req.channel.isTextBased()) {
 		res.status(400).send({ error: 'Channel must be text based' });
 	} else {
 		let message = await req.channel.messages.fetch(message_id).catch(() => {});
 		if (!message) {
-			res.status(400).send({ error: 'Unknown message' });
+			res.status(404).send({ error: 'Unknown message' });
 		} else {
 			req.message = message;
 		}
@@ -120,7 +120,7 @@ messageRouter.post('/:message_id/react', async (req, res, next) => {
 			emjoiId = emoji.id;
 		}
 		if (!emojiId) {
-			res.status(400).send({ error: 'Unknown emoji' });
+			res.status(404).send({ error: 'Unknown emoji' });
 		} else {
 			let reaction = req.message.reactions.cache.get(emojiId);
 			if (req.body.exclusive) {
@@ -158,7 +158,7 @@ messageRouter.get('/:message_id', (req, res, next) => {
 	next();
 });
 
-messageRouter.post('/:message_id', (req, res, next) => {
+messageRouter.put('/:message_id', (req, res, next) => {
 	if (req.message.author.id !== global.client.user.id) {
 		res.status(403).send({ error: 'Cannot edit messages authored by other users' });
 	} else if (!req.body.content && !req.body.embeds) {
@@ -204,7 +204,7 @@ function getChannel(guild, channel_id) {
 channelRouter.param('channel_id', (req, res, next, channel_id) => {
 	let channel = getChannel(req.guild, channel_id);
 	if (!channel) {
-		res.status(400).send({ error: 'Unknown channel' });
+		res.status(404).send({ error: 'Unknown channel' });
 	} else {
 		req.channel = channel;
 	}
@@ -309,7 +309,7 @@ function getMember(guild, member_id) {
 memberRouter.param('member_id', (req, res, next, member_id) => {
 	let member = getMember(req.guild, member_id);
 	if (!member) {
-		res.status(400).send({ error: 'Unknown member' });
+		res.status(404).send({ error: 'Unknown member' });
 	} else {
 		req.member = member;
 		req.channel = member.dmChannel;
