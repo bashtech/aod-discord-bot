@@ -1266,7 +1266,9 @@ function getChannelInfo(guild, channel, officerRole) {
 		const staffPerms = await channel.permissionsFor(staffRole);
 
 		let type = 'Text';
-		if (channel.isVoiceBased()) {
+		if (channel.type === ChannelType.GuildCategory) {
+			type = 'Category';
+		} else if (channel.isVoiceBased()) {
 			if (joinToCreateChannels.joinToCreateChannels[channel.id] === 1) {
 				type = 'JTC';
 			} else if (memberPerms && !memberPerms.has(PermissionsBitField.Flags.UseVAD)) {

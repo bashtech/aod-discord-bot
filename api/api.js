@@ -86,6 +86,12 @@ messageRouter.param('message_id', async (req, res, next, message_id) => {
 const unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
 const unicodeHexRegEx = /&#x([0-9a-fA-F]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
 messageRouter.post('/:message_id/react', async (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	let emjoiId;
 	if (!req.body.emoji) {
 		console.log(req.body);
@@ -147,6 +153,12 @@ messageRouter.post('/:message_id/react', async (req, res, next) => {
 });
 
 messageRouter.get('/:message_id', (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	res.send({
 		id: req.message.id,
 		content: req.message.content,
@@ -159,6 +171,12 @@ messageRouter.get('/:message_id', (req, res, next) => {
 });
 
 messageRouter.put('/:message_id', (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	if (req.message.author.id !== global.client.user.id) {
 		res.status(403).send({ error: 'Cannot edit messages authored by other users' });
 	} else if (!req.body.content && !req.body.embeds) {
@@ -174,6 +192,12 @@ messageRouter.put('/:message_id', (req, res, next) => {
 });
 
 messageRouter.delete('/:message_id', async (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	if (req.message.author.id !== global.client.user.id) {
 		res.status(403).send({ error: 'Cannot delete messages authored by other users' });
 	} else {
@@ -252,13 +276,28 @@ function getChannelType(channel) {
 	}
 }
 channelRouter.get('/:channel_id', async (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	let children = [];
+	let category = req.channel.parent ?? req.channel;
+	let officerRole;
+	if (category) {
+		//check if this category has an associated officer role
+		let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+		officerRole = req.guild.roles.cache.find(r => { return r.name == officerRoleName; });
+	}
+
 	if (req.channel.children) {
-		req.channel.children.cache.forEach(c => {
+		req.channel.children.cache.forEach(async function (c) {
 			children.push({
 				name: c.name,
 				id: c.id,
-				type: getChannelType(c)
+				type: getChannelType(c),
+				info: await global.getChannelInfo(req.guild, c, officerRole)
 			});
 		});
 	}
@@ -266,11 +305,20 @@ channelRouter.get('/:channel_id', async (req, res, next) => {
 		name: req.channel.name,
 		id: req.channel.id,
 		type: getChannelType(req.channel),
+		info: await global.getChannelInfo(req.guild, req.channel, officerRole),
 		children: children
 	});
+
+	next();
 });
 
 channelRouter.post('/:channel_id', async (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	if (!req.body.content && !req.body.embeds) {
 		res.status(400).send({ error: 'content or embeds must be provided' });
 	} else {
@@ -318,6 +366,12 @@ memberRouter.param('member_id', (req, res, next, member_id) => {
 });
 
 memberRouter.get('/:member_id', async (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	res.send({
 		id: req.member.id,
 		bot: req.member.bot,
@@ -329,6 +383,12 @@ memberRouter.get('/:member_id', async (req, res, next) => {
 });
 
 memberRouter.post('/:member_id', async (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	if (!req.body.content && !req.body.embeds) {
 		res.status(400).send({ error: 'content or embeds must be provided' });
 	} else {
@@ -353,6 +413,12 @@ const emojiRouter = express.Router();
 apiRouter.use('/emoji', emojiRouter);
 
 emojiRouter.get('/', async (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	let emojis = {};
 	global.client.emojis.cache.forEach(function(emoji, id) {
 		emojis[emoji.name] = {
