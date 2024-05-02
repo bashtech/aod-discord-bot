@@ -3020,7 +3020,9 @@ function doForumSync(message, member, guild, perm, doDaily) {
 
 		let date = new Date();
 		try {
-			fs.writeFileSync(config.syncLogFile, `${date.toISOString()}  Forum sync started\n`, 'utf8');
+			if (config.devMode !== true) {
+				fs.writeFileSync(config.syncLogFile, `${date.toISOString()}  Forum sync started\n`, 'utf8');
+			}
 		} catch (e) {
 			console.error(e);
 		}
@@ -3053,7 +3055,9 @@ function doForumSync(message, member, guild, perm, doDaily) {
 			total++;
 		});
 		try {
-			fs.writeFileSync(config.populationLogFile, `${online}/${idle}/${dnd}/${total}\n`, 'utf8');
+			if (config.devMode !== true) {
+				fs.writeFileSync(config.populationLogFile, `${online}/${idle}/${dnd}/${total}\n`, 'utf8');
+			}
 		} catch (e) {
 			console.error(e);
 		}
@@ -3088,7 +3092,9 @@ function doForumSync(message, member, guild, perm, doDaily) {
 
 					date = new Date();
 					let epochMs = date.getTime();
-					fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  Sync ${role.name}\n`, 'utf8');
+					if (config.devMode !== true) {
+						fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  Sync ${role.name}\n`, 'utf8');
+					}
 					let embed = {
 						title: `Sync ${role.name}`,
 						fields: []
@@ -3260,7 +3266,7 @@ function doForumSync(message, member, guild, perm, doDaily) {
 						}
 					}
 
-					if (!isGuestRole) {
+					if (!isGuestRole && config.devMode !== true) {
 						let sendMessage = false;
 						if (toAdd.length) {
 							sendMessage = true;
@@ -3368,7 +3374,9 @@ function doForumSync(message, member, guild, perm, doDaily) {
 		if (message || adds || removes || renames)
 			console.log(msg);
 		date = new Date();
-		fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  ${msg}\n`, 'utf8');
+		if (config.devMode !== true) {
+			fs.appendFileSync(config.syncLogFile, `${date.toISOString()}  ${msg}\n`, 'utf8');
+		}
 		resolve();
 	});
 	return promise;
