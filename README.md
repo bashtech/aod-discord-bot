@@ -2,8 +2,8 @@
 
 ## Static analysis
 
-jshint <filename>
+jshint [filename]
 
 ## Code Formating
 
-js-beautify -b collapse,preserve-inline -t -k -r -n -f <filename>
+js-beautify -b collapse,preserve-inline -t -k -r -n -f [filename]
