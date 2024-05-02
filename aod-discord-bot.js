@@ -2958,12 +2958,12 @@ function setDiscordStatusForForumUser(forumUser, status) {
 	forumUser.discordstatus = status;
 }
 
-const activityInterval_s = 60 * 60; //60 minutes
+const activityInterval_s = 15 * 60; //15 minutes
 function setDiscordActivityForForumUser(forumUser, activityEpochMs) {
 	activityEpoch = '' + (Math.floor((activityEpochMs / 1000) / activityInterval_s) * activityInterval_s);
 	if (forumUser.discordactivity === activityEpoch)
 		return;
-	console.log(`Updating Discord Activity for ${forumUser.name} (${forumUser.id}) from '${forumUser.discordactivity}' to '${activityEpoch}'`);
+	//console.log(`Updating Discord Activity for ${forumUser.name} (${forumUser.id}) from '${forumUser.discordactivity}' to '${activityEpoch}'`);
 	if (config.devMode !== true) {
 		let db = connectToDB();
 		let query = `UPDATE ${config.mysql.prefix}userfield SET field23='${activityEpoch}' WHERE userid=${forumUser.id}`;
