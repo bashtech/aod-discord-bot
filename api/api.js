@@ -7,7 +7,11 @@ const {
 
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json()); //parse application/json input data
+app.use(express.json({
+	verify: (req, res, buf) => {
+		req.rawBody = buf;
+	}
+})); //parse application/json input data
 
 //WARNING: handlers are processed in the order of definition
 
@@ -68,6 +72,12 @@ const messageRouter = express.Router();
 
 //common message_id processing
 messageRouter.param('message_id', async (req, res, next, message_id) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	if (!req.channel) {
 		res.status(404).send({ error: 'No channel' });
 	} else if (!req.channel.isTextBased()) {
@@ -94,7 +104,6 @@ messageRouter.post('/:message_id/react', async (req, res, next) => {
 
 	let emjoiId;
 	if (!req.body.emoji) {
-		console.log(req.body);
 		res.status(400).send({ error: 'emoji must be provided' });
 	} else {
 		let emoji = global.client.emojis.resolve(req.body.emoji);
@@ -226,6 +235,12 @@ function getChannel(guild, channel_id) {
 
 //common channel_id processing
 channelRouter.param('channel_id', (req, res, next, channel_id) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	let channel = getChannel(req.guild, channel_id);
 	if (!channel) {
 		res.status(404).send({ error: 'Unknown channel' });
@@ -337,6 +352,61 @@ channelRouter.post('/:channel_id', async (req, res, next) => {
 });
 
 ////////////////////////////
+// role router
+////////////////////////////
+
+const roleRouter = express.Router();
+apiRouter.use('/role', roleRouter);
+apiRouter.use('/roles', roleRouter);
+
+function getMember(guild, role_id) {
+	let role = guild.roles.resolve(member_id);
+	if (!role)
+		member = guild.roles.cache.find(r => r.name === member_id);
+	return member;
+}
+
+roleRouter.param('role_id', (req, res, next, role_id) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
+	let role = getRole(req.guild, role_id);
+	if (!role) {
+		res.status(404).send({ error: 'Unknown role' });
+	} else {
+		req.role = role;
+	}
+	next();
+});
+
+roleRouter.get('/export', async (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
+	let roles = [];
+	req.guild.roles.cache.forEach(async (r) => {
+		roles.push({
+			id: r.id,
+			name: r.name,
+			color: r.color,
+			icon: r.icon,
+			hoist: r.hoist,
+			permissions: r.permissions,
+			position: r.position
+		});
+	});
+	res.send(roles);
+	next();
+});
+
+
+////////////////////////////
 // member router
 ////////////////////////////
 
@@ -355,6 +425,12 @@ function getMember(guild, member_id) {
 
 //common member_id processing
 memberRouter.param('member_id', (req, res, next, member_id) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
 	let member = getMember(req.guild, member_id);
 	if (!member) {
 		res.status(404).send({ error: 'Unknown member' });
