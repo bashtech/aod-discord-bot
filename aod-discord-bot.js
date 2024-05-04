@@ -1772,6 +1772,10 @@ global.getDivisionsFromTracker = getDivisionsFromTracker;
 
 async function updateTrackerDivisionData(divisionData, data) {
 	let promise = new Promise(async function(resolve, reject) {
+		if (config.devMode === true) {
+			resolve();
+			return;
+		}
 		let response = await fetchTimeout(`${config.trackerAPIURL}/divisions/${divisionData.slug}`, 1000, {
 			method: 'post',
 			body: JSON.stringify(data),
