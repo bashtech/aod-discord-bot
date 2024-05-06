@@ -166,16 +166,17 @@ module.exports = {
 				let data = userData[i];
 				embed.fields.push({
 					name: 'Forum Data',
-					value: `**Username**: ${data.name} (${data.id})\n` +
+					value: `**Username**: ${data.name}\n` +
 						`**Division**: ${data.division}\n` +
 						`**Rank**: ${data.rank}\n` +
-						`**Status**: ${data.loaStatus}\n`
+						`**Status**: ${data.loaStatus}\n` +
+						`[[Profile](https://www.clanaod.net/forums/member.php?u=${data.id})]\n`
 				});
 				const memberRoleName = global.config.memberRole;
 				if (targetMember.roles.cache.find(r => r.name === memberRoleName)) {
 					embed.fields.push({
-						name: 'Tracker Link',
-						value: `${global.config.trackerURL}/members/${data.id}`
+						name: 'Tracker Data',
+						value: `[[Profile](${global.config.trackerURL}/members/${data.id})]`
 					});
 				}
 			}
