@@ -263,21 +263,13 @@ function getChannelType(channel) {
 }
 channelRouter.get('/:channel_id', async (req, res, next) => {
 	let children = [];
-	let category = req.channel.parent ?? req.channel;
-	let officerRole;
-	if (category) {
-		//check if this category has an associated officer role
-		let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
-		officerRole = req.guild.roles.cache.find(r => { return r.name == officerRoleName; });
-	}
-
 	if (req.channel.children) {
 		req.channel.children.cache.forEach(async function(c) {
 			children.push({
 				name: c.name,
 				id: c.id,
 				type: getChannelType(c),
-				info: await global.getChannelInfo(req.guild, c, officerRole)
+				info: await global.getChannelInfo(req.guild, c)
 			});
 		});
 	}
@@ -285,7 +277,7 @@ channelRouter.get('/:channel_id', async (req, res, next) => {
 		name: req.channel.name,
 		id: req.channel.id,
 		type: getChannelType(req.channel),
-		info: await global.getChannelInfo(req.guild, req.channel, officerRole),
+		info: await global.getChannelInfo(req.guild, req.channel),
 		children: children
 	});
 });

@@ -105,6 +105,7 @@ module.exports = {
 				let level = interaction.options.getString('perm') ?? 'member';
 				let category = interaction.options.getChannel('category');
 				let roleName = interaction.options.getString('role');
+				let role;
 
 				let officerRole;
 				if (category) {
@@ -112,11 +113,28 @@ module.exports = {
 					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
 					officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 					if (perm < global.PERM_DIVISION_COMMANDER)
-						return interaction.reply({ content: "You do not have permissions to create permanent channels", ephemeral: true });
+						return global.ephemeralReply(interaction, "You do not have permissions to create permanent channels");
 					if (perm == global.PERM_DIVISION_COMMANDER && (!officerRole || !member.roles.cache.get(officerRole.id)))
-						return interaction.reply({ content: "You can only add channels to a division you command", ephemeral: true });
+						return global.ephemeralReply(interaction, "You can only add channels to a division you command");
 					if (perm < global.PERM_STAFF && category.children.size >= config.maxChannelsPerCategory)
-						return interaction.reply({ content: "Category is full", ephemeral: true });
+						return global.ephemeralReply(interaction, "Category is full");
+
+					if (officerRole) {
+						if (level === 'member') {
+							let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
+							role = guild.roles.cache.find(r => { return r.name == memberRoleName; });
+						} else if (level === 'public' || level === 'feed') {
+							let divisionRoleName = category.name;
+							role = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
+						}
+						if (role) {
+							roleName = null;
+							if (level === 'feed')
+								level = 'role-feed';
+							else
+								level = 'role';
+						}
+					}
 
 					let prefix;
 					let divisions = await global.getDivisionsFromTracker();
@@ -130,30 +148,29 @@ module.exports = {
 						name = prefix + '-' + name;
 				} else {
 					if (type === 'text')
-						return interaction.reply({ content: "A category must be set for text channels", ephemeral: true });
+						return global.ephemeralReply(interaction, "A category must be set for text channels");
 					if (type === 'jtc')
-						return interaction.reply({ content: "A category must be set for join-to-create channels", ephemeral: true });
+						return global.ephemeralReply(interaction, "A category must be set for join-to-create channels");
 
 					category = guild.channels.cache.find(c => { return c.name == config.tempChannelCategory; });
 					if (!category)
-						return interaction.reply({ content: "Temp channel category not found", ephemeral: true });
+						return global.ephemeralReply(interaction, "Temp channel category not found");
 				}
 
-				let role;
 				if (roleName)
 					role = guild.roles.cache.find(r => { return r.name == roleName; });
 				if (role) {
-					if (level !== 'role')
-						return interaction.reply({ content: "Channel Permissions must be 'role' if a Role is selected", ephemeral: true });
+					if (level !== 'role' && level !== 'role-feed')
+						return global.ephemeralReply(interaction, "Channel Permissions must be 'role' if a Role is selected");
 					if (perm < global.PERM_DIVISION_COMMANDER)
-						return interaction.reply({ content: "You do not have permissions to create role locked channels", ephemeral: true });
-				} else if (level === 'role') {
-					return interaction.reply({ content: "Role must be provided if Channel Permissions is 'role'", ephemeral: true });
+						return global.ephemeralReply(interaction, "You do not have permissions to create role locked channels");
+				} else if (level === 'role' || level === 'role-feed') {
+					return global.ephemeralReply(interaction, "Role must be provided if Channel Permissions is 'role'");
 				}
 
 				let existingChannel = guild.channels.cache.find(c => { return c.name == name; });
 				if (existingChannel)
-					return interaction.reply({ content: "Channel already exists", ephemeral: true });
+					return global.ephemeralReply(interaction, "Channel already exists");
 
 				await interaction.deferReply({ ephemeral: true });
 				return global.addChannel(guild, interaction, member, perm, name, type, level, category, officerRole, role);
@@ -162,7 +179,7 @@ module.exports = {
 				let channel = interaction.options.getChannel('channel');
 				let channelName = channel.name;
 				if (global.config.protectedChannels.includes(channelName))
-					return interaction.reply({ content: `${channel} is a protected channel.`, ephemeral: true });
+					return global.ephemeralReply(interaction, `${channel} is a protected channel.`);
 
 				let category = channel.parent;
 				if (category) {
@@ -170,10 +187,10 @@ module.exports = {
 					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
 					let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 					if (perm == global.PERM_DIVISION_COMMANDER && (!officerRole || !member.roles.cache.get(officerRole.id)))
-						return interaction.reply({ content: 'You can only delete channels from a division you command', ephemeral: true });
+						return global.ephemeralReply(interaction, 'You can only delete channels from a division you command');
 				} else {
 					if (perm < PERM_STAFF)
-						return interaction.reply({ content: 'You cannot delete this channel', ephemeral: true });
+						return global.ephemeralReply(interaction, 'You cannot delete this channel');
 				}
 
 				const confirm = new ButtonBuilder()
@@ -218,7 +235,7 @@ module.exports = {
 				let topic = interaction.options.getString('topic') ?? "";
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 				if (!channel)
-					return interaction.reply({ content: "Please provide a channel or execute in a text channel", ephemeral: true });
+					return global.ephemeralReply(interaction, "Please provide a channel or execute in a text channel");
 				if (perm < global.PERM_MOD) {
 					let category = channel.parent;
 					if (category) {
@@ -226,11 +243,11 @@ module.exports = {
 						let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 						if (!officerRole || !member.roles.cache.get(officerRole.id)) {
 							if (global.tempChannelCreatedBy(channel.id) !== member.id) {
-								return interaction.reply({ content: "You do not have permissions to edit this channel.", ephemeral: true });
+								return global.ephemeralReply(interaction, "You do not have permissions to edit this channel.");
 							}
 						}
 					} else {
-						return interaction.reply({ content: "You do not have permissions to edit this channel.", ephemeral: true });
+						return global.ephemeralReply(interaction, "You do not have permissions to edit this channel.");
 					}
 				}
 
@@ -255,7 +272,8 @@ module.exports = {
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 				let channelName = channel.name;
 				if (global.config.protectedChannels.includes(channelName))
-					return interaction.reply({ content: `${channel} is a protected channel`, ephemeral: true });
+					return global.ephemeralReply(interaction, `${channel} is a protected channel`);
+				let role;
 
 				let category = channel.parent;
 				let officerRole;
@@ -264,22 +282,38 @@ module.exports = {
 					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
 					officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 					if (perm == global.PERM_DIVISION_COMMANDER && (!officerRole || !member.roles.cache.get(officerRole.id)))
-						return interaction.reply({ content: 'You can only update channels from a division you command', ephemeral: true });
+						return global.ephemeralReply(interaction, 'You can only update channels from a division you command');
+
+					if (officerRole) {
+						if (level === 'member') {
+							let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
+							role = guild.roles.cache.find(r => { return r.name == memberRoleName; });
+						} else if (level === 'public' || level === 'feed') {
+							let divisionRoleName = category.name;
+							role = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
+						}
+						if (role) {
+							roleName = null;
+							if (level === 'feed')
+								level = 'role-feed';
+							else
+								level = 'role';
+						}
+					}
 				} else {
 					if (perm < PERM_STAFF)
-						return interaction.reply({ content: 'You cannot update this channel', ephemeral: true });
+						return global.ephemeralReply(interaction, 'You cannot update this channel');
 				}
 
-				let role;
 				if (roleName)
 					role = guild.roles.cache.find(r => { return r.name == roleName; });
 				if (role) {
-					if (level !== 'role')
-						return interaction.reply({ content: "Channel Permissions must be 'role' if a Role is selected", ephemeral: true });
+					if (level !== 'role' && level !== 'role-feed')
+						return global.ephemeralReply(interaction, "Channel Permissions must be 'role' if a Role is selected");
 					if (perm < global.PERM_DIVISION_COMMANDER)
-						return interaction.reply({ content: "You do not have permissions to create role locked channels", ephemeral: true });
-				} else if (level === 'role') {
-					return interaction.reply({ content: "Role must be provided if Channel Permissions is 'role'", ephemeral: true });
+						return global.ephemeralReply(interaction, "You do not have permissions to create role locked channels");
+				} else if (level === 'role' || level === 'role-feed') {
+					return global.ephemeralReply(interaction, "Role must be provided if Channel Permissions is 'role'");
 				}
 				await interaction.deferReply({ ephemeral: true });
 				return global.setChannelPerms(guild, interaction, member, perm, channel, type, level, category, officerRole, role);
@@ -289,9 +323,9 @@ module.exports = {
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 				let channelName = channel.name;
 				if (channel.type === ChannelType.GuildCategory)
-					return interaction.reply({ content: `Cannot rename a category`, ephemeral: true });
+					return global.ephemeralReply(interaction, `Cannot rename a category`);
 				if (global.config.protectedChannels.includes(channelName))
-					return interaction.reply({ content: `${channel} is a protected channel`, ephemeral: true });
+					return global.ephemeralReply(interaction, `${channel} is a protected channel`);
 
 				let category = channel.parent;
 				if (category) {
@@ -299,7 +333,7 @@ module.exports = {
 					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
 					let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 					if (perm == global.PERM_DIVISION_COMMANDER && (!officerRole || !member.roles.cache.get(officerRole.id)))
-						return interaction.reply({ content: 'You can only rename channels from a division you command', ephemeral: true });
+						return global.ephemeralReply(interaction, 'You can only rename channels from a division you command');
 
 					let prefix;
 					let divisions = await global.getDivisionsFromTracker();
@@ -313,12 +347,12 @@ module.exports = {
 						name = prefix + '-' + name;
 				} else {
 					if (perm < PERM_STAFF)
-						return interaction.reply({ content: 'You cannot rename this channel', ephemeral: true });
+						return global.ephemeralReply(interaction, 'You cannot rename this channel');
 				}
 
 				let existingChannel = guild.channels.cache.find(c => { return c.name == name; });
 				if (existingChannel)
-					return interaction.reply({ content: `A channel already exists with the name ${existingChannel}`, ephemeral: true });
+					return global.ephemeralReply(interaction, `A channel already exists with the name ${existingChannel}`);
 
 				await interaction.deferReply({ ephemeral: true });
 				await channel.setName(name, `Requested by ${global.getNameFromMessage(interaction)}`);
@@ -332,11 +366,11 @@ module.exports = {
 					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
 					let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 					if (perm == global.PERM_DIVISION_COMMANDER && (!officerRole || !member.roles.cache.get(officerRole.id)))
-						return interaction.reply({ content: 'You can only move channels in a division you command', ephemeral: true });
+						return global.ephemeralReply(interaction, 'You can only move channels in a division you command');
 					let divisionPrefix = category.name.toLowerCase().replace(/\s/g, '-');
 				} else {
 					if (perm < PERM_STAFF)
-						return interaction.reply({ content: 'You cannot rename this channel', ephemeral: true });
+						return global.ephemeralReply(interaction, 'You cannot rename this channel');
 				}
 
 				const up = new ButtonBuilder()
@@ -387,16 +421,9 @@ module.exports = {
 			}
 			case 'info': {
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
-				let officerRole;
-				let category = channel.parent;
-				if (category) {
-					//check if this category has an associated officer role
-					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
-					officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
-				}
 
 				await interaction.deferReply({ ephemeral: true });
-				info = await global.getChannelInfo(guild, channel, officerRole);
+				info = await global.getChannelInfo(guild, channel);
 
 				let embed = {
 					description: `**Information for ${channel}**`,
@@ -409,14 +436,24 @@ module.exports = {
 					}],
 				};
 
-				if (officerRole) {
+				if (info.details.officer) {
 					embed.fields.push({
 						name: 'Officer Role',
-						value: `${officerRole}`
+						value: `${info.details.officer.role}`
 					});
 				}
-
-				if (info.details.role) {
+				if (info.details.divisionMember) {
+					embed.fields.push({
+						name: 'Division Member Role',
+						value: `${info.details.divisionMember.role}`
+					});
+				}
+				if (info.details.division) {
+					embed.fields.push({
+						name: 'Division Role',
+						value: `${info.details.division.role}`
+					});
+				} else if (info.details.role) {
 					embed.fields.push({
 						name: 'Channel Role',
 						value: `${info.details.role.role}`

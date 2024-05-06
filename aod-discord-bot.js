@@ -167,7 +167,7 @@ function getRolesByForumGroup(guild, doUpdate) {
 	Object.keys(forumIntegrationConfig).forEach(roleName => {
 		var groupMap = forumIntegrationConfig[roleName];
 		var role;
-		if (groupMap.roleID === undefined) {
+		if (groupMap.roleID === undefined || groupMap.roleID === '') {
 			const role = guild.roles.cache.find(r => { return r.name == roleName; });
 			if (role)
 				groupMap.roleID = role.id;
@@ -1124,19 +1124,18 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 
 		var permissions;
 		switch (level) {
-			case 'public':
+			case 'public': {
 				if (type === 'ptt')
 					defaultDeny = [PermissionsBitField.Flags.UseVAD];
 				else
 					defaultDeny = [];
 				if (perm < PERM_MOD) {
 					await ephemeralReply(message, "You don't have permissions to add this channel type");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
 
 				permissions = getPermissionsForEveryone(guild, defaultAllow, defaultDeny, allow, deny);
-				//add role permissions if necessary
+				//add role permissions
 				if (divisionOfficerRole) {
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
 				}
@@ -1144,15 +1143,15 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 					permissions = addMemberToPermissions(guild, targetMember, permissions, memberAllow, deny);
 				}
 				break;
-			case 'guest':
+			}
+			case 'guest': {
 				if (perm < PERM_MOD) {
 					await ephemeralReply(message, "You don't have permissions to add this channel type");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
 
 				permissions = getPermissionsForGuest(guild, defaultAllow, defaultDeny, allow, deny);
-				//add role permissions if necessary
+				//add role permissions
 				if (divisionOfficerRole) {
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
 				}
@@ -1160,55 +1159,53 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 					permissions = addMemberToPermissions(guild, targetMember, permissions, memberAllow, deny);
 				}
 				break;
-			case 'mod':
+			}
+			case 'mod': {
 				if (perm < PERM_MOD) {
 					await ephemeralReply(message, "You don't have permissions to add this channel type");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
 				permissions = getPermissionsForModerators(guild, defaultAllow, defaultDeny, allow, deny);
 				break;
-			case 'officer':
+			}
+			case 'officer': {
 				if (perm < PERM_MOD) {
 					await ephemeralReply(message, "You don't have permissions to add this channel type");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
 				if (!divisionOfficerRole) {
 					await ephemeralReply(message, "No officer role could be determined");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
 				permissions = getPermissionsForModerators(guild, defaultAllow, defaultDeny, allow, deny);
 				permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]);
 				break;
-			case 'staff':
+			}
+			case 'staff': {
 				if (perm < PERM_STAFF) {
 					await ephemeralReply(message, "You don't have permissions to add this channel type");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
 				permissions = getPermissionsForStaff(guild, defaultAllow, defaultDeny, allow, deny);
 				break;
-			case 'admin':
+			}
+			case 'admin': {
 				if (perm < PERM_ADMIN) {
 					await ephemeralReply(message, "You don't have permissions to add this channel type");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
 				permissions = getPermissionsForAdmin(guild, defaultAllow, defaultDeny, allow, deny);
 				break;
-			case 'feed':
+			}
+			case 'feed': {
 				defaultDeny = [PermissionsBitField.Flags.SendMessages];
 				if (type !== 'text') {
 					await ephemeralReply(message, "Feed may only be used for text channels");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
 				if (perm < PERM_DIVISION_COMMANDER) {
 					await ephemeralReply(message, "You don't have permissions to add this channel type");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
 				//get permissions for staff -- add manage webhooks
 				let staffAllow = allow.concat([PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageWebhooks]);
@@ -1220,34 +1217,76 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 					if (role)
 						permissions = addRoleToPermissions(guild, role, permissions, modAllow, deny);
 				});
-				//add role permissions if necessary
+				//add officer permissions
 				if (divisionOfficerRole) {
 					officerAllow.push(PermissionsBitField.Flags.SendMessages);
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
 				}
 				break;
-			case 'role':
+			}
+			case 'role': {
 				if (perm < PERM_DIVISION_COMMANDER) {
 					await ephemeralReply(message, "You don't have permissions to add this channel type");
-					resolve(null);
-					return;
+					return resolve(null);
 				}
+				//get permissions for moderators
 				permissions = getPermissionsForModerators(guild, defaultAllow, defaultDeny, allow, deny);
-				if (divisionOfficerRole)
-					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, allow, deny);
-				if (additionalRole)
-					permissions = addRoleToPermissions(guild, additionalRole, permissions, allow, deny);
-				break;
-			default: //member
-				permissions = getPermissionsForMembers(guild, defaultAllow, defaultDeny, allow, deny);
-				//add role permissions if necessary
+				//add officer permissions
 				if (divisionOfficerRole) {
-					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
+					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, allow, deny);
 				}
+				//add role permissions
+				if (additionalRole) {
+					permissions = addRoleToPermissions(guild, additionalRole, permissions, allow, deny);
+				}
+				//add target member permissions
 				if (targetMember) {
 					permissions = addMemberToPermissions(guild, targetMember, permissions, memberAllow, deny);
 				}
 				break;
+			}
+			case 'role-feed': {
+				defaultDeny.push(PermissionsBitField.Flags.SendMessages);
+				if (type !== 'text') {
+					await ephemeralReply(message, "Feed may only be used for text channels");
+					return resolve(null);
+				}
+				if (perm < PERM_DIVISION_COMMANDER) {
+					await ephemeralReply(message, "You don't have permissions to add this channel type");
+					return resolve(null);
+				}
+				//get permissions for staff -- add manage webhooks
+				let staffAllow = allow.concat([PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageWebhooks]);
+				permissions = getPermissionsForStaff(guild, defaultAllow, defaultDeny, staffAllow, deny);
+				//add moderators
+				let modAllow = allow.concat([PermissionsBitField.Flags.SendMessages]);
+				config.modRoles.forEach(n => {
+					const role = guild.roles.cache.find(r => { return r.name == n; });
+					if (role)
+						permissions = addRoleToPermissions(guild, role, permissions, modAllow, deny);
+				});
+				//add officer permissions
+				if (divisionOfficerRole) {
+					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
+				}
+				//add role permissions
+				if (additionalRole) {
+					permissions = addRoleToPermissions(guild, additionalRole, permissions, allow, deny);
+				}
+				break;
+			}
+			default: { //member
+				permissions = getPermissionsForMembers(guild, defaultAllow, defaultDeny, allow, deny);
+				//add officer permissions
+				if (divisionOfficerRole) {
+					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
+				}
+				//add target member permissions
+				if (targetMember) {
+					permissions = addMemberToPermissions(guild, targetMember, permissions, memberAllow, deny);
+				}
+				break;
+			}
 		}
 		resolve(permissions);
 	});
@@ -1281,7 +1320,7 @@ function getChannelRole(guild, channel) {
 	return channelRole;
 }
 
-function getChannelInfo(guild, channel, officerRole) {
+function getChannelInfo(guild, channel) {
 	let promise = new Promise(async function(resolve, reject) {
 		const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
 		const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
@@ -1290,11 +1329,24 @@ function getChannelInfo(guild, channel, officerRole) {
 		//const adminRole = guild.roles.cache.find(r => { return r.name == config.adminRoles[0]; });
 		const channelRole = getChannelRole(guild, channel);
 
+		let officerRole;
+		let divisionMemberRole;
+		let divisionRole;
+		if (channel.parent) {
+			let officerRoleName = channel.parent.name + ' ' + config.discordOfficerSuffix;
+			officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+			let memberRoleName = channel.parent.name + ' ' + config.discordMemberSuffix;
+			divisionMemberRole = guild.roles.cache.find(r => { return r.name == memberRoleName; });
+			divisionRole = guild.roles.cache.find(r => { return r.name == channel.parent.name; });
+		}
+
 		const everyonePerms = await channel.permissionsFor(guild.roles.everyone);
 		const guestPerms = await channel.permissionsFor(guestRole);
 		const memberPerms = await channel.permissionsFor(memberRole);
 		const channelRolePerms = (channelRole ? await channel.permissionsFor(channelRole) : null);
 		const officerPerms = (officerRole ? await channel.permissionsFor(officerRole) : null);
+		const divisionMemberPerms = (divisionMemberRole ? await channel.permissionsFor(divisionMemberRole) : null);
+		const divisionPerms = (divisionRole ? await channel.permissionsFor(divisionRole) : null);
 		const modPerms = await channel.permissionsFor(modRole);
 		const staffPerms = await channel.permissionsFor(staffRole);
 
@@ -1319,7 +1371,15 @@ function getChannelInfo(guild, channel, officerRole) {
 		} else if (guestPerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			perm = 'Guest';
 		} else if (memberPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'Member';
+			perm = 'Member (Division Role Locked)';
+		} else if (divisionPerms && divisionPerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			if (!everyonePerms.has(PermissionsBitField.Flags.SendMessages)) {
+				perm = 'Feed (Division Role Locked)';
+			} else {
+				perm = 'Public (Division Role Locked)';
+			}
+		} else if (divisionMemberPerms && divisionMemberPerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			perm = 'Member (Division Role Locked)';
 		} else if (channelRolePerms && channelRolePerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			perm = 'Role';
 		} else if (officerPerms && officerPerms.has(PermissionsBitField.Flags.ViewChannel)) {
@@ -1336,12 +1396,21 @@ function getChannelInfo(guild, channel, officerRole) {
 		details.everyone = getPermissionDetails(everyonePerms);
 		details.guest = getPermissionDetails(guestPerms);
 		details.member = getPermissionDetails(memberPerms);
+		if (divisionRole) {
+			details.division = getPermissionDetails(divisionPerms);
+			details.division.role = divisionRole;
+		}
+		if (divisionMemberRole) {
+			details.divisionMember = getPermissionDetails(divisionMemberPerms);
+			details.divisionMember.role = divisionMemberRole;
+		}
 		if (channelRole) {
 			details.role = getPermissionDetails(channelRolePerms);
 			details.role.role = channelRole;
 		}
 		if (officerRole) {
 			details.officer = getPermissionDetails(officerPerms);
+			details.officer.role = officerRole;
 		}
 		details.mod = getPermissionDetails(modPerms);
 		details.staff = getPermissionDetails(staffPerms);
@@ -1568,15 +1637,23 @@ global.updateTrackerDivisionOfficerChannel = updateTrackerDivisionOfficerChannel
 
 async function addDivision(message, member, perm, guild, divisionName) {
 	let officerRoleName = divisionName + ' ' + config.discordOfficerSuffix;
+	let memberRoleName = divisionName + ' ' + config.discordMemberSuffix;
+	let divisionRoleName = divisionName;
 	let lcName = divisionName.toLowerCase();
 	let simpleName = lcName.replace(/\s/g, '-');
 
-	var divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == ChannelType.GuildCategory); });
+	let divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == ChannelType.GuildCategory); });
 	if (divisionCategory)
 		return ephemeralReply(message, "Division category already exists.");
-	var divisionOfficerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+	let divisionOfficerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
 	if (divisionOfficerRole)
 		return ephemeralReply(message, "Division officer role already exists.");
+	let divisionMemberRole = guild.roles.cache.find(r => { return r.name == memberRoleName; });
+	if (divisionMemberRole)
+		return ephemeralReply(message, "Division member role already exists.");
+	let divisionRole = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
+	if (divisionRole)
+		return ephemeralReply(message, "Division role already exists.");
 
 	let prefix = simpleName;
 	let divisions = await getDivisionsFromTracker();
@@ -1593,69 +1670,109 @@ async function addDivision(message, member, perm, guild, divisionName) {
 	let divisionMemberVoiceChannel = prefix + '-member-voip';
 
 	try {
-		//create officers role
-		//divisionOfficerRole = await guild.roles.create({ name: officerRoleName, permissions: 0, mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
-		divisionOfficerRole = await guild.roles.create({ name: officerRoleName, permissions: [], mentionable: true, reason: `Requested by ${getNameFromMessage(message)}` });
 		const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
-		await divisionOfficerRole.setPosition(memberRole.position + 1).catch(e => { console.log(e); });
+		const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
+
+		//create roles
+		divisionOfficerRole = await guild.roles.create({
+			name: officerRoleName,
+			permissions: [],
+			mentionable: true,
+			reason: `Requested by ${getNameFromMessage(message)}`
+		});
+		await divisionOfficerRole.setPosition(memberRole.position + 1).catch(console.log);
+		divisionMemberRole = await guild.roles.create({
+			name: memberRoleName,
+			permissions: [],
+			mentionable: false,
+			reason: `Requested by ${getNameFromMessage(message)}`
+		});
+		await divisionMemberRole.setPosition(memberRole.position - 1).catch(console.log);
+		divisionRole = await guild.roles.create({
+			name: divisionRoleName,
+			permissions: [],
+			mentionable: false,
+			reason: `Requested by ${getNameFromMessage(message)}`
+		});
+		await divisionRole.setPosition(guestRole.position + 1).catch(console.log);
+
+		await setDependentRole(guild, message, divisionMemberRole, memberRole, false);
+		await setDependentRole(guild, message, divisionMemberRole, divisionRole, false);
+		await addManagedRole(message, member, guild, divisionRoleName, false, false);
 
 		//add category for division
-		let permissions = await getChannelPermissions(guild, message, perm, 'public', 'text', divisionOfficerRole);
+		let permissions = await getChannelPermissions(guild, message, perm,
+			'role', 'text', divisionOfficerRole, divisionRole);
 		divisionCategory = await guild.channels.create({
-				type: ChannelType.GuildCategory,
-				name: divisionName,
-				permissionOverwrites: permissions,
-				reason: `Requested by ${getNameFromMessage(message)}`
-			})
-			.catch(e => { console.log(e); });
+			type: ChannelType.GuildCategory,
+			name: divisionName,
+			permissionOverwrites: permissions,
+			reason: `Requested by ${getNameFromMessage(message)}`
+		}).catch(console.log);
+		if (!divisionCategory) {
+			return ephemeralReply(`Failed to create division category. Aborting division create.`);
+		}
 
 		//create members channel
-		permissions = await getChannelPermissions(guild, message, perm, 'member', 'text', divisionOfficerRole);
+		permissions = await getChannelPermissions(guild, message, perm,
+			'role', 'text', divisionOfficerRole, divisionMemberRole);
 		let membersChannel = await guild.channels.create({
-				type: ChannelType.GuildText,
-				name: divisionMembersChannel,
-				parent: divisionCategory,
-				permissionOverwrites: permissions,
-				reason: `Requested by ${getNameFromMessage(message)}`
-			})
-			.catch(e => { console.log(e); });
+			type: ChannelType.GuildText,
+			name: divisionMembersChannel,
+			parent: divisionCategory,
+			permissionOverwrites: permissions,
+			reason: `Requested by ${getNameFromMessage(message)}`
+		}).catch(console.log);
+		if (!membersChannel) {
+			await ephemeralReply(`Failed to create members channel`);
+		}
 
 		//create officers channel
-		permissions = await getChannelPermissions(guild, message, perm, 'officer', 'text', divisionOfficerRole);
+		permissions = await getChannelPermissions(guild, message, perm,
+			'officer', 'text', divisionOfficerRole);
 		let officersChannel = await guild.channels.create({
-				type: ChannelType.GuildText,
-				name: divisionOfficersChannel,
-				parent: divisionCategory,
-				permissionOverwrites: permissions,
-				reason: `Requested by ${getNameFromMessage(message)}`
-			})
-			.catch(e => { console.log(e); });
+			type: ChannelType.GuildText,
+			name: divisionOfficersChannel,
+			parent: divisionCategory,
+			permissionOverwrites: permissions,
+			reason: `Requested by ${getNameFromMessage(message)}`
+		}).catch(console.log);
+		if (!officersChannel) {
+			await ephemeralReply(`Failed to create officers channel`);
+		}
 
 		//create public channel
-		permissions = await getChannelPermissions(guild, message, perm, 'public', 'text', divisionOfficerRole);
+		permissions = await getChannelPermissions(guild, message, perm,
+			'role', 'text', divisionOfficerRole, divisionRole);
 		let publicChannel = await guild.channels.create({
-				type: ChannelType.GuildText,
-				name: divisionPublicChannel,
-				parent: divisionCategory,
-				permissionOverwrites: permissions,
-				reason: `Requested by ${getNameFromMessage(message)}`
-			})
-			.catch(e => { console.log(e); });
+			type: ChannelType.GuildText,
+			name: divisionPublicChannel,
+			parent: divisionCategory,
+			permissionOverwrites: permissions,
+			reason: `Requested by ${getNameFromMessage(message)}`
+		}).catch(console.log);
+		if (!publicChannel) {
+			await ephemeralReply(`Failed to create public channel`);
+		}
 
 		//create member voice channel
-		permissions = await getChannelPermissions(guild, message, perm, 'member', 'voice', divisionOfficerRole);
+		permissions = await getChannelPermissions(guild, message, perm,
+			'role', 'voice', divisionOfficerRole, divisionMemberRole);
 		let memberVoipChannel = await guild.channels.create({
-				type: ChannelType.GuildVoice,
-				name: divisionMemberVoiceChannel,
-				parent: divisionCategory,
-				permissionOverwrites: permissions,
-				reason: `Requested by ${getNameFromMessage(message)}`
-			})
-			.catch(e => { console.log(e); });
+			type: ChannelType.GuildVoice,
+			name: divisionMemberVoiceChannel,
+			parent: divisionCategory,
+			permissionOverwrites: permissions,
+			reason: `Requested by ${getNameFromMessage(message)}`
+		}).catch(console.log);
+		if (!memberVoipChannel) {
+			await ephemeralReply(`Failed to create member voip channel`);
+		}
 
 		addForumSyncMap(message, guild, officerRoleName, divisionName + ' ' + config.forumOfficerSuffix);
-		if (divisionData)
-			updateTrackerDivisionOfficerChannel(divisionData, officersChannel);
+		if (divisionData && officersChannel) {
+			await updateTrackerDivisionOfficerChannel(divisionData, officersChannel);
+		}
 
 		return ephemeralReply(message, `${divisionName} division added`);
 	} catch (error) {
@@ -1667,6 +1784,8 @@ global.addDivision = addDivision;
 
 async function deleteDivision(message, member, perm, guild, divisionName) {
 	let officerRoleName = divisionName + ' ' + config.discordOfficerSuffix;
+	let memberRoleName = divisionName + ' ' + config.discordMemberSuffix;
+	let divisionRoleName = divisionName;
 
 	let divisions = await getDivisionsFromTracker();
 	let divisionData = divisions[divisionName];
@@ -1704,10 +1823,23 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 		await ephemeralReply(message, `${divisionName} category not found`);
 	}
 
-	const role = guild.roles.cache.find(r => { return r.name == officerRoleName; });
-	if (role) {
+	let offcerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+	let memberRole = guild.roles.cache.find(r => { return r.name == memberRoleName; });
+	let divisionRole = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
+
+	await removeManagedRole(message, member, guild, divisionRoleName, false);
+	await unsetDependentRole(guild, message, memberRole, memberRole);
+	await unsetDependentRole(guild, message, memberRole, divisionRole);
+
+	if (forumIntegrationConfig[officerRoleName] !== undefined) {
+		delete(forumIntegrationConfig[officerRoleName]);
+		fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
+		getRolesByForumGroup(guild, true);
+	}
+
+	if (offcerRole) {
 		try {
-			await role.delete(`Requested by ${getNameFromMessage(message)}`);
+			await offcerRole.delete(`Requested by ${getNameFromMessage(message)}`);
 			await ephemeralReply(message, `${officerRoleName} role removed`);
 		} catch (error) {
 			await ephemeralReply(message, `Failed to delete role ${officerRoleName}`);
@@ -1717,10 +1849,29 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 		await ephemeralReply(message, `${officerRoleName} role not found`);
 	}
 
-	if (forumIntegrationConfig[officerRoleName] !== undefined) {
-		delete(forumIntegrationConfig[officerRoleName]);
-		fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
-		getRolesByForumGroup(guild, true);
+	if (memberRole) {
+		try {
+			await memberRole.delete(`Requested by ${getNameFromMessage(message)}`);
+			await ephemeralReply(message, `${memberRoleName} role removed`);
+		} catch (error) {
+			await ephemeralReply(message, `Failed to delete role ${memberRoleName}`);
+			console.log(error);
+		}
+	} else {
+		await ephemeralReply(message, `${memberRoleName} role not found`);
+	}
+
+
+	if (divisionRole) {
+		try {
+			await divisionRole.delete(`Requested by ${getNameFromMessage(message)}`);
+			await ephemeralReply(message, `${divisionRoleName} role removed`);
+		} catch (error) {
+			await ephemeralReply(message, `Failed to delete role ${divisionRoleName}`);
+			console.log(error);
+		}
+	} else {
+		await ephemeralReply(message, `${divisionRoleName} role not found`);
 	}
 }
 global.deleteDivision = deleteDivision;
@@ -2792,13 +2943,14 @@ function doForumSync(message, member, guild, perm, doDaily) {
 				let groupMap = forumIntegrationConfig[roleName];
 
 				let role;
-				if (groupMap.roleID === undefined) {
+				if (groupMap.roleID === undefined || groupMap.roleID === '') {
 					//make sure we actually have the roleID in our structure
 					role = guild.roles.cache.find(matchGuildRoleName, roleName);
 					if (role)
 						groupMap.roleID = role.id;
-				} else
+				} else {
 					role = guild.roles.resolve(groupMap.roleID);
+				}
 
 				if (role) {
 					let isMemberRole = (role.id === memberRole.id);
@@ -3050,6 +3202,8 @@ function doForumSync(message, member, guild, perm, doDaily) {
 							sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 						}
 					}
+				} else {
+					console.log(`${roleName} not found`);
 				}
 			}
 		}
@@ -3865,12 +4019,14 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 					//FIXME what what if the member creates mulitple channels?
 					let tempChannelName = `${newMemberState.member.nickname}'s Channel`;
 					let type = 'voice';
-					let level = 'member';
+					let level = 'role';
 					let category = guild.channels.resolve(newMemberState.channel.parentId);
 					let officerRoleName = category.name + ' ' + config.discordOfficerSuffix;
+					let memberRoleName = category.name + ' ' + config.discordMemberSuffix;
 					let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+					let memberRole = guild.roles.cache.find(r => { return r.name == memberRoleName; });
 					let tempChannel = await addChannel(guild, null, newMemberState.member, perm, tempChannelName, type, level,
-						category, officerRole, null, newMemberState.member);
+						category, officerRole, memberRole, newMemberState.member);
 					if (tempChannel) {
 						newMemberState.member.voice.setChannel(tempChannel).catch(error => {});
 						joinToCreateChannels.tempChannels[tempChannel.id] = newMemberState.member.id;

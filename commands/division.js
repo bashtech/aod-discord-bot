@@ -108,7 +108,13 @@ module.exports = {
 						});
 					}
 				} catch (e) {
-					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
+					if (!e.code || e.code !== 'InteractionCollectorError') {
+						console.log(e);
+						await interaction.editReply({ components: [], ephemeral: true });
+						await global.ephemeralReply(interaction, `An error occured while deleting the ${name} division`);
+					} else {
+						await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
+					}
 				}
 				return Promise.resolve();
 			}
