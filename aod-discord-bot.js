@@ -668,7 +668,7 @@ function getParams(string) {
 function notifyRequestError(message, member, guild, error, showError) {
 	if (!error)
 		return;
-	console.error(`Error from ${__caller_function}:${__caller_line}: ${error.toString()}`);
+	console.error('An error occurred while processing your request: ' + error.toString());
 	if (showError && message) {
 		if (member)
 			member.send('An error occurred while processing your request: ' + message.content + "\n" + error.toString())

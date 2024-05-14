@@ -137,7 +137,6 @@ messageRouter.post('/:message_id/react', async (req, res, next) => {
 		if (!emojiId) {
 			res.status(404).send({ error: 'Unknown emoji' });
 		} else {
-			let reaction = req.message.reactions.cache.get(emojiId);
 			if (req.body.exclusive) {
 				if (req.message.author.id !== global.client.user.id) {
 					res.status(403).send({ error: 'Cannot clear reactions on messages authored by other users' });
@@ -145,14 +144,23 @@ messageRouter.post('/:message_id/react', async (req, res, next) => {
 					return;
 				}
 				await req.message.reactions.removeAll();
-			} else if (reaction && reaction.users.resolve(global.client.user.id)) {
-				await reaction.users.remove(global.client.user.id).catch(() => {});
-			} else {
-				reaction = await req.message.react(emojiId).catch((err) => {});
+				let reaction = await req.message.react(emojiId).catch((err) => {});
 				if (!reaction) {
 					res.status(500).send({ error: `Failed to add reaction` });
 					next();
 					return;
+				}
+			} else {
+				let reaction = req.message.reactions.cache.get(emojiId);
+				if (reaction && reaction.users.resolve(global.client.user.id)) {
+					await reaction.users.remove(global.client.user.id).catch(() => {});
+				} else {
+					reaction = await req.message.react(emojiId).catch((err) => {});
+					if (!reaction) {
+						res.status(500).send({ error: `Failed to add reaction` });
+						next();
+						return;
+					}
 				}
 			}
 			res.send({ id: req.message.id });
