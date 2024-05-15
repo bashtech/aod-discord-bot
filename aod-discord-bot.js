@@ -34,7 +34,7 @@ const sprintf = require('sprintf-js').sprintf;
 //const vsprintf = require('sprintf-js').vsprintf;
 
 //include config
-var config = require('./aod-discord-bot.config.json');
+var config = require('./config/aod-discord-bot.config.json');
 global.config = config;
 
 //inclue fs
@@ -296,15 +296,28 @@ function ephemeralReply(message, msg, edit) {
 }
 global.ephemeralReply = ephemeralReply;
 
-function messageReply(message, msg) {
+function messageReply(message, msg, edit) {
 	if (message) {
-		if (message.isInteraction)
-			return sendInteractionReply(message, msg);
-		else
-			return message.reply(msg);
+		if (message.isInteraction) {
+			if (typeof(msg) === 'object') {
+				if (msg.embeds !== undefined || msg.components !== undefined) {
+					return sendInteractionReply(message, msg, edit);
+				} else {
+					return sendInteractionReply(message, { embeds: [msg] }, edit);
+				}
+			} else {
+				return sendInteractionReply(message, { content: msg }, edit);
+			}
+		} else {
+			if (typeof(msg) === 'object')
+				return message.reply(message, { embeds: [msg] }).catch(() => {});
+			else
+				return message.reply(msg).catch(() => {});
+		}
 	}
 	return Promise.resolve();
 }
+global.messageReply = messageReply
 
 //add or remove a role from a guildMember
 async function addRemoveRole(message, guild, add, roleData, member, assigned) {
@@ -3799,11 +3812,16 @@ function commandSetAdmin(message, member, cmd, args, guild, perm, permName, isDM
 	addRemoveRole(message, guild, cmd === 'addadmin', 'Admin', getMemberFromMessageOrArgs(guild, message, args), true);
 }
 
-//reload command processing
-function commandReload(message, member, cmd, args, guild, perm, permName, isDM) {
+function reloadConfig(message) {
 	console.log(`Reload config requested by ${getNameFromMessage(message)}`);
 	config = require('./aod-discord-bot.config.json');
 	message.reply('Configuration reloaded');
+}
+global.reloadConfig = reloadConfig;
+
+//reload command processing
+function commandReload(message, member, cmd, args, guild, perm, permName, isDM) {
+	reloadConfig(message);
 }
 
 function secondsToString(seconds) {
@@ -3868,38 +3886,45 @@ function stopAPIServer() {
 	});
 	return promise;
 }
-async function startAPIServer() {
-	try {
-		if (api_https_server) {
-			await stopAPIServer();
-			api_https_server = null;
-			delete require.cache[require.resolve('./api/api.js')];
-		}
 
-		const { api } = require('./api/api.js');
-		let api_server_cert = fs.readFileSync(config.botAPICert);
-		let api_server_key = fs.readFileSync(config.botAPIKey);
-		api_https_server = https.createServer({
-			cert: api_server_cert,
-			key: api_server_key
-		}, api);
+function startAPIServer() {
+	let promise = new Promise(async function(resolve, reject) {
+		try {
+			if (api_https_server) {
+				await stopAPIServer();
+				api_https_server = null;
+				delete require.cache[require.resolve('./api/api.js')];
+			}
 
-		api_https_server.on('error', (error) => {
-			console.log(error);
-		});
-		api_https_server.on('connection', (socket) => {
-			let socketId = nextSocketId++;
-			sockets[socketId] = socket;
-			socket.on('close', function() {
-				delete sockets[socketId];
+			const { api } = require('./api/api.js');
+			let api_server_cert = fs.readFileSync(config.botAPICert);
+			let api_server_key = fs.readFileSync(config.botAPIKey);
+			api_https_server = https.createServer({
+				cert: api_server_cert,
+				key: api_server_key
+			}, api);
+
+			api_https_server.on('error', (error) => {
+				console.log(error);
 			});
-		});
+			api_https_server.on('connection', (socket) => {
+				let socketId = nextSocketId++;
+				sockets[socketId] = socket;
+				socket.on('close', function() {
+					delete sockets[socketId];
+				});
+			});
 
-		api_https_server.listen(config.botAPIPort);
-	} catch (error) {
-		console.log(error);
-	}
+			api_https_server.listen(config.botAPIPort);
+			console.log("API Server started");
+		} catch (error) {
+			console.log(error);
+		}
+		resolve();
+	});
+	return promise;
 }
+global.startAPIServer = startAPIServer;
 
 function commandReloadAPI(message, member, cmd, args, guild, perm, permName, isDM) {
 	console.log(`Bot reload API server requested by ${getNameFromMessage(message)}`);
@@ -4464,33 +4489,40 @@ global.sortAndLimitOptions = sortAndLimitOptions;
 
 //Slash Command Processing
 function loadSlashCommands() {
-	try {
-		if (client.commands) {
-			delete client.commands;
-		}
-		if (client.menuMap) {
-			delete client.menuMap;
-		}
-		client.commands = new Collection();
-		client.menuMap = {};
-		const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
-		for (const file of commandFiles) {
-			try {
-				delete require.cache[require.resolve(`./commands/${file}`)];
-			} catch (error) {}
-			const command = require(`./commands/${file}`);
-			client.commands.set(command.data.name, command);
-			if (command.menuCommands) {
-				command.menuCommands.forEach(m => {
-					client.menuMap[m.name] = command.data.name;
-				});
+	let promise = new Promise(function(resolve, reject) {
+		try {
+			if (client.commands) {
+				delete client.commands;
 			}
+			if (client.menuMap) {
+				delete client.menuMap;
+			}
+			client.commands = new Collection();
+			client.menuMap = {};
+			const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+			for (const file of commandFiles) {
+				try {
+					delete require.cache[require.resolve(`./commands/${file}`)];
+				} catch (error) {}
+				const command = require(`./commands/${file}`);
+				client.commands.set(command.data.name, command);
+				if (command.menuCommands) {
+					command.menuCommands.forEach(m => {
+						client.menuMap[m.name] = command.data.name;
+					});
+				}
+			}
+			console.log("Slash commands installed");
+		} catch (error) {
+			console.log(error);
 		}
-	} catch (error) {
-		console.log(error);
-	}
+		resolve();
+	});
+	return promise;
 }
+global.loadSlashCommands = loadSlashCommands;
 loadSlashCommands();
+
 client.on('interactionCreate', async interaction => {
 	let command;
 	let commandName;
