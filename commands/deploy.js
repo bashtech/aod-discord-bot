@@ -28,6 +28,7 @@ const projectActions = [
 	{ name: 'Update NPM', value: 'update-npm' },
 	{ name: 'Restart Supervisor', value: 'restart-supervisor' },
 	{ name: 'Restart Service', value: 'restart-service' },
+	{ name: 'Toggle Maintenance', value: 'toggle-maintenance' },
 ];
 
 module.exports = {
