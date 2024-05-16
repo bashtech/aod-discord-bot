@@ -1,0 +1,78 @@
+{
+  "adminRoles": [
+    "Admin",
+    "AOD SgtMaj",
+    "AOD CmdSgt"
+  ],
+  "botAPIAllowedIPs": [],
+  "botAPICert": "cert.crt",
+  "botAPIKey": "key.pem",
+  "botAPIPort": "4443",
+  "botAPIToken": "",
+  "clientId": "",
+  "dependentRoles": "./config/dependentRoles.json",
+  "devMode": true,
+  "discordMemberSuffix": "Member",
+  "discordOfficerSuffix": "Officers",
+  "divisionCommandRoles": [
+    "Commanding Officer",
+    "Executive Officer"
+  ],
+  "forumGroupConfig": "./config/forumGroupConfig.json",
+  "forumLoginErrorTimeoutMs": 900000,
+  "forumOfficerSuffix": "Officers",
+  "forumSyncIntervalMS": 900000,
+  "guestRole": "Guest",
+  "guildId": "",
+  "joinToCreateChannels": "./config/joinToCreateChannels.json",
+  "managedRoles": "./config/managedRoles.json",
+  "maxChannelsPerCategory": 20,
+  "maxForumLoginAttempts": 3,
+  "memberRole": "AOD Member",
+  "modRoles": [
+    "AOD SSgt",
+    "AOD Sgt"
+  ],
+  "muteRole": "Muted",
+  "mysql": {
+    "host": "",
+    "port": "",
+    "user": "",
+    "password": "",
+    "database": "",
+    "prefix": "",
+    "trackerPrefix": ""
+  },
+  "populationLogFile": "./config/population.txt",
+  "prefix": "!",
+  "protectedCategories": [
+    "Lobby",
+    "Members Only",
+    "Voice Channels"
+  ],
+  "protectedChannels": [
+    "admin",
+    "aod-members",
+    "aod-sergeants",
+    "aod-staff",
+    "general",
+    "recruiting",
+    "aod-lobby"
+  ],
+  "pttRole": "Forced PTT",
+  "recruiterRoles": [],
+  "relayedMessageMap": "./config/relayedMessageMap.json",
+  "savedTimers": "./config/savedTimers.json",
+  "staffRoles": [
+    "AOD 1stSgt",
+    "AOD MSgt"
+  ],
+  "syncLogFile": "sync.log",
+  "tempChannelCategory": "Voice Channels",
+  "token": "",
+  "trackerAPIToken": "",
+  "trackerAPIURL": "http://localhost/api/v1",
+  "trackerURL": "http://localhost",
+  "trackerToken": "",
+  "webHookPerms": {}
+}

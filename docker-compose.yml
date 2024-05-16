@@ -1,0 +1,10 @@
+services:
+  bot:
+    build: .
+    ports:
+      - "4443:4443"
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config
+      # Optional: Use a certificate generate outside the Docker build. cert.crt and key.pem must be provided in the mapped volume
+      #- ./cert:/app/cert
