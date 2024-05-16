@@ -5,8 +5,8 @@
     "AOD CmdSgt"
   ],
   "botAPIAllowedIPs": [],
-  "botAPICert": "cert.crt",
-  "botAPIKey": "key.pem",
+  "botAPICert": "./cert/cert.crt",
+  "botAPIKey": "./cert/key.pem",
   "botAPIPort": "4443",
   "botAPIToken": "",
   "clientId": "",
