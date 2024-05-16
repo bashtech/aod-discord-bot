@@ -2,12 +2,16 @@ FROM node:lts
 
 # Copy bot
 COPY ./aod-discord-bot.js /app/aod-discord-bot.js
+COPY ./deploy-commands.js /app/deploy-commands.js
 COPY ./api /app/api
 COPY ./commands /app/commands
 
 # Copy NPM requirements
 COPY ./package.json /app/package.json
 COPY ./package-lock.json /app/package-lock.json
+
+# Copy entrypoint script
+COPY ./entrypoint.sh /app/entrypoint.sh
 
 WORKDIR /app
 
@@ -21,5 +25,5 @@ RUN openssl req -x509 -nodes -days 365 \
 # Install dependencies
 RUN npm install
 
-CMD ["node", "aod-discord-bot.js"]
+CMD ["/bin/sh","entrypoint.sh"]
 EXPOSE 4443
