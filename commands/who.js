@@ -31,7 +31,7 @@ function getComponentsForTarget(member, perm, targetMember, targetPerm, invite) 
 		//if the target is in a voie channel, check if member can move them
 		if (targetMember.voice.channel) {
 			let canMove = member.permissions.has(PermissionsBitField.Flags.MoveMembers);
-			if (!canMove && member.voice.channel.id === targetMember.voice.channel.id) {
+			if (!canMove) {
 				let catgory = member.voice.channel.parent;
 				let officerRole;
 				if (catgory) {
@@ -40,7 +40,10 @@ function getComponentsForTarget(member, perm, targetMember, targetPerm, invite) 
 					officerRole = interaction.guild.roles.cache.find(r => { return r.name == officerRoleName; });
 				}
 				if (officerRole && member.roles.resolve(officerRole.id)) {
-					canMove = true;
+					if (targetMember.voice.channel.parent.id === category.id ||
+						targetMember.voice.channel.name === 'Lobby') {
+						canMove = true;
+					}
 				}
 			}
 			//if member has permission to move target, create a move button
