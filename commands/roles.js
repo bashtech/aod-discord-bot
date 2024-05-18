@@ -91,7 +91,7 @@ module.exports = {
 			case 'add-assignable':
 			case 'add-subscribable': {
 				if (focusedOption.name === 'role') {
-					let managedRoles = global.getUserRoles(subCommand === 'add_assignable');
+					let managedRoles = global.getUserRoles(subCommand === 'add-assignable');
 					let guildRoles = [];
 					for (let role of interaction.guild.roles.cache.values()) {
 						if (managedRoles.includes(role.name) || !global.isManageableRole(role)) {
@@ -106,7 +106,7 @@ module.exports = {
 			case 'remove-assignable':
 			case 'remove-subscribable': {
 				if (focusedOption.name === 'role') {
-					let managedRoles = global.getUserRoles(subCommand === 'remove_assignable');
+					let managedRoles = global.getUserRoles(subCommand === 'remove-assignable');
 					return interaction.respond(global.sortAndLimitOptions(managedRoles, 25, search));
 				}
 				break;
@@ -167,17 +167,17 @@ module.exports = {
 				case 'add-assignable':
 				case 'add-subscribable': {
 					let roleName = interaction.options.getString('role');
-					return global.addManagedRole(interaction, member, interaction.guild, roleName, false, subCommand === 'add_assignable');
+					return global.addManagedRole(interaction, member, interaction.guild, roleName, false, subCommand === 'add-assignable');
 				}
 				case 'create-assignable':
 				case 'create-subscribable': {
 					let roleName = interaction.options.getString('role');
-					return global.addManagedRole(interaction, member, interaction.guild, roleName, true, subCommand === 'create_assignable');
+					return global.addManagedRole(interaction, member, interaction.guild, roleName, true, subCommand === 'create-assignable');
 				}
 				case 'remove-assignable':
 				case 'remove-subscribable': {
 					let roleName = interaction.options.getString('role');
-					return global.removeManagedRole(interaction, member, interaction.guild, roleName, subCommand === 'remove_assignable');
+					return global.removeManagedRole(interaction, member, interaction.guild, roleName, subCommand === 'remove-assignable');
 				}
 				case 'rename': {
 					let roleName = interaction.options.getString('role');
