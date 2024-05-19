@@ -17,48 +17,81 @@ function getComponentsForTarget(member, perm, targetMember, targetPerm, invite) 
 	if (member.id === targetMember.id) {
 		return components;
 	}
+
+	const voiceRow = new ActionRowBuilder();
+	let canMove = false;
+	let canDisconnect = false;
 	if (member.voice.channel && member.voice.channelId !== targetMember.voice.channelId) {
-		const row = new ActionRowBuilder();
 		//create invite button
 		if (invite === true) {
 			const invite = new ButtonBuilder()
 				.setCustomId('send_invite')
 				.setLabel('Invite to your channel')
 				.setStyle(ButtonStyle.Primary);
-			row.addComponents(invite);
+			voiceRow.addComponents(invite);
 		}
 
 		//if the target is in a voie channel, check if member can move them
-		if (targetMember.voice.channel) {
-			let canMove = member.permissions.has(PermissionsBitField.Flags.MoveMembers);
-			if (!canMove) {
-				let catgory = member.voice.channel.parent;
-				let officerRole;
-				if (catgory) {
-					//check if this category has an associated officer role
-					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
-					officerRole = interaction.guild.roles.cache.find(r => { return r.name == officerRoleName; });
-				}
-				if (officerRole && member.roles.resolve(officerRole.id)) {
-					if (targetMember.voice.channel.parent.id === category.id ||
-						targetMember.voice.channel.name === 'Lobby') {
-						canMove = true;
+		if (perm >= global.PERM_RECRUITER) {
+			if (targetMember.voice.channel) {
+				canMove = member.permissions.has(PermissionsBitField.Flags.MoveMembers);
+				if (!canMove) {
+					let category = member.voice.channel.parent;
+					let officerRole;
+					if (category) {
+						//check if this category has an associated officer role
+						let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+						officerRole = member.guild.roles.cache.find(r => { return r.name == officerRoleName; });
+					}
+					if (officerRole && member.roles.resolve(officerRole.id)) {
+						if (targetMember.voice.channel.parent.id === category.id ||
+							targetMember.voice.channel.name === 'Lobby') {
+							canMove = true;
+						}
 					}
 				}
 			}
-			//if member has permission to move target, create a move button
-			if (canMove) {
-				const move = new ButtonBuilder()
-					.setCustomId('move_to_me')
-					.setLabel('Move to your channel')
-					.setStyle(ButtonStyle.Danger);
-				row.addComponents(move);
+		}
+	}
+	if (targetMember.voice) {
+		if (perm >= global.PERM_RECRUITER) {
+			if (targetPerm < perm) {
+				if (perm >= global.PERM_MOD) {
+					canDisconnect = true;
+				}
+			} else {
+				let category = targetMember.voice.channel.parent;
+				let officerRole;
+				if (category) {
+					//check if this category has an associated officer role
+					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+					officerRole = member.guild.roles.cache.find(r => { return r.name == officerRoleName; });
+				}
+				if (officerRole && member.roles.resolve(officerRole.id)) {
+					canDisconnect = true;
+				}
 			}
 		}
+	}
 
-		if (row.components.length) {
-			components.push(row);
-		}
+	//if member has permission to move target, create a move button
+	if (canMove) {
+		const move = new ButtonBuilder()
+			.setCustomId('move_to_me')
+			.setLabel('Move to your channel')
+			.setStyle(ButtonStyle.Danger);
+		voiceRow.addComponents(move);
+	}
+	//if member has permission to disconnect target, create a disconnect button
+	if (canDisconnect) {
+		const disconnect = new ButtonBuilder()
+			.setCustomId('disconnect')
+			.setLabel('Disconnect')
+			.setStyle(ButtonStyle.Danger);
+		voiceRow.addComponents(disconnect);
+	}
+	if (voiceRow.components.length) {
+		components.push(voiceRow);
 	}
 
 	if (perm >= global.PERM_MOD && perm > targetPerm) {
@@ -144,7 +177,7 @@ module.exports = {
 	async execute(interaction, member, perm, permName) {
 		await interaction.deferReply({ ephemeral: true });
 
-		let targetMember = interaction.options.getMember('user');
+		const targetMember = interaction.options.getMember('user');
 		const userData = await global.getForumInfoForMember(targetMember);
 		const memberRole = interaction.guild.roles.cache.find(r => { return r.name == global.config.memberRole; });
 
@@ -206,12 +239,14 @@ module.exports = {
 		interaction.replied = true; //avoid common reply
 		const response = await global.ephemeralReply(interaction, { embeds: [embed], components: components }, true);
 		if (components.length) {
-			const buttons = ['send_invite', 'move_to_me', 'server_unmute', 'server_mute', 'server_undeaf', 'server_deaf',
+			const buttons = ['send_invite', 'move_to_me', 'disconnect',
+				'server_unmute', 'server_mute', 'server_undeaf', 'server_deaf',
 				'remove_mute_role', 'add_mute_role', 'remove_ptt_role', 'add_ptt_role'];
 			const filter = (i) => i.user.id === interaction.user.id && buttons.includes(i.customId);
 			try {
 				while (1) {
 					const confirmation = await response.awaitMessageComponent({ filter: filter, time: 15000 });
+					console.log(`${getNameFromMessage(interaction)} executed: button:who:${confirmation.customId}:${targetMember.id}`);
 					switch (confirmation.customId) {
 						case 'send_invite': {
 							let invite = await member.voice.channel.createInvite({
@@ -229,9 +264,11 @@ module.exports = {
 							break;
 						}
 						case 'move_to_me': {
-							confirmation.update({ components: [] });
-							await targetMember.voice.setChannel(member.voice.channelId);
-							global.ephemeralReply(interaction, { content: `${targetMember} moved to your channel.` });
+							await targetMember.voice.setChannel(member.voice.channelId).catch(console.log);
+							break;
+						}
+						case 'disconnect': {
+							await targetMember.voice.disconnect().catch(console.log);
 							break;
 						}
 						case 'server_unmute': {
