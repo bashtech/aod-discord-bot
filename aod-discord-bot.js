@@ -317,7 +317,7 @@ function messageReply(message, msg, edit) {
 	}
 	return Promise.resolve();
 }
-global.messageReply = messageReply
+global.messageReply = messageReply;
 
 //add or remove a role from a guildMember
 async function addRemoveRole(message, guild, add, roleData, member, assigned) {
@@ -987,10 +987,10 @@ async function userLogin(message, member, guild, username, password) {
 						db.query(query2, async function(err, rows2, fields) {
 							if (rows2 && rows2.length) {
 								let data2 = rows2[0];
-								const sgtsChannel = guild.channels.cache.find(c => { return c.name === 'aod-sergeants'; });
+								const notificationChannel = guild.channels.cache.find(c => { return c.name === config.globalNotificationChannel; });
 								console.log(`Existing forum account found ${data2.username} ${data2.userid}`);
-								if (sgtsChannel) {
-									await sgtsChannel.send(`${member.user.tag} logged in as ${data.username} but was already known as ${data2.username}`).catch(() => {});
+								if (notificationChannel) {
+									await notificationChannel.send(`${member.user.tag} logged in as ${data.username} but was already known as ${data2.username}`).catch(() => {});
 								}
 								query2 = `UPDATE ${config.mysql.prefix}userfield SET field19='',field20='' WHERE userid=${data2.userid}`;
 								db.query(query2);
@@ -2810,14 +2810,14 @@ function getForumUsersForGroups(groups, allowPending) {
 		let groupRegex = groups.join('|');
 		let query =
 			`SELECT u.userid,u.username,f.field19,f.field20,f.field13,f.field23,f.field24, ` +
-			`(CASE WHEN (r.requester_id IS NOT NULL AND r.approver_id IS NULL) THEN 1 ELSE 0 END) AS pending ` +
+			`(CASE WHEN (r.requester_id IS NOT NULL AND r.approved_at IS NULL AND r.cancelled_at IS NULL AND r.processed_at is NULL) THEN 1 ELSE 0 END) AS pending ` +
 			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
 			`LEFT JOIN  ${config.mysql.trackerPrefix}member_requests AS r ON u.userid=r.member_id AND r.approver_id IS NULL ` +
 			`WHERE (u.usergroupid IN (${groupStr}) OR u.membergroupids REGEXP '(^|,)(${groupRegex})(,|$)' `;
 		if (allowPending === true)
 			query +=
-			`OR r.requester_id IS NOT NULL `;
+			`OR (r.requester_id IS NOT NULL AND r.approved_at IS NULL AND r.cancelled_at IS NULL AND r.processed_at is NULL) `;
 		query +=
 			`) AND ((f.field19 IS NOT NULL AND f.field19 <> '') OR (f.field20 IS NOT NULL AND f.field20 <> '')) ` +
 			`ORDER BY f.field13,u.username`;
@@ -3015,7 +3015,7 @@ function doForumSync(message, member, guild, perm, doDaily) {
 			.catch(error => { console.log(error); });
 		const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
 		const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
-		const sgtsChannel = guild.channels.cache.find(c => { return c.name === 'aod-sergeants'; });
+		const notificationChannel = guild.channels.cache.find(c => { return c.name === config.globalNotificationChannel; });
 		const reason = (message ? `Requested by ${getNameFromMessage(message)}` : 'Periodic Sync');
 		let adds = 0,
 			removes = 0,
@@ -3364,7 +3364,7 @@ function doForumSync(message, member, guild, perm, doDaily) {
 						let division_disconnected = disconnected[divisionName] ?? 0;
 						let officer_channel = guild.channels.resolve(divisionData.officer_channel);
 						if (!officer_channel)
-							officer_channel = guild.channels.cache.find(c => c.name === divisionData.officer_channel && c.type === ChannelType.GuildText) ?? sgtsChannel;
+							officer_channel = guild.channels.cache.find(c => c.name === divisionData.officer_channel && c.type === ChannelType.GuildText) ?? notificationChannel;
 						if (officer_channel) {
 							officer_channel.send(`${divisionName} Division: ` +
 								`The forum sync process found ${division_misses} members with no discord account and ` +
@@ -3376,8 +3376,8 @@ function doForumSync(message, member, guild, perm, doDaily) {
 			}
 		}
 		if (duplicates > 0) {
-			if (sgtsChannel) {
-				sgtsChannel.send(`The forum sync process found ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
+			if (notificationChannel) {
+				notificationChannel.send(`The forum sync process found ${duplicates} duplicate tags. Please check https://www.clanaod.net/forums/aodinfo.php?type=last_discord_sync for the last sync status.`).catch(() => {});
 			}
 		}
 
@@ -4615,6 +4615,7 @@ client.on('interactionCreate', async interaction => {
 			console.log(`No button callback defined for ${commandName}`);
 			return;
 		}
+		console.log(`${getNameFromMessage(interaction)} executed: button:${interaction.customId}`);
 		try {
 			await command.button(interaction, member, perm, permName);
 			if (!interaction.replied)
