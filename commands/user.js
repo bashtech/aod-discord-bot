@@ -35,7 +35,7 @@ module.exports = {
 		const subCommand = interaction.options.getSubcommand();
 		let targetMember = interaction.options.getMember('user');
 
-		if (targetMember){
+		if (targetMember) {
 			// Validate caller has permissions to kick/ban target if they are a member of the server
 			let [targetPerm, targetPermName] = global.getPermissionLevelForMember(targetMember);
 			if (!targetMember.kickable || perm <= targetPerm)
@@ -59,7 +59,7 @@ module.exports = {
 					.setStyle(ButtonStyle.Secondary);
 				const row = new ActionRowBuilder()
 					.addComponents(cancel, confirm);
-				const response = await global.ephemeralReply(interaction ,{
+				const response = await global.ephemeralReply(interaction, {
 					content: `Are you sure you want to kick ${targetMember} from the server?`,
 					components: [row]
 				});
@@ -100,7 +100,7 @@ module.exports = {
 					.setStyle(ButtonStyle.Secondary);
 				const row = new ActionRowBuilder()
 					.addComponents(cancel, confirm);
-				const response = await global.ephemeralReply(interaction,{
+				const response = await global.ephemeralReply(interaction, {
 					content: `Are you sure you want to ban ${userToBan} from the server?`,
 					components: [row],
 					ephemeral: true
