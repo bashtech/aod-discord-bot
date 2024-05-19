@@ -54,11 +54,9 @@ function getComponentsForTarget(member, perm, targetMember, targetPerm, invite) 
 		}
 	}
 	if (targetMember.voice) {
-		if (perm >= global.PERM_RECRUITER) {
-			if (targetPerm < perm) {
-				if (perm >= global.PERM_MOD) {
-					canDisconnect = true;
-				}
+		if (perm >= global.PERM_RECRUITER && targetPerm < perm) {
+			if (perm >= global.PERM_MOD) {
+				canDisconnect = true;
 			} else {
 				let category = targetMember.voice.channel.parent;
 				let officerRole;
