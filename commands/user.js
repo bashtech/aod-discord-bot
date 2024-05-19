@@ -82,6 +82,7 @@ module.exports = {
 							content: `${targetMember} has been kicked for: ${reason}`,
 							components: []
 						}).catch(() => {});
+						await global.sendGlobalNotification(interaction.guild, `${targetMember} has been kicked by ${member} for: ${reason}`);
 					} else if (confirmation.customId === 'cancel_user_kick') {
 						await confirmation.update({
 							content: 'Kick request cancelled',
@@ -124,6 +125,7 @@ module.exports = {
 							content: `${userToBan} has been banned for: ${reason}`,
 							components: []
 						}).catch(() => {});
+						await global.sendGlobalNotification(interaction.guild, `${userToBan} has been banned by ${member} for: ${reason}`);
 					} else if (confirmation.customId === 'cancel_user_ban') {
 						await confirmation.update({
 							content: 'Ban request cancelled',

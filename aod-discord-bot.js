@@ -125,6 +125,9 @@ global.PERM_NONE = PERM_NONE;
 //global undefined for readable code
 var undefined;
 
+//Notification channel
+var globalNotificationChannel;
+
 //other globals
 global.lastForumSync = null;
 
@@ -318,6 +321,20 @@ function messageReply(message, msg, edit) {
 	return Promise.resolve();
 }
 global.messageReply = messageReply;
+
+function sendGlobalNotification(guild, msg) {
+	if (guild) {
+		if (!globalNotificationChannel || globalNotificationChannel.name !== config.globalNotificationChannel) {
+			globalNotificationChannel = guild.channels.cache.find(c => { return c.name === config.globalNotificationChannel; });
+		}
+		if (typeof(msg) === 'object')
+			return globalNotificationChannel.send({ embeds: [msg] }).catch(() => {});
+		else
+			return globalNotificationChannel.send(msg).catch(() => {});
+	}
+	return Promise.resolve();
+}
+global.sendGlobalNotification = sendGlobalNotification;
 
 //add or remove a role from a guildMember
 async function addRemoveRole(message, guild, add, roleData, member, assigned) {
