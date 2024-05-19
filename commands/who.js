@@ -255,7 +255,7 @@ module.exports = {
 							});
 							if (invite) {
 								await targetMember.send(`${member} has invited you to their voice channel: ${invite.url}`);
-								global.ephemeralReply(interaction, { content: 'Intivation sent' });
+								global.ephemeralReply(interaction, { content: 'Invitation sent' });
 							} else {
 								global.ephemeralReply(interaction, { content: 'Failed to create invitation.' });
 							}
