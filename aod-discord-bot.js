@@ -20,7 +20,9 @@ const {
 	PermissionsBitField,
 	Collection,
 	InteractionType,
-	OverwriteType
+	OverwriteType,
+	AuditLogEvent,
+	Events
 } = require('discord.js');
 
 //include node-fetch using esm-hook
@@ -4997,6 +4999,28 @@ client.on("ready", async function() {
 	startNextSavedTimer();
 });
 
+//GuildAuditLogEntryCreate handler -- Triggers when an audit log entry is created
+client.on('guildAuditLogEntryCreate', async function(auditLogEntry, guild) {
+	let { action, executorId, targetId, reason } = auditLogEntry;
+
+	// Filter for kick or ban events
+	if (action === AuditLogEvent.MemberKick || action === AuditLogEvent.MemberBanAdd) {
+		let executor = await client.users.fetch(auditLogEntry.executorId);
+		let target = await client.users.fetch(auditLogEntry.targetId);
+
+		// Ignore actions issued by the bot to avoid double logging.
+		// These events will be logged from within the commands.
+		if (executor === client.user)
+			return;
+
+		const actionDescription = {
+			[AuditLogEvent.MemberKick]: "kicked",
+			[AuditLogEvent.MemberBanAdd]: "banned",
+		};
+
+		await global.sendGlobalNotification(guild, `${target} has been ${actionDescription[action]} by ${executor} for: ${reason}`);
+	}
+});
 
 //guildCreate handler -- triggers when the bot joins a server for the first time
 client.on("guildCreate", guild => {
