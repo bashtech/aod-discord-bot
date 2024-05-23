@@ -59,7 +59,9 @@ module.exports = {
 		.addSubcommand(command => command.setName('move').setDescription('Move a channel')
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to move').setRequired(true)))
 		.addSubcommand(command => command.setName('info').setDescription('Channel information')
-			.addChannelOption(option => option.setName('channel').setDescription('Channel'))),
+			.addChannelOption(option => option.setName('channel').setDescription('Channel')))
+		.addSubcommand(command => command.setName('purge').setDescription('Purges messages from the current channel')
+			.addIntegerOption(option => option.setName('num').setDescription('Number of messages to purge').setRequired(true))),
 	help: true,
 	checkPerm(perm, commandName, parentName) {
 		switch (commandName) {
@@ -74,6 +76,7 @@ module.exports = {
 			case 'move':
 				return perm >= global.PERM_DIVISION_COMMANDER;
 			case 'update':
+			case 'purge':
 				return perm >= global.PERM_STAFF;
 		}
 		return false;
@@ -420,6 +423,24 @@ module.exports = {
 				}
 
 				await global.ephemeralReply(interaction, embed);
+				break;
+			}
+			case 'purge': {
+				let deleteCount = interaction.options.getInteger('num');
+
+				if (deleteCount < 1 || deleteCount > 100)
+					return global.ephemeralReply(interaction, "Please provide a number between 1 and 100 for the number of messages to delete");
+
+				await interaction.deferReply({ ephemeral: true });
+				try {
+					let fetched = await interaction.channel.messages.fetch({ limit: deleteCount });
+					await interaction.channel.bulkDelete(fetched);
+
+					return global.ephemeralReply(interaction, `Purged ${fetched.size} message(s) from the channel`);
+				} catch (error) {
+					console.error(error);
+					return global.ephemeralReply(interaction, 'An error occurred purging messages');
+				}
 				break;
 			}
 		}
