@@ -85,15 +85,6 @@ try {
 	dependentRoles = { requires: {}, requiredFor: {} };
 }
 
-//include relayedMessageMap
-var relayedMessageMap;
-try {
-	relayedMessageMap = require(config.relayedMessageMap);
-} catch (error) {
-	console.log(error);
-	relayedMessageMap = {};
-}
-
 //include joinToCreateChannels
 var joinToCreateChannels;
 try {
@@ -3636,196 +3627,6 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 	}
 }
 
-//function to send a message to a change that always returns a promise (simplifies exception handling)
-function sendMessageToChannel(channel, content, existingMessage) {
-	if (existingMessage)
-		return existingMessage.edit(content);
-	else
-		return channel.send(content);
-}
-
-//relay command processing
-async function commandRelay(message, member, cmd, args, guild, perm, permName, isDM) {
-	if (isDM)
-		return;
-	if (args.length <= 0)
-		return;
-
-	let channel = getChannelFromMessageOrArgs(guild, message, args);
-	if (channel)
-		args.shift();
-	else
-		channel = message.channel;
-
-	if (channel.type !== ChannelType.GuildText)
-		return;
-
-	if (args.length <= 0)
-		return;
-	await channel.messages.fetch(args[0])
-		.catch(() => {});
-	let existingMessage;
-	if (args[0] == "relayed") {
-		args.shift();
-		if (args.length <= 0)
-			return;
-		map = relayedMessageMap[args[0]];
-		if (!map)
-			return;
-		await channel.messages.fetch(map.messageId)
-			.catch(() => {});
-		existingMessage = channel.messages.resolve(map.messageId);
-	} else {
-		await channel.messages.fetch(args[0])
-			.catch(() => {});
-		existingMessage = channel.messages.resolve(args[0]);
-	}
-	if (existingMessage)
-		args.shift();
-
-	let content = args.join(' ');
-	if (!content || content === '')
-		return;
-
-	let json;
-	let relayId;
-	try {
-		json = JSON.parse(content);
-		if (json.embed !== undefined)
-			content = { embeds: [json.embed] };
-		else if (json.text !== undefined)
-			content = json.text;
-		else
-			return;
-		relayId = json.id;
-	} catch (e) {}
-
-	sendMessageToChannel(channel, content, existingMessage)
-		.then((relayed) => {
-			if (message.author.bot && message.webhookId && message.webhookId === message.author.id) {
-				//approved bot, save message if given id
-				if (!existingMessage && relayId) {
-					relayedMessageMap[relayId] = {
-						messageId: relayed.id,
-						epoch: (new Date()).getTime()
-					};
-					fs.writeFileSync(config.relayedMessageMap, JSON.stringify(relayedMessageMap), 'utf8');
-				}
-			}
-		})
-		.finally(() => { if (!isDM) message.delete(); })
-		.catch(error => { notifyRequestError(message, member, guild, error, PERM_NONE); });
-}
-
-//react command processing
-async function commandReact(message, member, cmd, args, guild, perm, permName, isDM) {
-	if (isDM)
-		return;
-	if (args.length <= 0)
-		return;
-
-	let channelName = args[0].toLowerCase();
-	let channel = guild.channels.cache.find(c => { return (c.name.toLowerCase() == channelName); });
-	if (channel)
-		args.shift();
-	else
-		channel = message.channel;
-
-	if (channel.type !== ChannelType.GuildText)
-		return;
-
-	if (args.length <= 0)
-		return;
-
-	let existingMessage;
-	let relayed = false;
-	if (args[0] == "relayed") {
-		relayed = true;
-		args.shift();
-		if (args.length <= 0)
-			return;
-		map = relayedMessageMap[args[0]];
-		if (!map)
-			return;
-		await channel.messages.fetch(map.messageId)
-			.catch(() => {});
-		existingMessage = channel.messages.resolve(map.messageId);
-	} else {
-		await channel.messages.fetch(args[0])
-			.catch(() => {});
-		existingMessage = channel.messages.resolve(args[0]);
-	}
-	args.shift();
-	if (!existingMessage)
-		return;
-
-	if (args.length <= 0)
-		return;
-	if (args[0] == "clear") {
-		args.shift();
-		if (args.length <= 0 || args[0] == "self") {
-			//clear self reactions
-			const userReactions = existingMessage.reactions.cache.filter(reaction => reaction.users.cache.has(client.user.id));
-			try {
-				for (const reaction of userReactions.values()) {
-					await reaction.users.remove(client.user.id);
-				}
-			} catch (e) {}
-		} else if (args[0] == "all") {
-			//clear all reactions
-			existingMessage.reactions.removeAll();
-		} else {
-			//remove reaction entirely if emoji passed
-			let existingReaction = existingMessage.reactions.cache.get(args[0]);
-			if (existingReaction) {
-				existingReaction.remove();
-			} else {
-				//remove all reactions from member if member passed
-				let targetMember = getMemberFromMessageOrArgs(guild, message, args);
-				if (targetMember) {
-					const userReactions = existingMessage.reactions.cache.filter(reaction => reaction.users.cache.has(client.user.id));
-					try {
-						for (const reaction of userReactions.values()) {
-							await reaction.users.remove(client.user.id);
-						}
-					} catch (e) {}
-				}
-			}
-		}
-	} else if (relayed) {
-		//relayed messages only come from the tracker webhook right now, make the reactions exclusive
-		await existingMessage.reactions.removeAll();
-		existingMessage.react(args[0]);
-	} else {
-		let existingReaction = existingMessage.reactions.cache.get(args[0]);
-		if (existingReaction && existingReaction.users.resolve(client.user.id)) {
-			await existingReaction.users.remove(client.user.id);
-		} else {
-			existingMessage.react(args[0]);
-		}
-	}
-
-	if (!isDM) message.delete();
-}
-
-//relaydm command processing
-function commandRelayDm(message, member, cmd, args, guild, perm, permName, isDM) {
-	if (args.length <= 0)
-		return;
-	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
-	if (!targetMember)
-		return;
-	args.shift();
-
-	let content = args.join(' ');
-	if (!content || content === '')
-		return;
-
-	sendMessageToMember(targetMember, content)
-		.finally(() => { if (!isDM) message.delete(); })
-		.catch(console.error);
-}
-
 //admin command processing
 function commandSetAdmin(message, member, cmd, args, guild, perm, permName, isDM) {
 	addRemoveRole(message, guild, cmd === 'addadmin', 'Admin', getMemberFromMessageOrArgs(guild, message, args), true);
@@ -4287,24 +4088,6 @@ commands = {
 		helpText: "Show current webhooks",
 		callback: commandShowWebhooks
 	},*/
-	relay: {
-		minPermission: PERM_ADMIN,
-		args: ["[\"<channel>\"]", "[<message id>]", "\"<message>\""],
-		helpText: "Relay a message using the bot. If <channel> is provided, the message will be sent there.",
-		callback: commandRelay
-	},
-	react: {
-		minPermission: PERM_ADMIN,
-		args: ["\"<channel>\"", "<message id>", "\"<emoji>\""],
-		helpText: "React to a message using the bot.",
-		callback: commandReact
-	},
-	relaydm: {
-		minPermission: PERM_ADMIN,
-		args: ["[<@mention|tag|snowflake>]", "\"<message>\""],
-		helpText: "Relay a DM using the bot.",
-		callback: commandRelayDm
-	},
 	addadmin: {
 		minPermission: PERM_OWNER,
 		args: "<@mention|tag|snowflake>",
@@ -4932,8 +4715,7 @@ function forumSyncTimerCallback() {
 
 //messageDelete handler
 client.on('messageDelete', (message) => {
-	if (message.guildId && message.channel && message.content && !message.content.startsWith(config.prefix + 'relay ') &&
-		!message.content.startsWith(config.prefix + 'relaydm ') && !message.content.startsWith(config.prefix + 'react ') &&
+	if (message.guildId && message.channel && message.content &&
 		!message.content.startsWith(config.prefix + 'login '))
 		console.log(`Deleted message from ${message.author.tag} in #${message.channel.name}: ${message.content}`);
 });
