@@ -23,12 +23,13 @@ function run(cmd, args) {
 
 const projectActions = [
 	{ name: 'Deploy', value: 'deploy' },
-	{ name: 'Revert', value: 'revert-deployment' },
-	{ name: 'Update PHP', value: 'update-php' },
-	{ name: 'Update NPM', value: 'update-npm' },
-	{ name: 'Restart Supervisor', value: 'restart-supervisor' },
 	{ name: 'Restart Service', value: 'restart-service' },
+	{ name: 'Restart Supervisor', value: 'restart-supervisor' },
+	{ name: 'Revert', value: 'revert-deployment' },
 	{ name: 'Toggle Maintenance', value: 'toggle-maintenance' },
+	{ name: 'Tracker Sync', value: 'tracker-sync' },
+	{ name: 'Update NPM', value: 'update-npm' },
+	{ name: 'Update PHP', value: 'update-php' },
 ];
 
 module.exports = {
