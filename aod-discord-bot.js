@@ -2820,14 +2820,20 @@ function getForumUsersForGroups(groups, allowPending) {
 		let groupRegex = groups.join('|');
 		let query =
 			`SELECT u.userid,u.username,f.field19,f.field20,f.field13,f.field23,f.field24, ` +
-			`(CASE WHEN (r.requester_id IS NOT NULL AND r.approved_at IS NULL AND r.cancelled_at IS NULL AND r.processed_at is NULL) THEN 1 ELSE 0 END) AS pending ` +
+			`  (CASE WHEN (r.requester_id IS NOT NULL) THEN 1 ELSE 0 END) AS pending, t.name AS pending_name ` +
 			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
-			`LEFT JOIN  ${config.mysql.trackerPrefix}member_requests AS r ON u.userid=r.member_id AND r.approver_id IS NULL ` +
-			`WHERE (u.usergroupid IN (${groupStr}) OR u.membergroupids REGEXP '(^|,)(${groupRegex})(,|$)' `;
-		if (allowPending === true)
+			`LEFT JOIN ${config.mysql.trackerPrefix}member_requests AS r ON u.userid=r.member_id AND r.approver_id IS NULL ` +
+			`  AND r.cancelled_at IS NULL AND r.hold_placed_at IS NULL AND r.created_at > (NOW() - INTERVAL 24 HOUR) ` +
+			`LEFT JOIN ${config.mysql.trackerPrefix}members AS t on u.userid=t.clan_id ` +
+			`WHERE ((u.usergroupid IN (${groupStr}) OR u.membergroupids REGEXP '(^|,)(${groupRegex})(,|$)') `;
+		if (allowPending === true) {
 			query +=
-			`OR (r.requester_id IS NOT NULL AND r.approved_at IS NULL AND r.cancelled_at IS NULL AND r.processed_at is NULL) `;
+				`OR r.requester_id IS NOT NULL `;
+		} else {
+			query +=
+				`AND r.requester_id IS NULL `;
+		}
 		query +=
 			`) AND ((f.field19 IS NOT NULL AND f.field19 <> '') OR (f.field20 IS NOT NULL AND f.field20 <> '')) ` +
 			`ORDER BY f.field13,u.username`;
@@ -2856,14 +2862,14 @@ function getForumUsersForGroups(groups, allowPending) {
 				} else {
 					usersByIDOrDiscriminator[index] = {
 						indexIsId: indexIsId,
-						name: row.username,
+						name: (row.pending ? `AOD_${row.pending_name}` : row.username),
 						id: row.userid,
 						division: row.field13,
 						discordid: discordid,
 						discordtag: discordtag,
 						discordstatus: row.field24,
 						discordactivity: row.field23,
-						pending: row.pending
+						pending: row.pending,
 					};
 				}
 			})
@@ -3225,9 +3231,6 @@ function doForumSync(message, member, guild, perm, doDaily) {
 						if (usersByIDOrDiscriminator.hasOwnProperty(u)) {
 							if (membersByID[u] === undefined) {
 								let forumUser = usersByIDOrDiscriminator[u];
-								//don't add members who are pending
-								if (forumUser.pending)
-									continue;
 
 								let guildMember = guild.members.resolve(u);
 								if ((guildMember === undefined || guildMember === null) && !forumUser.indexIsId) {
