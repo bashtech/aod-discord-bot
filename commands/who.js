@@ -53,7 +53,7 @@ function getComponentsForTarget(member, perm, targetMember, targetPerm, invite) 
 			}
 		}
 	}
-	if (targetMember.voice) {
+	if (targetMember.voice.channel) {
 		if (perm >= global.PERM_RECRUITER && targetPerm < perm) {
 			if (perm >= global.PERM_MOD) {
 				canDisconnect = true;
