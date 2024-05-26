@@ -4407,9 +4407,9 @@ client.on('interactionCreate', async interaction => {
 			return;
 		}
 		try {
-			await command.autocomplete(interaction, member, perm, permName);
+			await command.autocomplete(interaction, member, perm, permName).catch(console.log);
 			if (!interaction.responded)
-				interaction.respond([]);
+				interaction.respond([]).catch(console.log);
 		} catch (error) {
 			console.error(error);
 			if (!interaction.responded)

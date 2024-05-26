@@ -35,17 +35,18 @@ module.exports = {
 					let roles = interaction.guild.roles.cache
 						.filter(r => r.name.endsWith(global.config.discordOfficerSuffix))
 						.map(r => r.name);
-					await interaction.respond(global.sortAndLimitOptions(roles, 25, search));
+					return interaction.respond(global.sortAndLimitOptions(roles, 25, search)).catch(console.log);
 				} else if (focusedOption.name === 'group') {
 					let forumGroups = await global.getForumGroups();
 					if (forumGroups) {
 						forumGroups = Object.values(forumGroups)
 							.filter(g => g.endsWith(global.config.forumOfficerSuffix));
-						await interaction.respond(global.sortAndLimitOptions(forumGroups, 25, search));
+						return interaction.respond(global.sortAndLimitOptions(forumGroups, 25, search));
 					}
 				}
 			}
 		}
+		return Promise.reject();
 	},
 	async execute(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();

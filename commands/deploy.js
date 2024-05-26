@@ -68,18 +68,19 @@ module.exports = {
 					} catch (err) {
 
 					}
-					await interaction.respond(global.sortAndLimitOptions(options, 25, search));
+					return interaction.respond(global.sortAndLimitOptions(options, 25, search));
 				}
 				break;
 			}
 		}
+		return Promise.reject();
 	},
 	async execute(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		switch (subCommand) {
 			case 'update-slash-commands': {
 				await interaction.deferReply();
-				let output = await run('node',['deploy-commands.js']);
+				let output = await run('node', ['deploy-commands.js']);
 				if (!output) {
 					output = 'Error: No output';
 				}

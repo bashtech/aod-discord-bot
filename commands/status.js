@@ -26,6 +26,6 @@ module.exports = {
 				/*{ name: 'Timers', value: `${savedTimers.length} timers, next timer expires in ${global.secondsToString(nextTimerSeconds)}` },*/
 			]
 		};
-		return interaction.reply({ embeds: [embed], ephemeral: true  });
+		return interaction.reply({ embeds: [embed], ephemeral: true });
 	},
 };

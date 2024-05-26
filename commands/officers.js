@@ -20,6 +20,7 @@ module.exports = {
 			}
 			return interaction.respond(global.sortAndLimitOptions(guildRoles, 25, search));
 		}
+		return Promise.reject();
 	},
 	async execute(interaction, member, perm, permName) {
 		let roleName = interaction.options.getString('role');
@@ -36,7 +37,7 @@ module.exports = {
 		if (!officerRole) {
 			return interaction.reply({ content: 'Please choose an officer role or run the command in a division channel.', ephemeral: true });
 		}
-		
+
 		let reply = `${roleName}s\n`;
 		officerRole.members.each(m => {
 			reply += `${m}\n`;

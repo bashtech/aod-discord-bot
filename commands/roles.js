@@ -126,6 +126,7 @@ module.exports = {
 				break;
 			}
 		}
+		return Promise.reject();
 	},
 	async execute(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();

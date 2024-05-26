@@ -315,7 +315,7 @@ channelRouter.get('/:channel_id', async (req, res, next) => {
 	}
 
 	if (req.channel.children) {
-		req.channel.children.cache.forEach(async function (c) {
+		req.channel.children.cache.forEach(async function(c) {
 			children.push({
 				name: c.name,
 				id: c.id,
@@ -348,8 +348,9 @@ channelRouter.post('/:channel_id', async (req, res, next) => {
 		let message = await req.channel.send({
 			content: req.body.content,
 			embeds: req.body.embeds
-		}).catch((err) => { console.log(req.body);
-			console.log(err); });
+		}).catch((err) => {
+			console.log(err);
+		});
 		if (message) {
 			res.send({ id: message.id });
 		} else {

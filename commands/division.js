@@ -58,11 +58,12 @@ module.exports = {
 							}
 						}
 					}
-					await interaction.respond(global.sortAndLimitOptions(options, 25, search));
+					return interaction.respond(global.sortAndLimitOptions(options, 25, search));
 				}
 				break;
 			}
 		}
+		return Promise.reject();
 	},
 	async execute(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();

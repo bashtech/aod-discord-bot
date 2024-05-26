@@ -41,7 +41,7 @@ module.exports = {
 				commands.push(name);
 			}
 		});
-		await interaction.respond(global.sortAndLimitOptions(commands, 25, search));
+		return interaction.respond(global.sortAndLimitOptions(commands, 25, search));
 	},
 	async execute(interaction, member, perm, permName) {
 		let filter = interaction.options.getString('command') ?? null;

@@ -89,11 +89,12 @@ module.exports = {
 			case 'add':
 			case 'update': {
 				if (focusedOption.name === 'role') {
-					await interaction.respond(global.sortAndLimitOptions(global.getUserRoles(false, null).concat(global.getUserRoles(true, null)), 25, search));
+					return interaction.respond(global.sortAndLimitOptions(global.getUserRoles(false, null).concat(global.getUserRoles(true, null)), 25, search));
 				}
 				break;
 			}
 		}
+		return Promise.reject();
 	},
 	async execute(interaction, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
