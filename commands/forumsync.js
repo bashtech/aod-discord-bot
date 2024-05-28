@@ -71,7 +71,7 @@ module.exports = {
 				if (fields.length > 0) {
 					await global.ephemeralReply(interaction, { embeds: [{ title: 'Configured Group Maps', fields: fields }] });
 				}
-				break;
+				return Promise.resolve();
 			}
 			case 'show-roles': {
 				let embed = {
@@ -82,8 +82,7 @@ module.exports = {
 							.filter(r => r.name.endsWith(config.discordOfficerSuffix)).map(r => r.name).sort().join("\n")
 					}]
 				};
-				await global.ephemeralReply(interaction, { embeds: [embed] });
-				break;
+				return global.ephemeralReply(interaction, { embeds: [embed] });
 			}
 			case 'show-forumgroups': {
 				await interaction.deferReply({ ephemeral: true });
@@ -102,12 +101,11 @@ module.exports = {
 					};
 					await global.ephemeralReply(interaction, { embeds: [embed] });
 				}
-				break;
+				return Promise.resolve();
 			}
 			case 'sync': {
 				await interaction.deferReply({ ephemeral: true });
-				await doForumSync(interaction, member, interaction.guild, perm, false);
-				break;
+				return doForumSync(interaction, member, interaction.guild, perm, false);
 			}
 			case 'add':
 			case 'delete': {
@@ -121,15 +119,16 @@ module.exports = {
 
 				await interaction.deferReply({ ephemeral: true });
 				if (subCommand === 'add')
-					await global.addForumSyncMap(interaction, interaction.guild, roleName, groupName);
+					return global.addForumSyncMap(interaction, interaction.guild, roleName, groupName);
 				else
-					await global.removeForumSyncMap(interaction, interaction.guild, roleName, groupName);
+					return global.removeForumSyncMap(interaction, interaction.guild, roleName, groupName);
 				break;
 			}
 			case 'prune': {
 				await interaction.deferReply({ ephemeral: true });
-				await pruneForumSyncMap(interaction, interaction.guild);
+				return pruneForumSyncMap(interaction, interaction.guild);
 			}
 		}
+		return Promise.reject();
 	},
 };
