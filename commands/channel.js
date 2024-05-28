@@ -212,7 +212,7 @@ module.exports = {
 				} catch (e) {
 					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
 				}
-				break;
+				return Promise.resolve();
 			}
 			case 'topic': {
 				let topic = interaction.options.getString('topic') ?? "";
@@ -383,7 +383,7 @@ module.exports = {
 						return await interaction.editReply({ content: 'Timeout', components: [], ephemeral: true });
 					}
 				}
-				break;
+				return Promise.resolve();
 			}
 			case 'info': {
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
@@ -423,8 +423,7 @@ module.exports = {
 					});
 				}
 
-				await global.ephemeralReply(interaction, embed);
-				break;
+				return global.ephemeralReply(interaction, embed);
 			}
 			case 'purge': {
 				let deleteCount = interaction.options.getInteger('num');
@@ -445,5 +444,6 @@ module.exports = {
 				break;
 			}
 		}
+		return Promise.reject();
 	}
 };
