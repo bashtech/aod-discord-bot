@@ -92,7 +92,7 @@ module.exports = {
 				} catch (e) {
 					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
 				}
-				break;
+				return Promise.resolve();
 			}
 			case 'ban': {
 				let userToBan = targetMember ?? interaction.options.getUser('user');
@@ -135,8 +135,9 @@ module.exports = {
 				} catch (e) {
 					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
 				}
-				break;
+				return Promise.resolve();
 			}
 		}
+		return Promise.reject();
 	}
 };
