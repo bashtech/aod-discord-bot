@@ -334,9 +334,10 @@ module.exports = {
 					}
 				}
 			} catch (e) {
-				global.ephemeralReply(interaction, { components: [] }, true);
+				return global.ephemeralReply(interaction, { components: [] }, true);
 			}
 		}
+		return Promise.resolve();
 	},
 	async menu(interaction, member, perm, permName) {
 		return module.exports.execute(interaction, member, perm, permName);
