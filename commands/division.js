@@ -110,7 +110,7 @@ module.exports = {
 				} catch (e) {
 					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
 				}
-				break;
+				return Promise.resolve();
 			}
 			case 'info': {
 				let name = interaction.options.getString('name');
@@ -152,9 +152,7 @@ module.exports = {
 						value: officers
 					});
 				}
-
-				await global.ephemeralReply(interaction, embed);
-				break;
+				return global.ephemeralReply(interaction, embed);
 			}
 			case 'prefix': {
 				let name = interaction.options.getString('name');
@@ -214,9 +212,9 @@ module.exports = {
 					return global.ephemeralReply(interaction, `Officer Channel must be a channel in the division category`);
 				}
 
-				await global.updateTrackerDivisionOfficerChannel(divisionData, channel);
-				break;
+				return global.updateTrackerDivisionOfficerChannel(divisionData, channel);
 			}
 		}
+		return Promise.reject();
 	}
 };
