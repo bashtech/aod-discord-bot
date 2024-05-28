@@ -90,13 +90,12 @@ module.exports = {
 				console.log(`Bot reload slash commands requested by ${getNameFromMessage(interaction)}`);
 				await global.messageReply(interaction, 'Reloading slash command files...');
 				setTimeout(global.loadSlashCommands, 10);
-				break;
+				return Promise.resolve();
 			}
 			case 'reload-api': {
 				console.log(`Bot reload API server requested by ${getNameFromMessage(interaction)}`);
 				await global.messageReply(interaction, 'Restarting API server...');
-				await global.startAPIServer();
-				break;
+				return global.startAPIServer();
 			}
 			case 'git-project': {
 				let name = interaction.options.getString('name', true);
@@ -129,5 +128,6 @@ module.exports = {
 				break;
 			}
 		}
+		return Promise.reject();
 	},
 };
