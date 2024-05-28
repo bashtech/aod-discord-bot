@@ -218,13 +218,14 @@ module.exports = {
 						get_role.setEmoji(emoji);
 					const row = new ActionRowBuilder()
 						.addComponents(get_role, remove_role);
-					channel.send({
+					return channel.send({
 						content: text,
 						components: [row]
 					});
 				}
 			}
 		}
+		return Promise.reject();
 	},
 	async button(interaction, member, perm, permName) {
 		let args = interaction.customId.split('::');
@@ -253,5 +254,6 @@ module.exports = {
 			default:
 				return interaction.reply({ content: `Invalid request.`, ephemeral: true });
 		}
+		return Promise.reject();
 	}
 };
