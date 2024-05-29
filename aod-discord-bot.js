@@ -4798,6 +4798,7 @@ client.on('guildAuditLogEntryCreate', async function(auditLogEntry, guild) {
 		if (executor === client.user)
 			return;
 
+		reason = reason ?? 'No reason provided';
 		const actionDescription = {
 			[AuditLogEvent.MemberKick]: "kicked",
 			[AuditLogEvent.MemberBanAdd]: "banned",
