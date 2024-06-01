@@ -31,6 +31,7 @@ module.exports = {
 		.setName('help')
 		.setDescription('Show list of available commands')
 		.addStringOption(option => option.setName('command').setDescription('Command').setAutocomplete(true)),
+	global: true,
 	help: true,
 	async autocomplete(interaction, guild, member, perm, permName) {
 		const focusedOption = interaction.options.getFocused(true);
@@ -76,7 +77,7 @@ module.exports = {
 						embed.description += `</${name}:${command.commandId}>: ${guildCommand.description}\n`;
 						if (guildCommand.options.some(cmdOption => (cmdOption.type === ApplicationCommandOptionType.Subcommand ||
 								cmdOption.type === ApplicationCommandOptionType.SubcommandGroup))) {
-							embed.description += `\u3000\u2023</help:${interaction.command.id}> command:${name} for sub-commands\n`;
+							embed.description += `\u3000\u2023</help:${interaction.commandId}> command:${name} for sub-commands\n`;
 						}
 					} else {
 						let subCommands = '';
@@ -94,6 +95,10 @@ module.exports = {
 				}
 			}
 		});
-		return interaction.reply({ embeds: [embed], ephemeral: true });
+		await interaction.reply({ embeds: [embed], ephemeral: true });
+		if (!interaction.inGuild()) {
+			return interaction.followUp('Please note, most commands must be executed in a text channel of the Discord server.');
+		}
+		return Promise.resolve();
 	},
 };

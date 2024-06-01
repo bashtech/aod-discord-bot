@@ -217,6 +217,8 @@ function getNameFromMessage(message) {
 			return `${message.member.displayName} (${message.member.user.tag})`;
 		if (message.author)
 			return message.author.tag;
+		if (message.user)
+			return message.user.tag;
 	}
 	return "<unknown>";
 }
@@ -4395,7 +4397,8 @@ client.on('interactionCreate', async interaction => {
 			if (!interaction.replied)
 				ephemeralReply(interaction, "Done");
 		} catch (error) {
-			console.error(error);
+			if (error)
+				console.error(error);
 			try {
 				ephemeralReply(interaction, 'There was an error while executing your command');
 			} catch (error) {}
@@ -4410,7 +4413,8 @@ client.on('interactionCreate', async interaction => {
 			if (!interaction.responded)
 				interaction.respond([]).catch(console.log);
 		} catch (error) {
-			console.error(error);
+			if (error)
+				console.error(error);
 			if (!interaction.responded)
 				interaction.respond([]);
 		}
@@ -4425,7 +4429,8 @@ client.on('interactionCreate', async interaction => {
 			if (!interaction.replied)
 				ephemeralReply(interaction, "Done");
 		} catch (error) {
-			console.error(error);
+			if (error)
+				console.error(error);
 			try {
 				ephemeralReply(interaction, 'There was an error processing this action.');
 			} catch (error) {}
@@ -4447,7 +4452,8 @@ client.on('interactionCreate', async interaction => {
 			if (!interaction.replied)
 				sendInteractionReply(interaction, { content: "Done", ephemeral: true });
 		} catch (error) {
-			console.error(error);
+			if (error)
+				console.error(error);
 			try {
 				ephemeralReply(interaction, 'There was an error while executing your command');
 			} catch (error) {}
