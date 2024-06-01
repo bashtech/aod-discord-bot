@@ -4572,7 +4572,7 @@ function setRolesForMember(member, reason) {
 		getForumGroupsForMember(member)
 			.then(async function(data) {
 				if (data === undefined || data.groups.length === 0) {
-					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
+					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`/login\` to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
 					resolve();
 					return;
 				}
@@ -4580,8 +4580,8 @@ function setRolesForMember(member, reason) {
 				let rolesByGroup = getRolesByForumGroup(member.guild);
 				let rolesToAdd = [],
 					existingRoles = [];
-				for (var i in data.groups) {
-					var group = data.groups[i];
+				for (let i in data.groups) {
+					let group = data.groups[i];
 					if (rolesByGroup[group] !== undefined) {
 						for (const roleName of Object.keys(rolesByGroup[group])) {
 							let role = rolesByGroup[group][roleName];
@@ -4602,7 +4602,7 @@ function setRolesForMember(member, reason) {
 						return;
 					}
 				} else if (!existingRoles.length) {
-					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`${config.prefix}login\` in a DM the to associate your Discord user to our forums (https://www.clanaod.net). \`${config.prefix}help login\` can provide more details.`).catch(() => {});
+					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`/login\` to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
 					resolve();
 					return;
 				}
@@ -4613,16 +4613,17 @@ function setRolesForMember(member, reason) {
 					} catch (error) {}
 				}
 				let roles = existingRoles.concat(rolesToAdd);
-				await member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use \`!help\` to see available commands.`).catch(() => {});
+				await member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use \`/help\` to see available commands.`).catch(() => {});
 				resolve();
 			})
 			.catch(error => {
-				notifyRequestError(null, member, guild, error, false);
+				console.log(error);
 				reject();
 			});
 	});
 	return promise;
 }
+global.setRolesForMember = setRolesForMember;
 
 //guildMemberAdd event handler -- triggered when a user joins the guild
 client.on('guildMemberAdd', member => {

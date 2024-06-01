@@ -27,12 +27,15 @@ module.exports = {
 		.addSubcommand(command => command.setName('ban').setDescription('Bans a user from the server')
 			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
 			.addStringOption(option => option.setName('reason').setDescription('Ban reason').setRequired(true))
-			.addIntegerOption(option => option.setName('delete-messages').setDescription('Message purge duration').addChoices(...deleteMessagesChoices))),
+			.addIntegerOption(option => option.setName('delete-messages').setDescription('Message purge duration').addChoices(...deleteMessagesChoices)))
+		.addSubcommand(command => command.setName('update').setDescription('Update a user\'s permissions')
+			.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))),
 	help: true,
 	checkPerm(perm, commandName) {
 		switch (commandName) {
 			case 'user':
 			case 'kick':
+			case 'update':
 				return perm >= global.PERM_RECRUITER;
 			case 'ban':
 				return perm >= global.PERM_MOD;
@@ -136,6 +139,11 @@ module.exports = {
 					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
 				}
 				return Promise.resolve();
+			}
+			case 'update': {
+				if (!targetMember)
+					return global.ephemeralReply(interaction, 'User is invalid or left the server.');
+				return global.setRolesForMember(targetMember, `Requested by ${global.getNameFromMessage(interaction)}`);
 			}
 		}
 		return Promise.reject();
