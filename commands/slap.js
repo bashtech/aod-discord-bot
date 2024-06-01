@@ -9,7 +9,7 @@ module.exports = {
 		.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
 		.addStringOption(option => option.setName('object').setDescription('Object').setRequired(false)),
 	help: true,
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		let targetMember = interaction.options.getMember('user');
 		let object = interaction.options.getString('object') ?? 'a large trout';
 

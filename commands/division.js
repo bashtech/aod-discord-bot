@@ -30,7 +30,7 @@ module.exports = {
 	checkPerm(perm, commandName) {
 		return perm >= global.PERM_STAFF;
 	},
-	async autocomplete(interaction, member, perm, permName) {
+	async autocomplete(interaction, guild, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);
 		let search = focusedOption.value.toLowerCase();
@@ -47,7 +47,7 @@ module.exports = {
 						if (divisions.hasOwnProperty(divisionName)) {
 							if (subCommand === 'info') {
 								options.push(divisionName);
-							} else if (interaction.guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory)) {
+							} else if (guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory)) {
 								if (subCommand === 'delete' || subCommand === 'prefix' || subCommand === 'officer-channel') {
 									options.push(divisionName);
 								}
@@ -65,13 +65,13 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		switch (subCommand) {
 			case 'add': {
 				let name = interaction.options.getString('name');
 				await interaction.deferReply({ ephemeral: true });
-				return global.addDivision(interaction, member, perm, interaction.guild, name);
+				return global.addDivision(interaction, member, perm, guild, name);
 			}
 			case 'delete': {
 				let name = interaction.options.getString('name');
@@ -96,7 +96,7 @@ module.exports = {
 				try {
 					const confirmation = await response.awaitMessageComponent({ filter: filter, time: 10000 });
 					if (confirmation.customId === 'confirm_division_delete') {
-						await global.deleteDivision(interaction, member, perm, interaction.guild, name);
+						await global.deleteDivision(interaction, member, perm, guild, name);
 						await confirmation.update({
 							content: `${name} division deleted`,
 							components: []
@@ -128,20 +128,20 @@ module.exports = {
 					fields: []
 				};
 
-				let category = interaction.guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildCategory);
+				let category = guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildCategory);
 				embed.fields.push({
 					name: "Category",
 					value: category ? `${category}` : 'Not Found'
 				});
 
-				let officer_channel = interaction.guild.channels.resolve(divisionData.officer_channel);
+				let officer_channel = guild.channels.resolve(divisionData.officer_channel);
 				embed.fields.push({
 					name: "Officer Channel",
 					value: officer_channel ? `${officer_channel}` : 'Not Found'
 				});
 
 				let roleName = name + ' ' + global.config.discordOfficerSuffix;
-				let officerRole = interaction.guild.roles.cache.find(r => { return r.name == roleName; });
+				let officerRole = guild.roles.cache.find(r => { return r.name == roleName; });
 				if (officerRole) {
 					let officers = '';
 					officerRole.members.each(m => {
@@ -181,7 +181,7 @@ module.exports = {
 						return global.ephemeralReply(interaction, 'old_prefix must be set if the division is configured on the tracker');
 				}
 
-				let category = interaction.guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildCategory);
+				let category = guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildCategory);
 				if (!category) {
 					return global.ephemeralReply(interaction, `No category for ${name} found`);
 				}

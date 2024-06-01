@@ -68,7 +68,7 @@ module.exports = {
 		}
 		return false;
 	},
-	async autocomplete(interaction, member, perm, permName) {
+	async autocomplete(interaction, guild, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);
 		let search = focusedOption.value.toLowerCase();
@@ -81,7 +81,7 @@ module.exports = {
 			}
 			case 'assign':
 			case 'unassign': {
-				let targetMember = interaction.guild.members.resolve(interaction.options.get('user')?.value);
+				let targetMember = guild.members.resolve(interaction.options.get('user')?.value);
 				if (!targetMember)
 					return;
 				if (focusedOption.name === 'role')
@@ -93,7 +93,7 @@ module.exports = {
 				if (focusedOption.name === 'role') {
 					let managedRoles = global.getUserRoles(subCommand === 'add-assignable');
 					let guildRoles = [];
-					for (let role of interaction.guild.roles.cache.values()) {
+					for (let role of guild.roles.cache.values()) {
 						if (managedRoles.includes(role.name) || !global.isManageableRole(role)) {
 							continue;
 						}
@@ -128,69 +128,69 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const commandGroup = interaction.options.getSubcommandGroup(false);
 		if (commandGroup === null) {
 			switch (subCommand) {
 				case 'list': {
-					return global.listRoles(interaction, member, interaction.guild, member, false);
+					return global.listRoles(interaction, member, guild, member, false);
 				}
 				case 'list-user': {
 					let targetMember = interaction.options.getMember('user');
-					return global.listRoles(interaction, member, interaction.guild, targetMember, true);
+					return global.listRoles(interaction, member, guild, targetMember, true);
 				}
 				case 'members': {
 					let role = interaction.options.getRole('role');
-					return global.listMembers(interaction, member, interaction.guild, role.name);
+					return global.listMembers(interaction, member, guild, role.name);
 				}
 				case 'sub':
 				case 'unsub': {
 					let roleName = interaction.options.getString('role');
-					return global.subUnsubRole(interaction, member, interaction.guild, member, false, subCommand === 'sub', roleName);
+					return global.subUnsubRole(interaction, member, guild, member, false, subCommand === 'sub', roleName);
 				}
 				case 'assign':
 				case 'unassign': {
 					let targetMember = interaction.options.getMember('user');
 					let roleName = interaction.options.getString('role');
-					return global.subUnsubRole(interaction, targetMember, interaction.guild, targetMember, true, subCommand === 'assign', roleName);
+					return global.subUnsubRole(interaction, targetMember, guild, targetMember, true, subCommand === 'assign', roleName);
 				}
 			}
 		} else if (commandGroup === 'manage') {
 			await interaction.deferReply({ ephemeral: true });
 			switch (subCommand) {
 				case 'list': {
-					return global.listManagedRoles(interaction, member, interaction.guild);
+					return global.listManagedRoles(interaction, member, guild);
 				}
 				case 'prune': {
-					return global.pruneManagedRoles(interaction, member, interaction.guild);
+					return global.pruneManagedRoles(interaction, member, guild);
 				}
 				case 'add-assignable':
 				case 'add-subscribable': {
 					let roleName = interaction.options.getString('role');
-					return global.addManagedRole(interaction, member, interaction.guild, roleName, false, subCommand === 'add-assignable');
+					return global.addManagedRole(interaction, member, guild, roleName, false, subCommand === 'add-assignable');
 				}
 				case 'create-assignable':
 				case 'create-subscribable': {
 					let roleName = interaction.options.getString('role');
-					return global.addManagedRole(interaction, member, interaction.guild, roleName, true, subCommand === 'create-assignable');
+					return global.addManagedRole(interaction, member, guild, roleName, true, subCommand === 'create-assignable');
 				}
 				case 'remove-assignable':
 				case 'remove-subscribable': {
 					let roleName = interaction.options.getString('role');
-					return global.removeManagedRole(interaction, member, interaction.guild, roleName, subCommand === 'remove-assignable');
+					return global.removeManagedRole(interaction, member, guild, roleName, subCommand === 'remove-assignable');
 				}
 				case 'rename': {
 					let roleName = interaction.options.getString('role');
 					let newRoleName = interaction.options.getString('name');
-					return global.renameManagedRole(interaction, member, interaction.guild, roleName, newRoleName);
+					return global.renameManagedRole(interaction, member, guild, roleName, newRoleName);
 				}
 				case 'button': {
 					let roleName = interaction.options.getString('role');
 					let text = interaction.options.getString('text') ?? '';
 					let emoji = interaction.options.getString('emoji') ?? null;
 					let channel = interaction.options.getChannel('channel') ?? interaction.channel;
-					let role = interaction.guild.roles.cache.find(r => { return r.name == roleName; });
+					let role = guild.roles.cache.find(r => { return r.name == roleName; });
 					if (!role || !global.isManageableRole(role)) {
 						return interaction.reply({ content: `Invalid role.`, ephemeral: true });
 					}
@@ -227,14 +227,14 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async button(interaction, member, perm, permName) {
+	async button(interaction, guild, member, perm, permName) {
 		let args = interaction.customId.split('::');
 		if (args.length < 4) {
 			return interaction.reply({ content: `Invalid request.`, ephemeral: true });
 		}
 		let type = args[2];
 		let data = args[3];
-		let role = interaction.guild.roles.resolve(data);
+		let role = guild.roles.resolve(data);
 		if (!role || !global.isManageableRole(role)) {
 			return interaction.reply({ content: `Invalid role.`, ephemeral: true });
 		}
@@ -243,13 +243,13 @@ module.exports = {
 				if (member.roles.resolve(data))
 					return interaction.reply({ content: `${role.name} already assigned.`, ephemeral: true });
 				await interaction.deferReply({ ephemeral: true });
-				return addRemoveRole(interaction, interaction.guild, true, role, member);
+				return addRemoveRole(interaction, guild, true, role, member);
 			}
 			case 'remove_role': {
 				if (!member.roles.resolve(data))
 					return interaction.reply({ content: `${role.name} not assigned.`, ephemeral: true });
 				await interaction.deferReply({ ephemeral: true });
-				return addRemoveRole(interaction, interaction.guild, false, role, member);
+				return addRemoveRole(interaction, guild, false, role, member);
 			}
 			default:
 				return interaction.reply({ content: `Invalid request.`, ephemeral: true });

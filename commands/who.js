@@ -188,12 +188,12 @@ module.exports = {
 	checkPerm(perm, commandName) {
 		return perm >= global.PERM_MEMBER;
 	},
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		await interaction.deferReply({ ephemeral: true });
 
 		const targetMember = interaction.options.getMember('user');
 		const userData = await global.getForumInfoForMember(targetMember);
-		const memberRole = interaction.guild.roles.cache.find(r => { return r.name == global.config.memberRole; });
+		const memberRole = guild.roles.cache.find(r => { return r.name == global.config.memberRole; });
 
 		let embed = {
 			description: `**Information for ${targetMember}**`,
@@ -241,7 +241,7 @@ module.exports = {
 		embed.fields.push({
 			name: 'Roles',
 			value: targetMember.roles.cache
-				.filter(r => r != interaction.guild.roles.everyone)
+				.filter(r => r != guild.roles.everyone)
 				.sort((r1, r2) => r2.position - r1.position)
 				.map(r => `${r}`)
 				.join(', ')
@@ -287,11 +287,11 @@ module.exports = {
 							break;
 						}
 						case 'remove_guest_role': {
-							await addRemoveRole(interaction, interaction.guild, false, global.config.guestRole, targetMember, true);
+							await addRemoveRole(interaction, guild, false, global.config.guestRole, targetMember, true);
 							break;
 						}
 						case 'add_guest_role': {
-							await addRemoveRole(interaction, interaction.guild, true, global.config.guestRole, targetMember, true);
+							await addRemoveRole(interaction, guild, true, global.config.guestRole, targetMember, true);
 							break;
 						}
 						case 'server_unmute': {
@@ -311,19 +311,19 @@ module.exports = {
 							break;
 						}
 						case 'remove_mute_role': {
-							await addRemoveRole(interaction, interaction.guild, false, global.config.muteRole, targetMember, true);
+							await addRemoveRole(interaction, guild, false, global.config.muteRole, targetMember, true);
 							break;
 						}
 						case 'add_mute_role': {
-							await addRemoveRole(interaction, interaction.guild, true, global.config.muteRole, targetMember, true);
+							await addRemoveRole(interaction, guild, true, global.config.muteRole, targetMember, true);
 							break;
 						}
 						case 'remove_ptt_role': {
-							await addRemoveRole(interaction, interaction.guild, false, global.config.pttRole, targetMember, true);
+							await addRemoveRole(interaction, guild, false, global.config.pttRole, targetMember, true);
 							break;
 						}
 						case 'add_ptt_role': {
-							await addRemoveRole(interaction, interaction.guild, true, global.config.pttRole, targetMember, true);
+							await addRemoveRole(interaction, guild, true, global.config.pttRole, targetMember, true);
 							break;
 						}
 					}
@@ -339,7 +339,7 @@ module.exports = {
 		}
 		return Promise.resolve();
 	},
-	async menu(interaction, member, perm, permName) {
-		return module.exports.execute(interaction, member, perm, permName);
+	async menu(interaction, guild, member, perm, permName) {
+		return module.exports.execute(interaction, guild, member, perm, permName);
 	}
 };

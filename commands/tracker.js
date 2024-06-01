@@ -30,7 +30,7 @@ module.exports = {
 		}
 		return false;
 	},
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		await interaction.deferReply();
 		const subCommand = interaction.options.getSubcommand();
 

@@ -42,7 +42,7 @@ module.exports = {
 		}
 		return false;
 	},
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		let targetMember = interaction.options.getMember('user');
 
@@ -85,7 +85,7 @@ module.exports = {
 							content: `${targetMember} has been kicked for: ${reason}`,
 							components: []
 						}).catch(() => {});
-						await global.sendGlobalNotification(interaction.guild, `${targetMember} has been kicked by ${member} for: ${reason}`);
+						await global.sendGlobalNotification(guild, `${targetMember} has been kicked by ${member} for: ${reason}`);
 					} else if (confirmation.customId === 'cancel_user_kick') {
 						await confirmation.update({
 							content: 'Kick request cancelled',
@@ -122,13 +122,13 @@ module.exports = {
 				try {
 					const confirmation = await response.awaitMessageComponent({ filter: filter, time: 10000 });
 					if (confirmation.customId === 'confirm_user_ban') {
-						await interaction.guild.members.ban(userToBan, { reason: `Requested by ${global.getNameFromMessage(interaction)}: ${reason}`, deleteMessageSeconds: purgeDuration })
+						await guild.members.ban(userToBan, { reason: `Requested by ${global.getNameFromMessage(interaction)}: ${reason}`, deleteMessageSeconds: purgeDuration })
 							.catch(error => global.ephemeralReply(interaction, `Sorry, I couldn't ban because of : ${error}`));
 						await confirmation.update({
 							content: `${userToBan} has been banned for: ${reason}`,
 							components: []
 						}).catch(() => {});
-						await global.sendGlobalNotification(interaction.guild, `${userToBan} has been banned by ${member} for: ${reason}`);
+						await global.sendGlobalNotification(guild, `${userToBan} has been banned by ${member} for: ${reason}`);
 					} else if (confirmation.customId === 'cancel_user_ban') {
 						await confirmation.update({
 							content: 'Ban request cancelled',

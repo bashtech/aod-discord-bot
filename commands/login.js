@@ -9,9 +9,9 @@ module.exports = {
 		.addStringOption(option => option.setName('username').setDescription('ClanAOD.net Forum Username').setRequired(true))
 		.addStringOption(option => option.setName('password').setDescription('ClanAOD.net Forum Password').setRequired(true)),
 	help: true,
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		let username = interaction.options.getString('username');
 		let password = interaction.options.getString('password');
-		return global.userLogin(interaction, member, interaction.guild, username, password);
+		return global.userLogin(interaction, member, guild, username, password);
 	},
 };

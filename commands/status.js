@@ -11,7 +11,7 @@ module.exports = {
 	checkPerm(perm, commandName, parentName) {
 		return perm >= global.PERM_ADMIN;
 	},
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		let uptimeSeconds = Math.round(interaction.client.uptime / 1000);
 		let now = new Date();
 		let lastForumSyncDiff = new Date(now - global.lastForumSync);
@@ -20,7 +20,7 @@ module.exports = {
 			title: 'Bot Status',
 			fields: [
 				{ name: 'UpTime', value: global.secondsToString(uptimeSeconds) },
-				{ name: 'Server Status', value: `${interaction.guild.name} has ${interaction.guild.members.cache.size} members and ${interaction.guild.channels.cache.size} channels` },
+				{ name: 'Server Status', value: `${guild.name} has ${guild.members.cache.size} members and ${guild.channels.cache.size} channels` },
 				{ name: 'Last Forum Sync', value: `${lastForumSyncDiff.getMinutes()} minutes, ${lastForumSyncDiff.getSeconds()} seconds ago` },
 				{ name: 'Average WebSocket Hearbeat Time', value: `${interaction.client.ws.ping}ms` },
 				/*{ name: 'Timers', value: `${savedTimers.length} timers, next timer expires in ${global.secondsToString(nextTimerSeconds)}` },*/

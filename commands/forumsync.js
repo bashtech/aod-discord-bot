@@ -24,7 +24,7 @@ module.exports = {
 	checkPerm(perm, commandName, parentName) {
 		return perm >= global.PERM_STAFF;
 	},
-	async autocomplete(interaction, member, perm, permName) {
+	async autocomplete(interaction, guild, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);
 		let search = focusedOption.value.toLowerCase();
@@ -32,7 +32,7 @@ module.exports = {
 			case 'add':
 			case 'delete': {
 				if (focusedOption.name === 'role') {
-					let roles = interaction.guild.roles.cache
+					let roles = guild.roles.cache
 						.filter(r => r.name.endsWith(global.config.discordOfficerSuffix))
 						.map(r => r.name);
 					return interaction.respond(global.sortAndLimitOptions(roles, 25, search)).catch(console.log);
@@ -48,7 +48,7 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		const subCommand = interaction.options.getSubcommand();
 		switch (subCommand) {
 			case 'show-map': {
@@ -78,7 +78,7 @@ module.exports = {
 					title: '',
 					fields: [{
 						name: 'Discord Officer Roles',
-						value: interaction.guild.roles.cache
+						value: guild.roles.cache
 							.filter(r => r.name.endsWith(config.discordOfficerSuffix)).map(r => r.name).sort().join("\n")
 					}]
 				};
@@ -105,7 +105,7 @@ module.exports = {
 			}
 			case 'sync': {
 				await interaction.deferReply({ ephemeral: true });
-				return doForumSync(interaction, member, interaction.guild, perm, false);
+				return doForumSync(interaction, member, guild, perm, false);
 			}
 			case 'add':
 			case 'delete': {
@@ -119,14 +119,14 @@ module.exports = {
 
 				await interaction.deferReply({ ephemeral: true });
 				if (subCommand === 'add')
-					return global.addForumSyncMap(interaction, interaction.guild, roleName, groupName);
+					return global.addForumSyncMap(interaction, guild, roleName, groupName);
 				else
-					return global.removeForumSyncMap(interaction, interaction.guild, roleName, groupName);
+					return global.removeForumSyncMap(interaction, guild, roleName, groupName);
 				break;
 			}
 			case 'prune': {
 				await interaction.deferReply({ ephemeral: true });
-				return pruneForumSyncMap(interaction, interaction.guild);
+				return pruneForumSyncMap(interaction, guild);
 			}
 		}
 		return Promise.reject();

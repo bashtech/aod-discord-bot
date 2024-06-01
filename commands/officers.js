@@ -8,12 +8,12 @@ module.exports = {
 		.setDescription('List the officers for a Division.')
 		.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(false)),
 	help: true,
-	async autocomplete(interaction, member, perm, permName) {
+	async autocomplete(interaction, guild, member, perm, permName) {
 		const focusedOption = interaction.options.getFocused(true);
 		let search = focusedOption.value.toLowerCase();
 		if (focusedOption.name === 'role') {
 			let guildRoles = [];
-			for (let role of interaction.guild.roles.cache.values()) {
+			for (let role of guild.roles.cache.values()) {
 				if (role.name.endsWith(config.discordOfficerSuffix)) {
 					guildRoles.push(role.name);
 				}
@@ -22,17 +22,17 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		let roleName = interaction.options.getString('role');
 		let officerRole;
 		if (!roleName || roleName === '') {
 			let category = interaction.channel.parent;
 			if (category) {
 				roleName = category.name + ' ' + global.config.discordOfficerSuffix;
-				officerRole = interaction.guild.roles.cache.find(r => { return r.name == roleName; });
+				officerRole = guild.roles.cache.find(r => { return r.name == roleName; });
 			}
 		} else {
-			officerRole = interaction.guild.roles.cache.find(r => { return r.name == roleName; });
+			officerRole = guild.roles.cache.find(r => { return r.name == roleName; });
 		}
 		if (!officerRole) {
 			return interaction.reply({ content: 'Please choose an officer role or run the command in a division channel.', ephemeral: true });

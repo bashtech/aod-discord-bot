@@ -4355,18 +4355,17 @@ client.on('interactionCreate', async interaction => {
 		return;
 	}
 
+	let guild;
 	let member;
 	if (!interaction.inGuild()) {
-		interaction.reply("Not supported");
-		return;
-		/*let guild = client.guilds.resolve(config.guildId);
+		guild = client.guilds.resolve(config.guildId);
 		member = guild.members.resolve(interaction.user.id);
 		if (!member) {
 			interaction.reply("You are not a member of the AOD server.");
 			return;
-		}*/
-		//FIXME interaction.guild and interaction.member are readonly
+		}
 	} else {
+		guild = interaction.guild;
 		member = interaction.member;
 	}
 	let [perm, permName] = getPermissionLevelForMember(member);
@@ -4392,7 +4391,7 @@ client.on('interactionCreate', async interaction => {
 		}
 		try {
 			logInteraction(command, interaction);
-			await command.execute(interaction, member, perm, permName);
+			await command.execute(interaction, guild, member, perm, permName);
 			if (!interaction.replied)
 				ephemeralReply(interaction, "Done");
 		} catch (error) {
@@ -4407,7 +4406,7 @@ client.on('interactionCreate', async interaction => {
 			return;
 		}
 		try {
-			await command.autocomplete(interaction, member, perm, permName).catch(console.log);
+			await command.autocomplete(interaction, guild, member, perm, permName).catch(console.log);
 			if (!interaction.responded)
 				interaction.respond([]).catch(console.log);
 		} catch (error) {
@@ -4422,7 +4421,7 @@ client.on('interactionCreate', async interaction => {
 		}
 		console.log(`${getNameFromMessage(interaction)} executed: button:${interaction.customId}`);
 		try {
-			await command.button(interaction, member, perm, permName);
+			await command.button(interaction, guild, member, perm, permName);
 			if (!interaction.replied)
 				ephemeralReply(interaction, "Done");
 		} catch (error) {
@@ -4444,7 +4443,7 @@ client.on('interactionCreate', async interaction => {
 		}
 		try {
 			logInteraction(command, interaction);
-			await command.menu(interaction, member, perm, permName);
+			await command.menu(interaction, guild, member, perm, permName);
 			if (!interaction.replied)
 				sendInteractionReply(interaction, { content: "Done", ephemeral: true });
 		} catch (error) {

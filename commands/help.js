@@ -32,7 +32,7 @@ module.exports = {
 		.setDescription('Show list of available commands')
 		.addStringOption(option => option.setName('command').setDescription('Command').setAutocomplete(true)),
 	help: true,
-	async autocomplete(interaction, member, perm, permName) {
+	async autocomplete(interaction, guild, member, perm, permName) {
 		const focusedOption = interaction.options.getFocused(true);
 		let search = focusedOption.value.toLowerCase();
 		let commands = [];
@@ -43,7 +43,7 @@ module.exports = {
 		});
 		return interaction.respond(global.sortAndLimitOptions(commands, 25, search));
 	},
-	async execute(interaction, member, perm, permName) {
+	async execute(interaction, guild, member, perm, permName) {
 		let filter = interaction.options.getString('command') ?? null;
 		let embed = {
 			title: "Available Commands",
@@ -62,14 +62,14 @@ module.exports = {
 				}
 				let guildCommand;
 				if (!command.commandId) {
-					guildCommand = interaction.guild.commands.cache.find(c => {
+					guildCommand = guild.commands.cache.find(c => {
 						return (c.applicationId === interaction.client.application.id && c.name === name);
 					});
 					if (guildCommand) {
 						command.commandId = guildCommand.id;
 					}
 				} else {
-					guildCommand = interaction.guild.commands.resolve(command.commandId);
+					guildCommand = guild.commands.resolve(command.commandId);
 				}
 				if (guildCommand) {
 					if (filter === null) {
