@@ -188,7 +188,7 @@ module.exports = {
 	checkPerm(perm, commandName) {
 		return perm >= global.PERM_MEMBER;
 	},
-	async execute(interaction, guild, member, perm, permName) {
+	async execute(interaction, guild, member, perm) {
 		await interaction.deferReply({ ephemeral: true });
 
 		const targetMember = interaction.options.getMember('user');
@@ -247,7 +247,7 @@ module.exports = {
 				.join(', ')
 		});
 
-		let [targetPerm, targetPermName] = getPermissionLevelForMember(targetMember);
+		let targetPerm = getPermissionLevelForMember(targetMember);
 		let components = getComponentsForTarget(member, perm, targetMember, targetPerm, true);
 
 		interaction.replied = true; //avoid common reply
@@ -339,7 +339,7 @@ module.exports = {
 		}
 		return Promise.resolve();
 	},
-	async menu(interaction, guild, member, perm, permName) {
-		return module.exports.execute(interaction, guild, member, perm, permName);
+	async menu(interaction, guild, member, perm) {
+		return module.exports.execute(interaction, guild, member, perm);
 	}
 };

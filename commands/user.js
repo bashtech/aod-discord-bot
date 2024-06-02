@@ -42,13 +42,13 @@ module.exports = {
 		}
 		return false;
 	},
-	async execute(interaction, guild, member, perm, permName) {
+	async execute(interaction, guild, member, perm) {
 		const subCommand = interaction.options.getSubcommand();
 		let targetMember = interaction.options.getMember('user');
 
 		if (targetMember) {
 			// Validate caller has permissions to kick/ban target if they are a member of the server
-			let [targetPerm, targetPermName] = global.getPermissionLevelForMember(targetMember);
+			let targetPerm = global.getPermissionLevelForMember(targetMember);
 			if (!targetMember.kickable || perm <= targetPerm)
 				return global.ephemeralReply(interaction, `You do not have permissions to ${subCommand} ${targetMember}.`);
 		}

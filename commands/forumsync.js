@@ -24,7 +24,7 @@ module.exports = {
 	checkPerm(perm, commandName, parentName) {
 		return perm >= global.PERM_STAFF;
 	},
-	async autocomplete(interaction, guild, member, perm, permName) {
+	async autocomplete(interaction, guild, member, perm) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);
 		let search = focusedOption.value.toLowerCase();
@@ -48,7 +48,7 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async execute(interaction, guild, member, perm, permName) {
+	async execute(interaction, guild, member, perm) {
 		const subCommand = interaction.options.getSubcommand();
 		switch (subCommand) {
 			case 'show-map': {

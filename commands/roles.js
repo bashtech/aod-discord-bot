@@ -68,7 +68,7 @@ module.exports = {
 		}
 		return false;
 	},
-	async autocomplete(interaction, guild, member, perm, permName) {
+	async autocomplete(interaction, guild, member, perm) {
 		const subCommand = interaction.options.getSubcommand();
 		const focusedOption = interaction.options.getFocused(true);
 		let search = focusedOption.value.toLowerCase();
@@ -128,7 +128,7 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async execute(interaction, guild, member, perm, permName) {
+	async execute(interaction, guild, member, perm) {
 		const subCommand = interaction.options.getSubcommand();
 		const commandGroup = interaction.options.getSubcommandGroup(false);
 		if (commandGroup === null) {
@@ -227,7 +227,7 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async button(interaction, guild, member, perm, permName) {
+	async button(interaction, guild, member, perm) {
 		let args = interaction.customId.split('::');
 		if (args.length < 4) {
 			return interaction.reply({ content: `Invalid request.`, ephemeral: true });

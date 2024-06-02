@@ -33,7 +33,7 @@ module.exports = {
 		.addStringOption(option => option.setName('command').setDescription('Command').setAutocomplete(true)),
 	global: true,
 	help: true,
-	async autocomplete(interaction, guild, member, perm, permName) {
+	async autocomplete(interaction, guild, member, perm) {
 		const focusedOption = interaction.options.getFocused(true);
 		let search = focusedOption.value.toLowerCase();
 		let commands = [];
@@ -44,7 +44,7 @@ module.exports = {
 		});
 		return interaction.respond(global.sortAndLimitOptions(commands, 25, search));
 	},
-	async execute(interaction, guild, member, perm, permName) {
+	async execute(interaction, guild, member, perm) {
 		let filter = interaction.options.getString('command') ?? null;
 		let embed = {
 			title: "Available Commands",

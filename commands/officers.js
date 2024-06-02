@@ -8,7 +8,7 @@ module.exports = {
 		.setDescription('List the officers for a Division.')
 		.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(false)),
 	help: true,
-	async autocomplete(interaction, guild, member, perm, permName) {
+	async autocomplete(interaction, guild, member, perm) {
 		const focusedOption = interaction.options.getFocused(true);
 		let search = focusedOption.value.toLowerCase();
 		if (focusedOption.name === 'role') {
@@ -22,7 +22,7 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async execute(interaction, guild, member, perm, permName) {
+	async execute(interaction, guild, member, perm) {
 		let roleName = interaction.options.getString('role');
 		let officerRole;
 		if (!roleName || roleName === '') {

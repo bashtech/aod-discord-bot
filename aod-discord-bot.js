@@ -401,6 +401,7 @@ function getStringForPermission(perm) {
 			return 'Everyone';
 	}
 }
+global.getStringForPermission = getStringForPermission;
 
 //map roles to permissions based on config
 function getPermissionLevelForMember(member) {
@@ -425,7 +426,7 @@ function getPermissionLevelForMember(member) {
 		else if (member.roles.cache.find(r => r.name == config.guestRole))
 			perm = PERM_GUEST;
 	}
-	return [perm, getStringForPermission(perm)];
+	return perm;
 }
 global.getPermissionLevelForMember = getPermissionLevelForMember;
 
@@ -753,7 +754,7 @@ async function sendListToMessageAuthor(message, member, guild, title, list, foot
 }
 
 //help command processing
-function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandHelp(message, member, cmd, args, guild, perm, isDM) {
 	let filter;
 	let detail = false;
 	let footer = "**Note**: Parameters that require spaces must be 'single' or \"double\" quoted.";
@@ -832,7 +833,7 @@ function commandHelp(message, member, cmd, args, guild, perm, permName, isDM) {
 }
 
 //ping command processing
-function commandPing(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandPing(message, member, cmd, args, guild, perm, isDM) {
 	if (perm >= PERM_STAFF)
 		sendReplyToMessageAuthor(message, member, "Ping?")
 		.then(m => {
@@ -848,7 +849,7 @@ function commandPing(message, member, cmd, args, guild, perm, permName, isDM) {
 
 //roll command processing
 var diceRegEx = /^([0-9]+)?[dD]([0-9]+)$/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
-function commandRoll(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandRoll(message, member, cmd, args, guild, perm, isDM) {
 	let num = 1;
 	let size = 6;
 	if (args.length > 0) {
@@ -880,7 +881,7 @@ function commandRoll(message, member, cmd, args, guild, perm, permName, isDM) {
 }
 
 //flip command processing
-function commandFlip(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandFlip(message, member, cmd, args, guild, perm, isDM) {
 	let result = Math.floor(Math.random() * 2);
 	if (result > 0)
 		message.reply(`Result: heads`);
@@ -888,7 +889,7 @@ function commandFlip(message, member, cmd, args, guild, perm, permName, isDM) {
 		message.reply(`Result: tails`);
 }
 
-function commandReminder(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandReminder(message, member, cmd, args, guild, perm, isDM) {
 	let num = savedTimers.length;
 	let menuOrder = 1;
 	let myReminders = [];
@@ -1045,7 +1046,7 @@ async function userLogin(message, member, guild, username, password) {
 global.userLogin = userLogin;
 
 //login command processing
-async function commandLogin(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandLogin(message, member, cmd, args, guild, perm, isDM) {
 	if (!isDM) {
 		message.delete();
 		sendMessageToMember(member, `***WARNING:*** You have entered your credentials into a public channel. Your password may be compromised. Please change your password immediately.`);
@@ -1061,17 +1062,17 @@ async function commandLogin(message, member, cmd, args, guild, perm, permName, i
 }
 
 //aod command processing
-function commandSetAOD(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandSetAOD(message, member, cmd, args, guild, perm, isDM) {
 	return addRemoveRole(message, guild, cmd === 'addaod', config.memberRole, getMemberFromMessageOrArgs(guild, message, args), true);
 }
 
 //guest command processing
-function commandSetGuest(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandSetGuest(message, member, cmd, args, guild, perm, isDM) {
 	return addRemoveRole(message, guild, cmd === 'addguest', config.guestRole, getMemberFromMessageOrArgs(guild, message, args), true);
 }
 
 //purge command processing
-function commandPurge(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandPurge(message, member, cmd, args, guild, perm, isDM) {
 	if (isDM)
 		return message.reply("Must be executed in a text channel");
 
@@ -1410,7 +1411,7 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 global.addChannel = addChannel;
 
 //voice command processing
-async function commandAddChannel(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandAddChannel(message, member, cmd, args, guild, perm, isDM) {
 	let channelCategory;
 	let divisionOfficerRole;
 
@@ -1528,7 +1529,7 @@ async function setChannelPerms(guild, message, member, perm, channel, type, leve
 global.setChannelPerms = setChannelPerms;
 
 //set channel perms command processing
-async function commandSetPerms(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandSetPerms(message, member, cmd, args, guild, perm, isDM) {
 	if (args[0] === undefined)
 		return message.reply("Invalid parameters");
 
@@ -1581,7 +1582,7 @@ async function commandSetPerms(message, member, cmd, args, guild, perm, permName
 }
 
 //remove channel command processing
-function commandRemChannel(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandRemChannel(message, member, cmd, args, guild, perm, isDM) {
 	//check for existing channel
 	let channelName = args.join(' ').toLowerCase().replace(/\s/g, '-');
 	if (channelName === undefined || channelName == '')
@@ -1613,7 +1614,7 @@ function commandRemChannel(message, member, cmd, args, guild, perm, permName, is
 }
 
 //rename channel command processing
-async function commandRenameChannel(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandRenameChannel(message, member, cmd, args, guild, perm, isDM) {
 	if (args.length <= 0)
 		return message.reply("A name must be provided");
 
@@ -1669,7 +1670,7 @@ async function commandRenameChannel(message, member, cmd, args, guild, perm, per
 		.then(() => { message.reply(`Channel ${channelName} renamed to ${newName}`); });
 }
 
-function commandTopic(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandTopic(message, member, cmd, args, guild, perm, isDM) {
 	if (args.length <= 0)
 		return message.channel.setTopic('', `Requested by ${getNameFromMessage(message)}`);
 
@@ -1696,7 +1697,7 @@ function commandTopic(message, member, cmd, args, guild, perm, permName, isDM) {
 }
 
 //move channel command processing
-function commandMoveChannel(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandMoveChannel(message, member, cmd, args, guild, perm, isDM) {
 	//check for existing channel
 	let channelName = args.join(' ');
 	if (channelName === undefined || channelName == '')
@@ -1927,7 +1928,7 @@ async function addDivision(message, member, perm, guild, divisionName) {
 global.addDivision = addDivision;
 
 //adddivision command processing
-function commandAddDivision(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandAddDivision(message, member, cmd, args, guild, perm, isDM) {
 	let divisionName = args.join(' ');
 	if (divisionName === undefined || divisionName == '')
 		return ephemeralReply(message, "A name must be provided");
@@ -1993,7 +1994,7 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 global.deleteDivision = deleteDivision;
 
 //remdivision command processing
-async function commandRemDivision(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandRemDivision(message, member, cmd, args, guild, perm, isDM) {
 	let divisionName = args.join(' ');
 	if (divisionName === undefined || divisionName == '')
 		return message.reply("A name must be provided");
@@ -2117,7 +2118,7 @@ async function subUnsubRole(message, member, guild, targetMember, assign, sub, r
 global.subUnsubRole = subUnsubRole;
 
 //sub/unsub/list command processing
-function commandSub(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandSub(message, member, cmd, args, guild, perm, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
 	let assign = false;
 	if (targetMember) {
@@ -2394,7 +2395,7 @@ async function renameManagedRole(message, member, guild, roleName, newRoleName) 
 global.renameManagedRole = renameManagedRole;
 
 //subrole command processing
-async function commandSubRoles(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandSubRoles(message, member, cmd, args, guild, perm, isDM) {
 	if (args.length <= 0)
 		return message.reply('No parameters provided');
 
@@ -2559,7 +2560,7 @@ async function unsetDependentRole(guild, dependentRole, requiredRole) {
 }
 
 //subrole command processing
-async function commandDependentRoles(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandDependentRoles(message, member, cmd, args, guild, perm, isDM) {
 	if (args.length <= 0)
 		return message.reply('No parameters provided');
 
@@ -2657,7 +2658,7 @@ function getWebhooksForGuild(guild)
 	return promise;
 }
 
-function commandShowWebhooks(message, member, cmd, args, guild, perm, permName, isDM)
+function commandShowWebhooks(message, member, cmd, args, guild, perm, isDM)
 {
 	if (!message.member)
 		return;
@@ -2679,34 +2680,34 @@ function commandShowWebhooks(message, member, cmd, args, guild, perm, permName, 
 		.catch(error=>{notifyRequestError(guild, error,message,(perm >= PERM_MOD));});
 }*/
 
-function commandMute(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandMute(message, member, cmd, args, guild, perm, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
 	if (!targetMember)
 		return message.reply("Please mention a valid member of this server");
-	var [memberPerm, memberPermName] = getPermissionLevelForMember(targetMember);
+	let memberPerm = getPermissionLevelForMember(targetMember);
 	if (perm <= memberPerm)
 		return message.reply(`You cannot mute ${targetMember.user.tag}.`);
 	return addRemoveRole(message, guild, cmd === 'mute', config.muteRole, targetMember, true);
 }
 
-function commandPTT(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandPTT(message, member, cmd, args, guild, perm, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
 	if (!targetMember)
 		return message.reply("Please mention a valid member of this server");
-	var [memberPerm, memberPermName] = getPermissionLevelForMember(targetMember);
+	let memberPerm = getPermissionLevelForMember(targetMember);
 	if (perm <= memberPerm)
 		return message.reply(`You cannot make ${targetMember.user.tag} PTT.`);
 	return addRemoveRole(message, guild, cmd === 'setptt', config.pttRole, targetMember, true);
 }
 
 //kick command processing
-function commandKick(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandKick(message, member, cmd, args, guild, perm, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
 	if (!targetMember)
 		return message.reply("Please mention a valid member of this server");
 	if (!targetMember.kickable)
 		return message.reply(`I cannot kick ${targetMember.user.tag}.`);
-	var [memberPerm, memberPermName] = getPermissionLevelForMember(targetMember);
+	let memberPerm = getPermissionLevelForMember(targetMember);
 	if (perm <= memberPerm)
 		return message.reply(`You cannot kick ${targetMember.user.tag}.`);
 
@@ -2720,13 +2721,13 @@ function commandKick(message, member, cmd, args, guild, perm, permName, isDM) {
 }
 
 //ban command processing
-function commandBan(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandBan(message, member, cmd, args, guild, perm, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
 	let tag;
 	if (targetMember) {
 		if (!targetMember.bannable)
 			return message.reply(`I cannot ban ${targetMember.user.tag}.`);
-		var [memberPerm, memberPermName] = getPermissionLevelForMember(targetMember);
+		let memberPerm = getPermissionLevelForMember(targetMember);
 		if (perm <= memberPerm)
 			return message.reply(`You cannot ban ${targetMember.user.tag}.`);
 		tag = targetMember.user.tag;
@@ -2747,7 +2748,7 @@ function commandBan(message, member, cmd, args, guild, perm, permName, isDM) {
 }
 
 //tracker command processing
-async function commandTracker(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandTracker(message, member, cmd, args, guild, perm, isDM) {
 	try {
 		let data = new URLSearchParams();
 		data.append('type', 'discord');
@@ -3535,7 +3536,7 @@ function pruneForumSyncMap(message, guild) {
 global.pruneForumSyncMap = pruneForumSyncMap;
 
 //forum sync command processing
-function commandForumSync(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandForumSync(message, member, cmd, args, guild, perm, isDM) {
 	let subCmd = args.shift();
 	if (!subCmd)
 		return;
@@ -3633,7 +3634,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, permName, isD
 }
 
 //admin command processing
-function commandSetAdmin(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandSetAdmin(message, member, cmd, args, guild, perm, isDM) {
 	addRemoveRole(message, guild, cmd === 'addadmin', 'Admin', getMemberFromMessageOrArgs(guild, message, args), true);
 }
 
@@ -3645,7 +3646,7 @@ function reloadConfig(message) {
 global.reloadConfig = reloadConfig;
 
 //reload command processing
-function commandReload(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandReload(message, member, cmd, args, guild, perm, isDM) {
 	reloadConfig(message);
 }
 
@@ -3664,7 +3665,7 @@ function secondsToString(seconds) {
 global.secondsToString = secondsToString;
 
 //status command processing
-function commandStatus(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandStatus(message, member, cmd, args, guild, perm, isDM) {
 	let uptimeSeconds = Math.round(client.uptime / 1000);
 	let now = new Date();
 	let lastForumSyncDiff = new Date(now - global.lastForumSync);
@@ -3683,14 +3684,14 @@ function commandStatus(message, member, cmd, args, guild, perm, permName, isDM) 
 }
 
 //quit command processing
-function commandQuit(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandQuit(message, member, cmd, args, guild, perm, isDM) {
 	console.log(`Bot quit requested by ${getNameFromMessage(message)}`);
 	client.destroy();
 	process.exit();
 }
 
 //reload slash command processing
-function commandReloadCommands(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandReloadCommands(message, member, cmd, args, guild, perm, isDM) {
 	console.log(`Bot reload slash commands requested by ${getNameFromMessage(message)}`);
 	loadSlashCommands();
 }
@@ -3751,7 +3752,7 @@ function startAPIServer() {
 }
 global.startAPIServer = startAPIServer;
 
-function commandReloadAPI(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandReloadAPI(message, member, cmd, args, guild, perm, isDM) {
 	console.log(`Bot reload API server requested by ${getNameFromMessage(message)}`);
 	startAPIServer();
 }
@@ -3772,7 +3773,7 @@ function processTimeStr(string) {
 	return seconds;
 }
 
-function commandSlap(message, member, cmd, args, guild, perm, permName, isDM) {
+function commandSlap(message, member, cmd, args, guild, perm, isDM) {
 	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
 	let tag;
 	if (isDM) {
@@ -3793,7 +3794,7 @@ function commandSlap(message, member, cmd, args, guild, perm, permName, isDM) {
 		.catch(() => {});
 }
 
-async function commandTest(message, member, cmd, args, guild, perm, permName, isDM) {
+async function commandTest(message, member, cmd, args, guild, perm, isDM) {
 	//console.log("test:" + args.join(' '));
 	//message.reply("test: " + args.join(' '));
 	/*
@@ -3810,7 +3811,7 @@ commands = {
 		minPermission: PERM_LEVEL,
 		args: array of "String" or "String",
 		helpText: array of "String" or "String",
-		callback: function(message, cmd, args, guild, perm, permName, isDM)
+		callback: function(message, cmd, args, guild, perm, isDM)
 		dmOnly: optional boolean (default false)
 		doLog: optional boolean (default true)
 		logArgs: optional boolean (default true)
@@ -4156,7 +4157,7 @@ commands = {
 };
 
 //process commands
-function processCommand(message, member, cmd, arg_string, guild, perm, permName, isDM) {
+function processCommand(message, member, cmd, arg_string, guild, perm, isDM) {
 	var commandObj = commands[cmd];
 	if (commandObj !== undefined) {
 		if (commandObj.minPermission <= perm) {
@@ -4169,7 +4170,7 @@ function processCommand(message, member, cmd, arg_string, guild, perm, permName,
 			}
 			//if (commandObj.dmOnly === true && !isDM)
 			//do nothing for now...
-			return commandObj.callback(message, member, cmd, args, guild, perm, permName, isDM);
+			return commandObj.callback(message, member, cmd, args, guild, perm, isDM);
 		}
 	}
 }
@@ -4182,7 +4183,7 @@ client.on("messageCreate", message => {
 
 	//make sure we have a member
 	var isDM = false;
-	var guild, role, perm, permName;
+	var guild, role, perm;
 	var member = message.member;
 	if (!member) {
 		if (message.author.bot) {
@@ -4192,7 +4193,7 @@ client.on("messageCreate", message => {
 			let webhookPerms = config.webHookPerms[message.webhookId];
 			if (webhookPerms === undefined)
 				return; //this bot is not allowed
-			[perm, permName] = webhookPerms;
+			perm = webhookPerms;
 
 			if (message.channel && message.channel)
 				guild = message.channel.guild;
@@ -4214,13 +4215,13 @@ client.on("messageCreate", message => {
 
 			message.member = member;
 			isDM = true;
-			[perm, permName] = getPermissionLevelForMember(member);
+			perm = getPermissionLevelForMember(member);
 		}
 	} else {
 		guild = member.guild;
 		if (!guild)
 			return; //must have guild
-		[perm, permName] = getPermissionLevelForMember(member);
+		perm = getPermissionLevelForMember(member);
 	}
 
 	//get command and argument string
@@ -4235,7 +4236,7 @@ client.on("messageCreate", message => {
 	}
 
 	try {
-		return processCommand(message, member, command, arg_string, guild, perm, permName, isDM);
+		return processCommand(message, member, command, arg_string, guild, perm, isDM);
 	} catch (error) {
 		notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
 	} //don't let user input crash the bot
@@ -4370,7 +4371,7 @@ client.on('interactionCreate', async interaction => {
 		guild = interaction.guild;
 		member = interaction.member;
 	}
-	let [perm, permName] = getPermissionLevelForMember(member);
+	let perm = getPermissionLevelForMember(member);
 
 	interaction.isInteraction = true;
 	if (interaction.isChatInputCommand()) {
@@ -4393,7 +4394,7 @@ client.on('interactionCreate', async interaction => {
 		}
 		try {
 			logInteraction(command, interaction);
-			await command.execute(interaction, guild, member, perm, permName);
+			await command.execute(interaction, guild, member, perm);
 			if (!interaction.replied)
 				ephemeralReply(interaction, "Done");
 		} catch (error) {
@@ -4409,7 +4410,7 @@ client.on('interactionCreate', async interaction => {
 			return;
 		}
 		try {
-			await command.autocomplete(interaction, guild, member, perm, permName).catch(console.log);
+			await command.autocomplete(interaction, guild, member, perm).catch(console.log);
 			if (!interaction.responded)
 				interaction.respond([]).catch(console.log);
 		} catch (error) {
@@ -4425,7 +4426,7 @@ client.on('interactionCreate', async interaction => {
 		}
 		console.log(`${getNameFromMessage(interaction)} executed: button:${interaction.customId}`);
 		try {
-			await command.button(interaction, guild, member, perm, permName);
+			await command.button(interaction, guild, member, perm);
 			if (!interaction.replied)
 				ephemeralReply(interaction, "Done");
 		} catch (error) {
@@ -4448,7 +4449,7 @@ client.on('interactionCreate', async interaction => {
 		}
 		try {
 			logInteraction(command, interaction);
-			await command.menu(interaction, guild, member, perm, permName);
+			await command.menu(interaction, guild, member, perm);
 			if (!interaction.replied)
 				sendInteractionReply(interaction, { content: "Done", ephemeral: true });
 		} catch (error) {

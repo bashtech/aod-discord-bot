@@ -7,7 +7,7 @@ module.exports = {
 		.setName('aod')
 		.setDescription('Legacy command processing using the original text/prefix format.')
 		.addStringOption(option => option.setName('command').setDescription('The legacy command excluding command prefix')),
-	async execute(interaction, guild, member, perm, permName) {
+	async execute(interaction, guild, member, perm) {
 		//get command and argument string
 		const input = interaction.options.getString('command');
 		let first_space = input.indexOf(' ');
@@ -20,6 +20,6 @@ module.exports = {
 			arg_string = input.slice(first_space + 1).trim();
 		}
 
-		global.processCommand(interaction, member, command, arg_string, guild, perm, permName, false);
+		global.processCommand(interaction, member, command, arg_string, guild, perm, false);
 	},
 };

@@ -12,7 +12,7 @@ module.exports = {
 	checkPerm(perm, commandName, parentName) {
 		return perm >= global.PERM_ADMIN;
 	},
-	async execute(interaction, guild, member, perm, permName) {
+	async execute(interaction, guild, member, perm) {
 		let uptimeSeconds = Math.round(interaction.client.uptime / 1000);
 		let now = new Date();
 		let lastForumSyncDiff = new Date(now - global.lastForumSync);
