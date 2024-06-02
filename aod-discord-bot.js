@@ -193,17 +193,17 @@ function connectToDB() {
 	mysqlConnection = mysql.createConnection(config.mysql);
 	mysqlConnection.connect(error => {
 		if (error)
-			notifyRequestError(null, null, guild, error, false);
+			console.log(error);
 	});
 	mysqlConnection
 		.on('close', error => {
 			if (error) {
-				notifyRequestError(null, null, guild, error, false);
+				console.log(error);
 				connectToDB();
 			}
 		})
 		.on('error', error => {
-			notifyRequestError(null, null, guild, error, false);
+			console.log(error);
 			if (error.code === 'PROTOCOL_CONNECTION_LOST')
 				connectToDB();
 		});
@@ -359,7 +359,7 @@ async function addRemoveRole(message, guild, add, roleData, member, assigned) {
 				resolve();
 			})
 			.catch(error => {
-				notifyRequestError(null, null, guild, error, false);
+				console.log(error);
 				resolve();
 			});
 		else
@@ -372,7 +372,7 @@ async function addRemoveRole(message, guild, add, roleData, member, assigned) {
 				resolve();
 			})
 			.catch(error => {
-				notifyRequestError(null, null, guild, error, false);
+				console.log(error);
 				resolve();
 			});
 	});
@@ -690,18 +690,6 @@ function getParams(string) {
 	return params;
 }
 
-//log and notify of errors processing commands
-function notifyRequestError(message, member, guild, error, showError) {
-	if (!error)
-		return;
-	console.error('An error occurred while processing your request: ' + error.toString());
-	if (showError && message) {
-		if (member)
-			member.send('An error occurred while processing your request: ' + message.content + "\n" + error.toString())
-			.catch(console.error);
-	}
-}
-
 function sendMessageToMember(member, data) {
 	if (member)
 		return member.send(data).catch(() => {});
@@ -839,7 +827,7 @@ function commandPing(message, member, cmd, args, guild, perm, isDM) {
 		.then(m => {
 			let pingTime = sprintf('%.3f', client.ws.ping);
 			m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${pingTime}ms`)
-				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+				.catch(console.log);
 		})
 		.catch(console.error);
 	else
@@ -1520,7 +1508,7 @@ async function setChannelPerms(guild, message, member, perm, channel, type, leve
 			})
 			.catch(async function(error) {
 				await ephemeralReply(message, `Failed to update channel ${channel} permissions`);
-				notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+				console.log(error);
 				reject();
 			});
 	});
@@ -1689,7 +1677,7 @@ function commandTopic(message, member, cmd, args, guild, perm, isDM) {
 			return channel.setTopic('', `Requested by ${getNameFromMessage(message)}`);
 		} else {
 			channel.setTopic(args.join(' '), `Requested by ${getNameFromMessage(message)}`)
-				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+				.catch(console.log);
 		}
 	} else {
 		return message.reply("Channel not found");
@@ -1710,7 +1698,7 @@ function commandMoveChannel(message, member, cmd, args, guild, perm, isDM) {
 	if (existingChannel)
 		existingChannel.setPosition(cmd === 'up' ? -1 : 1, { relative: true, reason: `Requested by ${getNameFromMessage(message)}` })
 		.then(() => { message.reply(`Channel ${channelName} moved`); })
-		.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+		.catch(console.log);
 	else
 		return message.reply("Channel not found");
 }
@@ -1921,7 +1909,7 @@ async function addDivision(message, member, perm, guild, divisionName) {
 
 		return ephemeralReply(message, `${divisionName} division added`);
 	} catch (error) {
-		notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+		console.log(error);
 		return ephemeralReply(message, `Failed to add ${divisionName} division`);
 	}
 }
@@ -1957,18 +1945,19 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 				await c.setParent(null, `Requested by ${getNameFromMessage(message)}`);
 				await c.delete(`Requested by ${getNameFromMessage(message)}`);
 			} catch (error) {
-				notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+				await ephemeralReply(message, `Failed to delete channel ${c.name}`);
+				console.log(error);
 			}
 		}
 
 		//remove category
 		try {
 			await divisionCategory.delete(`Requested by ${getNameFromMessage(message)}`);
+			await ephemeralReply(message, `${divisionName} category removed`);
 		} catch (error) {
-			notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+			await ephemeralReply(message, `Failed to delete category ${divisionName}`);
+			console.log(error);
 		}
-
-		await ephemeralReply(message, `${divisionName} category removed`);
 	} else {
 		await ephemeralReply(message, `${divisionName} category not found`);
 	}
@@ -1977,10 +1966,11 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 	if (role) {
 		try {
 			await role.delete(`Requested by ${getNameFromMessage(message)}`);
+			await ephemeralReply(message, `${officerRoleName} role removed`);
 		} catch (error) {
-			notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+			await ephemeralReply(message, `Failed to delete role ${officerRoleName}`);
+			console.log(error);
 		}
-		await ephemeralReply(message, `${officerRoleName} role removed`);
 	} else {
 		await ephemeralReply(message, `${officerRoleName} role not found`);
 	}
@@ -2677,7 +2667,7 @@ function commandShowWebhooks(message, member, cmd, args, guild, perm, isDM)
 			}
 			message.member.send({embed: embed});
 		})
-		.catch(error=>{notifyRequestError(guild, error,message,(perm >= PERM_MOD));});
+		.catch(console.log);
 }*/
 
 function commandMute(message, member, cmd, args, guild, perm, isDM) {
@@ -3122,7 +3112,7 @@ function doForumSync(message, member, guild, perm, doDaily) {
 					try {
 						usersByIDOrDiscriminator = await getForumUsersForGroups(groupMap.forumGroups, isMemberRole);
 					} catch (error) {
-						notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+						console.log(error);
 						continue;
 					}
 
@@ -3562,7 +3552,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, isDM) {
 						sendReplyToMessageAuthor(message, member, { embeds: [{ title: 'Configured Group Maps', fields: fields }] });
 					}
 				})
-				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+				.catch(console.log);
 			break;
 		}
 		case 'showroles': {
@@ -3593,7 +3583,7 @@ function commandForumSync(message, member, cmd, args, guild, perm, isDM) {
 						sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 					}
 				})
-				.catch(error => { notifyRequestError(message, member, guild, error, (perm >= PERM_MOD)); });
+				.catch(console.log);
 			break;
 		}
 		case 'sync':
@@ -4238,7 +4228,7 @@ client.on("messageCreate", message => {
 	try {
 		return processCommand(message, member, command, arg_string, guild, perm, isDM);
 	} catch (error) {
-		notifyRequestError(message, member, guild, error, (perm >= PERM_MOD));
+		console.log(error);
 	} //don't let user input crash the bot
 });
 
@@ -4708,7 +4698,7 @@ function forumSyncTimerCallback() {
 	doForumSync(null, null, guild, PERM_NONE, doDaily);
 	if (doDaily)
 		guild.members.prune({ days: 14, reason: 'Forum sync timer' })
-		.catch(error => { notifyRequestError(null, null, guild, error, false); });
+		.catch(console.log);
 
 	//clearout expired login errors
 	let currEpochMs = (new Date()).getTime();
@@ -4826,7 +4816,7 @@ client.on("guildDelete", guild => {
 });
 
 //common client error handler
-client.on('error', error => { notifyRequestError(null, null, null, error, false); });
+client.on('error', console.log);
 
 //everything is defined, start the client
 client.login(config.token)
