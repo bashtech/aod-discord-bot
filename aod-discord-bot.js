@@ -2812,7 +2812,9 @@ function getForumUsersForGroups(groups, allowPending) {
 		let groupStr = groups.join(',');
 		let groupRegex = groups.join('|');
 		let query =
-			`SELECT u.userid,u.username,f.field19,f.field20,f.field13,f.field23,f.field24, ` +
+			`SELECT u.userid,u.username,` +
+			`  IF(f.field19 NOT LIKE "%#%" OR f.field19 LIKE "%#0", LOWER(f.field19), f.field19) AS field19,` +
+			`  f.field20,f.field13,f.field23,f.field24,` +
 			`  (CASE WHEN (r.requester_id IS NOT NULL) THEN 1 ELSE 0 END) AS pending, t.name AS pending_name ` +
 			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
@@ -4535,7 +4537,9 @@ function getForumGroupsForMember(member) {
 	let promise = new Promise(function(resolve, reject) {
 		let db = connectToDB();
 		let query =
-			`SELECT u.userid,u.username,f.field19,f.field20,u.usergroupid,u.membergroupids FROM ${config.mysql.prefix}user AS u ` +
+			`SELECT u.userid,u.username,` +
+			`  IF(f.field19 NOT LIKE "%#%" OR f.field19 LIKE "%#0", LOWER(f.field19), f.field19) AS field19,` +
+			`  f.field20,u.usergroupid,u.membergroupids FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
 			`WHERE f.field20="${member.user.id}" OR f.field19 LIKE "${convertDiscordTag(member.user.tag)}"`;
 		db.query(query, function(err, rows, fields) {
