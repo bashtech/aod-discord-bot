@@ -2737,32 +2737,6 @@ function commandBan(message, member, cmd, args, guild, perm, isDM) {
 	message.reply(`${tag} has been banned by ${message.author.tag} because: ${reason}`);
 }
 
-//tracker command processing
-async function commandTracker(message, member, cmd, args, guild, perm, isDM) {
-	try {
-		let data = new URLSearchParams();
-		data.append('type', 'discord');
-		data.append('text', args.join(' '));
-		data.append('token', config.trackerToken);
-
-		let response = await fetch(`${config.trackerURL}/slack`, {
-			method: 'post',
-			body: data,
-			headers: {
-				'User-Agent': 'Discord Bot',
-				'Accept': 'application/json'
-			}
-		});
-		let body = await response.json();
-		if (body.embed)
-			return message.reply({ embeds: [body.embed] });
-		else if (body.text)
-			return message.reply(body.text);
-	} catch (e) {
-		return message.reply('There was an error processing the request');
-	}
-}
-
 //get forum groups from forum database
 function getForumGroups() {
 	var promise = new Promise(function(resolve, reject) {
@@ -3872,12 +3846,6 @@ commands = {
 		args: ["[@mention]"],
 		helpText: "List subscribable roles. Use @mention to show assignable roles for someone else (requires Moderator permissions)",
 		callback: commandSub
-	},
-	tracker: {
-		minPermission: PERM_MEMBER,
-		args: "<query>",
-		helpText: "Clan Tracker Integration",
-		callback: commandTracker
 	},
 	mute: {
 		minPermission: PERM_MOD,
