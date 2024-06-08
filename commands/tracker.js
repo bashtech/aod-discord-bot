@@ -3,7 +3,6 @@
 const {
 	SlashCommandBuilder,
 } = require('discord.js');
-const config = require("../config/aod-discord-bot.config.json");
 
 module.exports = {
 	data: new SlashCommandBuilder()

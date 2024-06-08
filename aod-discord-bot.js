@@ -190,7 +190,7 @@ var mysqlConnection = null;
 function connectToDB() {
 	if (mysqlConnection !== null && mysqlConnection.state !== 'disconnected')
 		return mysqlConnection;
-	mysqlConnection = mysql.createConnection(config.mysql);
+	mysqlConnection = mysql.createConnection(config.mysql.config);
 	mysqlConnection.connect(error => {
 		if (error)
 			console.log(error);
@@ -944,6 +944,45 @@ function commandReminder(message, member, cmd, args, guild, perm, isDM) {
 	}
 }
 
+function getLoginToken(member) {
+	let promise = new Promise(function(resolve, reject) {
+		let db = connectToDB();
+		let currEpoch = ((new Date()).getTime()) / 1000;
+		let validEpoch = currEpoch - 15 * 60; //15 minutes
+
+		let query =
+			`SELECT token, create_time ` +
+			`FROM ${config.mysql.discordPrefix}discord_login_tokens ` +
+			`WHERE used = 0 AND create_time > ${validEpoch} ` +
+			`  AND discord_id="${member.id}"`;
+		db.query(query, function(err, rows, fields) {
+			if (err) {
+				console.log(err);
+				return reject();
+			}
+			if (rows.length)
+				return resolve(rows[0].token);
+			//no existing token
+			let token = md5(currEpoch + member.id + Math.random().toString());
+			let tag = db.escape(convertDiscordTag(member.user.tag));
+			query =
+				`INSERT INTO ${config.mysql.discordPrefix}discord_login_tokens ` +
+				`  (token, create_time, discord_tag, discord_id, used) ` +
+				`VALUES ` +
+				`  ("${token}",${currEpoch},${tag},"${member.user.id}",0)`;
+			db.query(query, function(err, results, fields) {
+				if (err) {
+					console.log(err);
+					return reject();
+				}
+				resolve(token);
+			});
+		});
+	});
+	return promise;
+}
+global.getLoginToken = getLoginToken;
+
 var loginErrorsByUserID = [];
 async function userLogin(message, member, guild, username, password) {
 	//check for failed login attempts
@@ -963,20 +1002,20 @@ async function userLogin(message, member, guild, username, password) {
 		}
 	}
 
-	var promise = new Promise(function(resolve, reject) {
+	let promise = new Promise(function(resolve, reject) {
 		let db = connectToDB();
 		let password_md5 = db.escape(md5(password));
 		let esc_username = db.escape(username);
 		let query = `CALL check_user(${esc_username},${password_md5})`;
-		db.query(query, async function(err, rows, fields) {
-			var success = false;
+		db.query(query, async function(err, results, fields) {
+			let success = false;
 			if (!err) {
 				//rows[i].userid
 				//rows[i].username
 				//rows[i].valid
 				//should never be more than 1 user...
-				if (rows && rows.length && rows[0][0]) {
-					let data = rows[0][0];
+				if (results && results.length && results[0].length) {
+					let data = results[0][0];
 					if (data && data.valid == 1) {
 						success = true;
 						let tag = db.escape(convertDiscordTag(member.user.tag));
@@ -2855,11 +2894,16 @@ function getForumInfoForMember(member) {
 		let userData = [];
 		let db = connectToDB();
 		let query =
-			`SELECT u.userid,u.username,f.field13,f.field11,f.field14,g.title ` +
+			`SELECT u.userid,u.username,f.field13,f.field11,f.field14,f.field19,f.field20,g.title ` +
 			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
-			`INNER JOIN ${config.mysql.prefix}usergroup AS g ON u.usergroupid=g.usergroupid ` +
-			`WHERE f.field20 like "${member.id}" `;
+			`INNER JOIN ${config.mysql.prefix}usergroup AS g ON u.usergroupid=g.usergroupid `;
+		if (typeof(msg) === 'object') {
+			query += `WHERE f.field20 LIKE "${member.id}" `;
+		} else {
+			let username = db.escape(member);
+			query += `WHERE u.username LIKE "${username}" `;
+		}
 		let queryError = false;
 		db.query(query)
 			.on('error', function(err) {
@@ -2873,7 +2917,9 @@ function getForumInfoForMember(member) {
 					division: row.field13,
 					rank: row.field11,
 					loaStatus: row.field14,
-					forumGroup: row.title
+					forumGroup: row.title,
+					discordtag: row.field19,
+					discordid: row.field20
 				});
 			})
 			.on('end', function(err) {
@@ -4233,7 +4279,7 @@ function logInteraction(command, interaction) {
 	}
 
 	cmd = '["' + cmd.join('" > "') + '"]';
-	options = command.noOptionsLog === true ? '' : ' options:[' + options.join(', ') + ']';
+	options = command.logOptions === false ? '' : ' options:[' + options.join(', ') + ']';
 	console.log(`${getNameFromMessage(interaction)} executed: cmd:${cmd}${options}`);
 }
 

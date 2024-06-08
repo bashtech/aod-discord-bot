@@ -10,9 +10,11 @@ module.exports = {
 		.addStringOption(option => option.setName('password').setDescription('ClanAOD.net Forum Password').setRequired(true)),
 	global: true,
 	help: true,
+	logOptions: false,
 	async execute(interaction, guild, member, perm) {
 		let username = interaction.options.getString('username');
 		let password = interaction.options.getString('password');
+		await interaction.deferReply({ ephemeral: true });
 		return global.userLogin(interaction, member, guild, username, password);
 	},
 };
