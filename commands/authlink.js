@@ -1,6 +1,6 @@
 /* jshint esversion: 11 */
 
-const { 
+const {
 	SlashCommandBuilder,
 	ActionRowBuilder,
 	ButtonBuilder,
@@ -10,7 +10,7 @@ const {
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('authlink')
-		.setDescription('Generate a URL to associate your Discord to the ClanAOD.net Forums'),
+		.setDescription('Generate a URL to associate your Discord user to the ClanAOD.net Forums'),
 	global: true,
 	help: true,
 	checkPerm(perm, commandName, parentName) {
@@ -31,7 +31,7 @@ module.exports = {
 					title: 'ClanAOD.net Login',
 					description: 'Click the button below to associate your Discord user to your ClanAOD.net forum account. The link is valid for 15 minutes.',
 					thumbnail: {
-						url: interaction.client.user.avatarURL({extension: 'png'})
+						url: interaction.client.user.avatarURL({ extension: 'png' })
 					}
 				}],
 				components: [row]

@@ -4302,8 +4302,8 @@ function sortAndLimitOptions(options, len, search) {
 global.sortAndLimitOptions = sortAndLimitOptions;
 
 //Slash Command Processing
-function loadSlashCommands() {
-	let promise = new Promise(function(resolve, reject) {
+function loadSlashCommands(guild) {
+	let promise = new Promise(async function(resolve, reject) {
 		try {
 			if (client.commands) {
 				delete client.commands;
@@ -4326,11 +4326,18 @@ function loadSlashCommands() {
 					});
 				}
 			}
+
+			if (guild)
+				await guild.commands.fetch().catch(console.log);
+			if (client.isReady())
+				await client.application.commands.fetch().catch(console.log);
+
 			console.log("Slash commands installed");
+			resolve();
 		} catch (error) {
 			console.log(error);
+			reject();
 		}
-		resolve();
 	});
 	return promise;
 }
@@ -4585,8 +4592,11 @@ function setRolesForMember(member, reason) {
 	let promise = new Promise(function(resolve, reject) {
 		getForumGroupsForMember(member)
 			.then(async function(data) {
+				let authCommand = client.application.commands.cache.find(c => c.name === 'authlink');
+				let helpCommand = client.application.commands.cache.find(c => c.name === 'help');
+
 				if (data === undefined || data.groups.length === 0) {
-					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`/login\` to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
+					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use </authlink:${authCommand.id}> to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
 					resolve();
 					return;
 				}
@@ -4616,7 +4626,7 @@ function setRolesForMember(member, reason) {
 						return;
 					}
 				} else if (!existingRoles.length) {
-					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use \`/login\` to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
+					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use </authlink:${authCommand.id}> to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
 					resolve();
 					return;
 				}
@@ -4627,7 +4637,7 @@ function setRolesForMember(member, reason) {
 					} catch (error) {}
 				}
 				let roles = existingRoles.concat(rolesToAdd);
-				await member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use \`/help\` to see available commands.`).catch(() => {});
+				await member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use </help:${helpCommand.id}> to see available commands.`).catch(() => {});
 				resolve();
 			})
 			.catch(error => {
@@ -4750,18 +4760,16 @@ client.on('channelDelete', (channel) => {
 });
 
 //ready handler
-client.on("ready", async function() {
+client.on('ready', async function() {
 	//remove any empty temp channels
 	const guild = client.guilds.resolve(config.guildId);
 	console.log(`Bot has started, with ${client.users.cache.size} users, in ${client.channels.cache.size} channels of ${client.guilds.cache.size} guilds.`);
 
-	await guild.members.fetch()
-		.catch(error => { console.log(error); });
-	await guild.roles.fetch()
-		.catch(error => { console.log(error); });
-	await guild.commands.fetch()
-		.catch(error => { console.log(error); });
-	console.log(`Member fetch complete`);
+	await guild.members.fetch().catch(console.log);
+	await guild.roles.fetch().catch(console.log);
+	await guild.commands.fetch().catch(console.log);
+	await client.application.commands.fetch().catch(console.log);
+	console.log(`Data fetch complete`);
 
 	const tempChannelCategory = guild.channels.cache.find(c => { return c.name === config.tempChannelCategory; });
 	if (tempChannelCategory && tempChannelCategory.children && tempChannelCategory.children.size) {

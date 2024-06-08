@@ -89,7 +89,7 @@ module.exports = {
 			case 'reload-slash-commands': {
 				console.log(`Bot reload slash commands requested by ${getNameFromMessage(interaction)}`);
 				await global.messageReply(interaction, 'Reloading slash command files...');
-				setTimeout(global.loadSlashCommands, 10);
+				setTimeout(global.loadSlashCommands, 10, guild);
 				return Promise.resolve();
 			}
 			case 'reload-api': {
