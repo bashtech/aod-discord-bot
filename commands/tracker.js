@@ -17,7 +17,7 @@ module.exports = {
 			.addSubcommand(command => command.setName('teamspeak').setDescription('Search for members in AOD Tracker by TeamSpeak unique ID')
 				.addStringOption(option => option.setName('unique-id').setDescription('TeamSpeak Unique ID').setRequired(true))))
 		.addSubcommand(command => command.setName('division').setDescription('Query basic division information')
-			.addStringOption(option => option.setName('abbreviation').setDescription('Division Abbreviation').setRequired(true))),
+			.addStringOption(option => option.setName('name').setDescription('Division name or abbreviation').setRequired(true))),
 	help: true,
 	checkPerm(perm, commandName, parentName) {
 		if (parentName === 'search') {
@@ -48,7 +48,7 @@ module.exports = {
 			switch (subCommand) {
 				case 'division': {
 					trackerCommand = 'division';
-					value = interaction.options.getString('abbreviation');
+					value = interaction.options.getString('name');
 					break;
 				}
 			}
