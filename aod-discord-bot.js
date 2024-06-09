@@ -430,6 +430,31 @@ function getPermissionLevelForMember(member) {
 }
 global.getPermissionLevelForMember = getPermissionLevelForMember;
 
+function getPermissionLevelForRole(role) {
+	let perm = PERM_GUEST;
+	if (role.permissions.bitfield & BigInt(0x00000008))
+		perm = PERM_OWNER;
+	else {
+		if (config.adminRoles.includes(role.name))
+			perm = PERM_ADMIN;
+		else if (config.staffRoles.includes(role.name))
+			perm = PERM_STAFF;
+		else if (config.divisionCommandRoles.includes(role.name))
+			perm = PERM_DIVISION_COMMANDER;
+		else if (config.modRoles.includes(role.name))
+			perm = PERM_MOD;
+		else if (role.name.endsWith('Officer') ||
+			config.recruiterRoles.includes(role.name))
+			perm = PERM_RECRUITER;
+		else if (role.name == config.memberRole)
+			perm = PERM_MEMBER;
+		else if (role.name == config.guestRole)
+			perm = PERM_GUEST;
+	}
+	return perm;
+}
+global.getPermissionLevelForRole = getPermissionLevelForRole;
+
 //add view to the permissions list of a role in the server
 function addRoleToPermissions(guild, role, permissions, allow, deny) {
 	if (!role)
@@ -2087,8 +2112,7 @@ function getMemberTag(m) {
 	return m.user.tag;
 }
 
-function auditDependentRole(guild, dependentRole, requiredRole) {
-	//console.log(`Auditing ${dependentRole.name}`);
+async function auditDependentRole(guild, message, dependentRole, requiredRole) {
 	let toRemove;
 	let toAdd;
 	if (requiredRole) {
@@ -2102,7 +2126,6 @@ function auditDependentRole(guild, dependentRole, requiredRole) {
 			for (let i = 0; i < requiredRoleIds.length; i++) {
 				let requiredRole = guild.roles.resolve(requiredRoleIds[i]);
 				if (requiredRole) {
-					//console.log(`-- checking ${requiredRole.name}`);
 					if (sharedMembers) {
 						sharedMembers = requiredRole.members.intersect(sharedMembers);
 					} else {
@@ -2115,86 +2138,214 @@ function auditDependentRole(guild, dependentRole, requiredRole) {
 			//Collection.difference returns elements from both sets; use filter instead
 			toRemove = dependentRole.members.filter(m => { return !sharedMembers.has(m); });
 			toAdd = sharedMembers.filter(m => { return !dependentRole.members.has(m); });
-			console.log([dependentRole.name, sharedMembers.map(getMemberTag), toRemove.map(getMemberTag), toAdd.map(getMemberTag)]);
 		}
 	}
-	if (toRemove) {
+	if (toRemove && toRemove.size) {
+		let msg;
 		toRemove.each(m => {
 			m.roles.remove(dependentRole);
+			if (!msg)
+				msg = m.user.tag;
+			else
+				msg += `, ${m.user.tag}`;
 		});
+		msg = `Removed ${toRemove.size} members from ${dependentRole}: ` + msg;
+		await ephemeralReply(message, truncateStr(msg, 2000));
 	}
-	if (toAdd) {
+	if (toAdd && toAdd.size) {
+		let msg;
 		toAdd.each(m => {
 			m.roles.add(dependentRole);
+			if (!msg)
+				msg = m.user.tag;
+			else
+				msg += `, ${m.user.tag}`;
 		});
+		msg = `Added ${toRemove.size} members to ${dependentRole}: ` + msg;
+		await ephemeralReply(message, truncateStr(msg, 2000));
 	}
 }
 
-function auditDependentRoles(guild) {
+function auditDependentRoles(guild, message) {
+	let promise = new Promise(async function(resolve, reject) {
+		for (var dependentRoleId in dependentRoles.requires) {
+			if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
+				let dependentRole = guild.roles.resolve(dependentRoleId);
+				if (dependentRole) {
+					auditDependentRole(guild, message, dependentRole);
+				}
+			}
+		}
+		resolve();
+	});
+	return promise;
+}
+global.auditDependentRoles = auditDependentRoles;
+
+function setDependentRole(guild, message, dependentRole, requiredRole, skipVerifyMembers) {
+	let promise = new Promise(async function(resolve, reject) {
+		let dependentRoleId = '' + dependentRole.id;
+		let requiredRoleId = '' + requiredRole.id;
+		let requiredRoleAdded = false;
+
+		if (dependentRoles.requires[dependentRoleId] === undefined) {
+			dependentRoles.requires[dependentRoleId] = [requiredRoleId];
+			requiredRoleAdded = true;
+		} else {
+			if (!dependentRoles.requires[dependentRoleId].includes(requiredRoleId)) {
+				dependentRoles.requires[dependentRoleId].push(requiredRoleId);
+				requiredRoleAdded = true;
+			}
+		}
+
+		if (dependentRoles.requiredFor[requiredRoleId] === undefined) {
+			dependentRoles.requiredFor[requiredRoleId] = [dependentRoleId];
+		} else {
+			if (!dependentRoles.requiredFor[requiredRoleId].includes(dependentRoleId)) {
+				dependentRoles.requiredFor[requiredRoleId].push(dependentRoleId);
+			}
+		}
+
+		fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
+
+		if (requiredRoleAdded && !skipVerifyMembers) {
+			auditDependentRole(guild, message, dependentRole, requiredRole);
+		}
+
+		if (message) {
+			if (requiredRoleAdded)
+				await ephemeralReply(message, `${requiredRole} added as required for ${dependentRole}`);
+			else
+				await ephemeralReply(message, `${requiredRole} already required for ${dependentRole}`);
+		}
+
+		resolve();
+	});
+	return promise;
+}
+global.setDependentRole = setDependentRole;
+
+function unsetDependentRole(guild, message, dependentRole, requiredRole) {
+	let promise = new Promise(async function(resolve, reject) {
+		let dependentRoleId = '' + dependentRole.id;
+		let requiredRoleId = '' + requiredRole.id;
+		let requiredRoleRemoved = false;
+
+		if (dependentRoles.requires[dependentRoleId] !== undefined) {
+			let index = dependentRoles.requires[dependentRoleId].indexOf(requiredRoleId);
+			if (index >= 0) {
+				dependentRoles.requires[dependentRoleId].splice(index, 1);
+				requiredRoleRemoved = true;
+			}
+			if (dependentRoles.requires[dependentRoleId].length == 0) {
+				delete dependentRoles.requires[dependentRoleId];
+			}
+		}
+
+		if (dependentRoles.requiredFor[requiredRoleId] !== undefined) {
+			let index = dependentRoles.requiredFor[requiredRoleId].includes(dependentRoleId);
+			if (index >= 0) {
+				dependentRoles.requiredFor[requiredRoleId].splice(index, 1);
+			}
+			if (dependentRoles.requiredFor[requiredRoleId].length == 0) {
+				delete dependentRoles.requiredFor[requiredRoleId];
+			}
+		}
+
+		fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
+
+		if (message) {
+			if (requiredRoleRemoved)
+				await ephemeralReply(message, `${requiredRole} removed as required for ${dependentRole}`);
+			else
+				await ephemeralReply(message, `${requiredRole} not required for ${dependentRole}`);
+		}
+
+		resolve();
+	});
+	return promise;
+}
+global.unsetDependentRole = unsetDependentRole;
+
+function pruneDependentRoles(guild, message) {
+	let promise = new Promise(async function(resolve, reject) {
+		let doWrite = false;
+		for (var dependentRoleId in dependentRoles.requires) {
+			if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
+				let dependentRole = guild.roles.resolve(dependentRoleId);
+				if (!dependentRole) {
+					doWrite = true;
+					let requiredRoleIds = dependentRoles.requires[dependentRoleId];
+					for (let i = 0; i < requiredRoleIds.length; i++) {
+						let requiredRoleId = requiredRoleIds[i];
+						let index = dependentRoles.requiredFor[requiredRoleId].indexOf(dependentRoleId);
+						if (index >= 0) {
+							dependentRoles.requiredFor[requiredRoleId].splice(index, 1);
+						}
+						if (dependentRoles.requiredFor[requiredRoleId].length == 0) {
+							delete dependentRoles.requiredFor[requiredRoleId];
+						}
+					}
+					delete dependentRoles.requires[dependentRoleId];
+				}
+			}
+		}
+		for (var requiredRoleId in dependentRoles.requiredFor) {
+			if (dependentRoles.requiredFor.hasOwnProperty(requiredRoleId)) {
+				let requiredRole = guild.roles.resolve(requiredRoleId);
+				if (!requiredRole) {
+					doWrite = true;
+					let dependentRoleIds = dependentRoles.requiredFor[requiredRoleId];
+					for (let i = 0; i < dependentRoleIds.length; i++) {
+						let dependentRoleId = dependentRoleIds[i];
+						let index = dependentRoles.requires[dependentRoleId].indexOf(requiredRoleId);
+						if (index >= 0) {
+							dependentRoles.requires[dependentRoleId].splice(index, 1);
+						}
+						if (dependentRoles.requires[dependentRoleId].length == 0) {
+							delete dependentRoles.requires[dependentRoleId];
+						}
+					}
+					delete dependentRoles.requiredFor[requiredRoleId];
+				}
+			}
+		}
+		if (doWrite) {
+			fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
+		}
+		resolve();
+	});
+	return promise;
+}
+global.pruneDependentRoles = pruneDependentRoles;
+
+function listDependentRoles(guild, message) {
+	let embed = {
+		title: "Dependent Roles",
+		fields: []
+	};
+
 	for (var dependentRoleId in dependentRoles.requires) {
 		if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
 			let dependentRole = guild.roles.resolve(dependentRoleId);
 			if (dependentRole) {
-				auditDependentRole(guild, dependentRole);
+				let requiredRoles = dependentRoles.requires[dependentRoleId];
+				let requiredRoleNames = [];
+				for (let i = 0; i < requiredRoles.length; i++) {
+					let requiredRoleId = requiredRoles[i];
+					let requiredRole = guild.roles.resolve(requiredRoleId);
+					if (requiredRole)
+						requiredRoleNames.push(requiredRole.name);
+				}
+
+				let field = { name: dependentRole.name, value: requiredRoleNames.length ? requiredRoleNames.join("\n") : "*None*" };
+				embed.fields.push(field);
 			}
 		}
 	}
+	return ephemeralReply(message, { embeds: [embed] });
 }
-
-function setDependentRole(guild, dependentRole, requiredRole, skipVerifyMembers) {
-	let dependentRoleId = '' + dependentRole.id;
-	let requiredRoleId = '' + requiredRole.id;
-	let verifyMembers = false;
-
-	if (dependentRoles.requires[dependentRoleId] === undefined) {
-		dependentRoles.requires[dependentRoleId] = [requiredRoleId];
-		verifyMembers = true;
-	} else {
-		if (!dependentRoles.requires[dependentRoleId].includes(requiredRoleId)) {
-			dependentRoles.requires[dependentRoleId].push(requiredRoleId);
-			verifyMembers = true;
-		}
-	}
-
-	if (dependentRoles.requiredFor[requiredRoleId] === undefined) {
-		dependentRoles.requiredFor[requiredRoleId] = [dependentRoleId];
-	} else {
-		if (!dependentRoles.requiredFor[requiredRoleId].includes(dependentRoleId)) {
-			dependentRoles.requiredFor[requiredRoleId].push(dependentRoleId);
-		}
-	}
-
-	fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
-
-	if (verifyMembers && !skipVerifyMembers) {
-		auditDependentRole(dependentRole, requiredRole);
-	}
-}
-
-async function unsetDependentRole(guild, dependentRole, requiredRole) {
-	let dependentRoleId = '' + dependentRole.id;
-	let requiredRoleId = '' + requiredRole.id;
-
-	if (dependentRoles.requires[dependentRoleId] !== undefined) {
-		if (dependentRoles.requires[dependentRoleId].includes(requiredRoleId)) {
-			delete dependentRoles.requires[dependentRoleId][requiredRoleId];
-		}
-		if (dependentRoles.requires[dependentRoleId].length == 0) {
-			delete dependentRoles.requires[dependentRoleId];
-		}
-	}
-
-	if (dependentRoles.requiredFor[requiredRoleId] !== undefined) {
-		if (dependentRoles.requiredFor[requiredRoleId].includes(dependentRoleId)) {
-			delete dependentRoles.requiredFor[requiredRoleId][dependentRoleId];
-		}
-		if (dependentRoles.requiredFor[requiredRoleId].length == 0) {
-			delete dependentRoles.requiredFor[requiredRoleId];
-		}
-	}
-
-	fs.writeFileSync(config.dependentRoles, JSON.stringify(dependentRoles), 'utf8');
-}
+global.listDependentRoles = listDependentRoles;
 
 //subrole command processing
 async function commandDependentRoles(message, member, cmd, args, guild, perm, isDM) {
@@ -2219,10 +2370,10 @@ async function commandDependentRoles(message, member, cmd, args, guild, perm, is
 				return message.reply(`Role ${requiredRoleName} not found`);
 
 			if (subcmd === 'set') {
-				setDependentRole(guild, dependentRole, requiredRole, false);
+				await setDependentRole(guild, message, dependentRole, requiredRole, false);
 				return message.reply(`Added required role ${requiredRoleName} to dependent role ${dependentRoleName}`);
 			} else {
-				unsetDependentRole(guild, dependentRole, requiredRole, false);
+				await unsetDependentRole(guild, message, dependentRole, requiredRole, false);
 				return message.reply(`Removed required role ${requiredRoleName} from dependent role ${dependentRoleName}`);
 			}
 			break;
@@ -2258,7 +2409,7 @@ async function commandDependentRoles(message, member, cmd, args, guild, perm, is
 			return message.reply('Not implemented');
 		}
 		case 'audit': {
-			auditDependentRoles(guild);
+			auditDependentRoles(guild, message);
 			break;
 		}
 		default: {
@@ -2507,8 +2658,8 @@ function getFieldsFromArray(arr, fieldName) {
 function setDiscordIDForForumUser(forumUser, guildMember) {
 	if (forumUser.discordid == guildMember.user.id)
 		return;
-	console.log(`Updating Discord ID for ${forumUser.name} (${forumUser.id}) Discord Tag ${guildMember.user.tag} from '${forumUser.discordid}' to '${guildMember.user.id}'`);
 	if (config.devMode !== true) {
+		console.log(`Updating Discord ID for ${forumUser.name} (${forumUser.id}) Discord Tag ${guildMember.user.tag} from '${forumUser.discordid}' to '${guildMember.user.id}'`);
 		let db = connectToDB();
 		//let tag = db.escape(convertDiscordTag(guildMember.user.tag));
 		let query = `UPDATE ${config.mysql.prefix}userfield SET field20="${guildMember.user.id}" WHERE userid=${forumUser.id}`;
@@ -2525,8 +2676,8 @@ function setDiscordTagForForumUser(forumUser, guildMember) {
 		forumUser.indexIsId = true;
 		setDiscordIDForForumUser(forumUser, guildMember);
 	}
-	console.log(`Updating Discord Tag for ${forumUser.name} (${forumUser.id}) Discord ID ${guildMember.user.id} from '${forumUser.discordtag}' to '${guildMember.user.tag}'`);
 	if (config.devMode !== true) {
+		console.log(`Updating Discord Tag for ${forumUser.name} (${forumUser.id}) Discord ID ${guildMember.user.id} from '${forumUser.discordtag}' to '${guildMember.user.tag}'`);
 		let db = connectToDB();
 		let tag = db.escape(convertDiscordTag(guildMember.user.tag));
 		let query = `UPDATE ${config.mysql.prefix}userfield SET field19=${tag} WHERE field20="${guildMember.user.id}" AND userid=${forumUser.id}`;
@@ -2538,8 +2689,8 @@ function setDiscordTagForForumUser(forumUser, guildMember) {
 function setDiscordStatusForForumUser(forumUser, status) {
 	if (forumUser.discordstatus === status)
 		return;
-	console.log(`Updating Discord Status for ${forumUser.name} (${forumUser.id}) from '${forumUser.discordstatus}' to '${status}'`);
 	if (config.devMode !== true) {
+		console.log(`Updating Discord Status for ${forumUser.name} (${forumUser.id}) from '${forumUser.discordstatus}' to '${status}'`);
 		let db = connectToDB();
 		let query = `UPDATE ${config.mysql.prefix}userfield SET field24='${status}' WHERE userid=${forumUser.id}`;
 		db.query(query, function(err, rows, fields) {});
@@ -2562,8 +2713,8 @@ function setDiscordActivityForForumUser(forumUser, activityEpochMs) {
 }
 
 function clearDiscordDataForForumUser(forumUser) {
-	console.log(`Clearing Discord data for ${forumUser.name} (${forumUser.id})`);
 	if (config.devMode !== true) {
+		console.log(`Clearing Discord data for ${forumUser.name} (${forumUser.id})`);
 		let db = connectToDB();
 		let query = `UPDATE ${config.mysql.prefix}userfield SET field19='', field20='', field23='', field24='' WHERE userid=${forumUser.id}`;
 		db.query(query, function(err, rows, fields) {});

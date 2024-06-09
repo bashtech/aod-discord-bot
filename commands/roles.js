@@ -49,10 +49,20 @@ module.exports = {
 				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true).setRequired(true))
 				.addStringOption(option => option.setName('text').setDescription('Descriptive Message'))
 				.addStringOption(option => option.setName('emoji').setDescription('Button Emoji'))
-				.addChannelOption(option => option.setName('channel').setDescription('Channel to send the button to')))),
+				.addChannelOption(option => option.setName('channel').setDescription('Channel to send the button to'))))
+		.addSubcommandGroup(command => command.setName('dependencies').setDescription('Manage role dependencies')
+			.addSubcommand(command => command.setName('add').setDescription('Add a role dependency')
+				.addRoleOption(option => option.setName('dependent-role').setDescription('Dependent Role').setRequired(true))
+				.addRoleOption(option => option.setName('required-role').setDescription('Required Role').setRequired(true)))
+			.addSubcommand(command => command.setName('delete').setDescription('Delete a role dependency')
+				.addRoleOption(option => option.setName('dependent-role').setDescription('Dependent Role').setRequired(true))
+				.addRoleOption(option => option.setName('required-role').setDescription('Required Role').setRequired(true)))
+			.addSubcommand(command => command.setName('list').setDescription('List Dependent Roles'))
+			.addSubcommand(command => command.setName('audit').setDescription('Audit members of Dependent Roles'))
+			.addSubcommand(command => command.setName('prune').setDescription('Prune Roles that have been manually removed'))),
 	help: true,
 	checkPerm(perm, commandName, parentName) {
-		if (parentName === 'manage')
+		if (parentName === 'manage' || parentName === 'dependencies')
 			return perm >= global.PERM_STAFF;
 		switch (commandName) {
 			case 'roles':
@@ -192,17 +202,17 @@ module.exports = {
 					let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 					let role = guild.roles.cache.find(r => { return r.name == roleName; });
 					if (!role || !global.isManageableRole(role)) {
-						return interaction.reply({ content: `Invalid role.`, ephemeral: true });
+						return global.ephemeralReply(interaction, 'Invalid role.');
 					}
 					let managedRoles = global.getUserRoles(false);
 					if (!managedRoles.includes(role.name)) {
-						return interaction.reply({ content: `Invalid role.`, ephemeral: true });
+						return global.ephemeralReply(interaction, 'Invalid role.');
 					}
 
 					if (emoji) {
 						emoji = interaction.client.emojis.resolveIdentifier(emoji);
 						if (!emoji) {
-							return interaction.reply({ content: `Invalid emoji.`, ephemeral: true });
+							return global.ephemeralReply(interaction, 'Invalid emoji.');
 						}
 					}
 
@@ -224,35 +234,60 @@ module.exports = {
 					});
 				}
 			}
+		} else if (commandGroup === 'dependencies') {
+			await interaction.deferReply({ ephemeral: true });
+			switch (subCommand) {
+				case 'add': {
+					let dependentRole = interaction.options.getRole('dependent-role');
+					let requiredRole = interaction.options.getRole('required-role');
+					if (perm < global.PERM_ADMIN) {
+						if (global.getPermissionLevelForRole(dependentRole) > global.PERM_MEMBER) {
+							return global.ephemeralReply(interaction, `You do not have permissions to add dependencies to ${dependentRole}`);
+						}
+					}
+					return global.setDependentRole(guild, interaction, dependentRole, requiredRole, false);
+				}
+				case 'delete': {
+					let dependentRole = interaction.options.getRole('dependent-role');
+					let requiredRole = interaction.options.getRole('required-role');
+					return global.unsetDependentRole(guild, interaction, dependentRole, requiredRole, false);
+				}
+				case 'list': {
+					return global.listDependentRoles(guild, interaction);
+				}
+				case 'prune': {
+					return global.pruneDependentRoles(guild, interaction);
+				}
+			}
 		}
 		return Promise.reject();
 	},
 	async button(interaction, guild, member, perm) {
 		let args = interaction.customId.split('::');
 		if (args.length < 4) {
-			return interaction.reply({ content: `Invalid request.`, ephemeral: true });
+			return global.ephemeralReply(interaction, 'Invalid request.');
 		}
 		let type = args[2];
 		let data = args[3];
 		let role = guild.roles.resolve(data);
 		if (!role || !global.isManageableRole(role)) {
-			return interaction.reply({ content: `Invalid role.`, ephemeral: true });
+			return global.ephemeralReply(interaction, 'Invalid role.');
 		}
 		switch (type) {
 			case 'get_role': {
 				if (member.roles.resolve(data))
-					return interaction.reply({ content: `${role.name} already assigned.`, ephemeral: true });
+					return global.ephemeralReply(interaction, `${role.name} already assigned.`);
 				await interaction.deferReply({ ephemeral: true });
 				return addRemoveRole(interaction, guild, true, role, member);
 			}
 			case 'remove_role': {
 				if (!member.roles.resolve(data))
-					return interaction.reply({ content: `${role.name} not assigned.`, ephemeral: true });
+					return global.ephemeralReply(interaction, `${role.name} not assigned.`);
 				await interaction.deferReply({ ephemeral: true });
 				return addRemoveRole(interaction, guild, false, role, member);
 			}
 			default:
-				return interaction.reply({ content: `Invalid request.`, ephemeral: true });
+				return global.ephemeralReply(interaction, 'Invalid request.');
 		}
 		return Promise.reject();
 	}

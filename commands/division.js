@@ -67,10 +67,10 @@ module.exports = {
 	},
 	async execute(interaction, guild, member, perm) {
 		const subCommand = interaction.options.getSubcommand();
+		await interaction.deferReply({ ephemeral: true });
 		switch (subCommand) {
 			case 'add': {
 				let name = interaction.options.getString('name');
-				await interaction.deferReply({ ephemeral: true });
 				return global.addDivision(interaction, member, perm, guild, name);
 			}
 			case 'delete': {
@@ -86,7 +86,7 @@ module.exports = {
 					.setStyle(ButtonStyle.Secondary);
 				const row = new ActionRowBuilder()
 					.addComponents(cancel, confirm);
-				const response = await interaction.reply({
+				const response = await interaction.editReply({
 					content: `Are you sure you want to delete the ${name} division?`,
 					components: [row],
 					ephemeral: true
@@ -114,8 +114,6 @@ module.exports = {
 			}
 			case 'info': {
 				let name = interaction.options.getString('name');
-
-				await interaction.deferReply({ ephemeral: true });
 				let divisions = await global.getDivisionsFromTracker();
 				let divisionData = divisions[name];
 				if (typeof(divisionData) === 'undefined') {
@@ -163,7 +161,6 @@ module.exports = {
 					return global.ephemeralReply(interaction, `${name} is a protected category`);
 				}
 
-				await interaction.deferReply({ ephemeral: true });
 				let divisions = await global.getDivisionsFromTracker();
 				let divisionData = divisions[name];
 				if (typeof(divisionData) !== 'undefined') {
@@ -202,7 +199,6 @@ module.exports = {
 				let name = interaction.options.getString('name');
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 
-				await interaction.deferReply({ ephemeral: true });
 				let divisions = await global.getDivisionsFromTracker();
 				let divisionData = divisions[name];
 				if (typeof(divisionData) === 'undefined') {
