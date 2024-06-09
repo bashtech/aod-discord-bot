@@ -2590,7 +2590,7 @@ function getForumInfoForMember(member) {
 			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
 			`INNER JOIN ${config.mysql.prefix}usergroup AS g ON u.usergroupid=g.usergroupid `;
-		if (typeof(msg) === 'object') {
+		if (typeof(member) === 'object') {
 			query += `WHERE f.field20 LIKE "${member.id}" `;
 		} else {
 			let username = db.escape(member);
