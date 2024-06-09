@@ -217,11 +217,11 @@ module.exports = {
 					}
 
 					const get_role = new ButtonBuilder()
-						.setCustomId(`::roles::get_role::${role.id}`)
+						.setCustomId(global.getButtonIdString('roles', 'get_role', [role.id]))
 						.setLabel(`Get ${roleName} Role`)
 						.setStyle(ButtonStyle.Primary);
 					const remove_role = new ButtonBuilder()
-						.setCustomId(`::roles::remove_role::${role.id}`)
+						.setCustomId(global.getButtonIdString('roles', 'remove_role', [role.id]))
 						.setLabel(`Remove ${roleName} Role`)
 						.setStyle(ButtonStyle.Secondary);
 					if (emoji)
@@ -262,26 +262,24 @@ module.exports = {
 		}
 		return Promise.reject();
 	},
-	async button(interaction, guild, member, perm) {
-		let args = interaction.customId.split('::');
-		if (args.length < 4) {
+	async button(interaction, guild, member, perm, subCommand, args) {
+		if (args.length < 1) {
 			return global.ephemeralReply(interaction, 'Invalid request.');
 		}
-		let type = args[2];
-		let data = args[3];
-		let role = guild.roles.resolve(data);
+		let roleId = args.shift();
+		let role = guild.roles.resolve(roleId);
 		if (!role || !global.isManageableRole(role)) {
 			return global.ephemeralReply(interaction, 'Invalid role.');
 		}
-		switch (type) {
+		switch (subCommand) {
 			case 'get_role': {
-				if (member.roles.resolve(data))
+				if (member.roles.resolve(roleId))
 					return global.ephemeralReply(interaction, `${role.name} already assigned.`);
 				await interaction.deferReply({ ephemeral: true });
 				return addRemoveRole(interaction, guild, true, role, member);
 			}
 			case 'remove_role': {
-				if (!member.roles.resolve(data))
+				if (!member.roles.resolve(roleId))
 					return global.ephemeralReply(interaction, `${role.name} not assigned.`);
 				await interaction.deferReply({ ephemeral: true });
 				return addRemoveRole(interaction, guild, false, role, member);

@@ -2019,7 +2019,7 @@ async function pruneManagedRoles(message, member, guild) {
 	assignRoles.sort();
 	if (subRoles.length || assignRoles.length)
 		saveRolesConfigFile();
-	return sendReplyToMessageAuthor(message, member, {
+	return ephemeralReply(message, member, {
 		embeds: [{
 			title: "Roles Pruned",
 			fields: [
@@ -3618,6 +3618,11 @@ function logInteraction(command, interaction) {
 	console.log(`${getNameFromMessage(interaction)} executed: cmd:${cmd}${options}`);
 }
 
+function getButtonIdString(command, subCommand, args) {
+	return `::${command}::${subCommand}::` + args.join('::');
+}
+global.getButtonIdString = getButtonIdString;
+
 function sortAndLimitOptions(options, len, search) {
 	let count = 0;
 	return options
@@ -3682,17 +3687,18 @@ loadSlashCommands();
 client.on('interactionCreate', async interaction => {
 	let command;
 	let commandName;
+	let buttonArgs;
 	if (interaction.isButton()) {
 		if (!interaction.customId.startsWith('::')) {
 			//generic buttons handled through collectors
 			return;
 		}
-		let args = interaction.customId.split('::');
-		if (args.length < 3) {
+		buttonArgs = interaction.customId.split('::');
+		if (buttonArgs.length < 3) {
 			return;
 		}
-		args.shift(); //first is empty
-		commandName = args.shift();
+		buttonArgs.shift(); //first is empty
+		commandName = buttonArgs.shift();
 		command = client.commands.get(commandName);
 	} else if (interaction.isContextMenuCommand()) {
 		commandName = client.menuMap[interaction.commandName];
@@ -3774,7 +3780,8 @@ client.on('interactionCreate', async interaction => {
 		}
 		console.log(`${getNameFromMessage(interaction)} executed: button:${interaction.customId}`);
 		try {
-			await command.button(interaction, guild, member, perm);
+			let subCommand = buttonArgs.shift();
+			await command.button(interaction, guild, member, perm, subCommand, buttonArgs);
 			if (!interaction.replied)
 				ephemeralReply(interaction, "Done");
 		} catch (error) {
