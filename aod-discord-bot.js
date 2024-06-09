@@ -2019,7 +2019,7 @@ async function pruneManagedRoles(message, member, guild) {
 	assignRoles.sort();
 	if (subRoles.length || assignRoles.length)
 		saveRolesConfigFile();
-	return ephemeralReply(message, member, {
+	return ephemeralReply(message, {
 		embeds: [{
 			title: "Roles Pruned",
 			fields: [
