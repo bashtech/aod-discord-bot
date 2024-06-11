@@ -3900,30 +3900,45 @@ function getForumGroupsForMember(member) {
 	let promise = new Promise(function(resolve, reject) {
 		let db = connectToDB();
 		let query =
-			`SELECT u.userid,u.username,` +
-			`  IF(f.field19 NOT LIKE "%#%" OR f.field19 LIKE "%#0", LOWER(f.field19), f.field19) AS field19,` +
-			`  f.field20,u.usergroupid,u.membergroupids FROM ${config.mysql.prefix}user AS u ` +
+			`SELECT u.userid,u.username,u.usergroupid,u.membergroupids,` +
+			`  (CASE WHEN (r.requester_id IS NOT NULL) THEN 1 ELSE 0 END) AS pending, t.name AS pending_name ` +
+			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
+			`LEFT JOIN ${config.mysql.trackerPrefix}member_requests AS r ON u.userid=r.member_id AND r.approver_id IS NULL ` +
+			`  AND r.cancelled_at IS NULL AND r.hold_placed_at IS NULL AND r.created_at > (NOW() - INTERVAL 24 HOUR) ` +
+			`LEFT JOIN ${config.mysql.trackerPrefix}members AS t on u.userid=t.clan_id ` +
 			`WHERE f.field20="${member.user.id}" OR f.field19 LIKE "${convertDiscordTag(member.user.tag)}"`;
 		db.query(query, function(err, rows, fields) {
-			if (err)
-				reject(err);
-			else {
+			if (err) {
+				console.log(err);
+				reject('Database error');
+			} else {
 				if (rows === undefined || rows.length === 0) {
 					return resolve();
 				}
 				if (rows.length > 1) { //danger will robinson! name conflict in database
-					member.send("Hello AOD member! There is a conflict with your discord name. Please verify your profile and contact the leadership for help.").catch(() => {});
+					member.send(`Hello ${member.displayName}! There is a conflict with your discord name. Please verify your profile and contact the leadership for help.`).catch(() => {});
 					return reject(`Member name conflict: ${rows.length} members have the discord tag ${member.user.tag}`);
 				}
-
 				let row = rows.shift();
 				let forumGroups = [];
-				if (row.usergroupid !== undefined)
-					forumGroups.push(row.usergroupid);
-				if (row.membergroupids !== undefined)
+				if (row.usergroupid !== undefined) {
+					if (row.pending) {
+						let guestGroupId = forumIntegrationConfig[config.guestRole].forumGroups[0];
+						let memberGroupId = forumIntegrationConfig[config.memberRole].forumGroups[0];
+						//if member is pending, overwrite primary group id to member group id
+						if (row.usergroupid == guestGroupId) {
+							row.usergroupid = memberGroupId;
+						} else {
+							row.pending = false;
+						}
+					}
+					forumGroups.push('' + row.usergroupid);
+				}
+				if (row.membergroupids !== undefined && row.membergroupids !== '') {
 					forumGroups = forumGroups.concat(row.membergroupids.split(','));
-				return resolve({ name: row.username, groups: forumGroups });
+				}
+				return resolve({ name: (row.pending ? `AOD_${row.pending_name}` : row.username), groups: forumGroups, pending: row.pending });
 			}
 		});
 	});
@@ -3938,39 +3953,39 @@ function setRolesForMember(member, reason) {
 				let helpCommand = client.application.commands.cache.find(c => c.name === 'help');
 
 				if (data === undefined || data.groups.length === 0) {
-					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use </authlink:${authCommand.id}> to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
-					resolve();
-					return;
+					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use </authlink:${authCommand.id}> to associate your Discord user to our [Forums](https://www.clanaod.net/forums/).`).catch(() => {});
+					return resolve();
 				}
 
 				let rolesByGroup = getRolesByForumGroup(member.guild);
 				let rolesToAdd = [],
 					existingRoles = [];
-				for (let i in data.groups) {
+				for (let i = 0; i < data.groups.length; i++) {
 					let group = data.groups[i];
 					if (rolesByGroup[group] !== undefined) {
-						for (const roleName of Object.keys(rolesByGroup[group])) {
+						for (let roleName of Object.keys(rolesByGroup[group])) {
 							let role = rolesByGroup[group][roleName];
-							if (role) {
-								if (!member.roles.cache.get(role.id))
-									rolesToAdd.push(role);
-								else
-									existingRoles.push(role);
-							}
+							let hasRole = !!member.roles.cache.get(role.id);
+							if (hasRole)
+								existingRoles.push(role);
+							else
+								rolesToAdd.push(role);
 						}
 					}
 				}
+
 				if (rolesToAdd.length) {
 					try {
 						await member.roles.add(rolesToAdd, reason);
 					} catch (error) {
-						reject();
-						return;
+						console.log(error);
+						return reject();
 					}
+					let added = rolesToAdd.map(r => r.name).join(',');
+					console.log(`Updated ${member.user.tag} (added: ${added}), ${reason}`);
 				} else if (!existingRoles.length) {
-					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use </authlink:${authCommand.id}> to associate your Discord user to our forums (https://www.clanaod.net).`).catch(() => {});
-					resolve();
-					return;
+					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use </authlink:${authCommand.id}> to associate your Discord user to our [Forums](https://www.clanaod.net/forums/).`).catch(() => {});
+					return resolve();
 				}
 
 				if (member.displayName !== data.name) {
