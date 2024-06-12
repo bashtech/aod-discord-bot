@@ -173,7 +173,8 @@ module.exports = {
 					return global.ephemeralReply(interaction, "Channel already exists");
 
 				await interaction.deferReply({ ephemeral: true });
-				return global.addChannel(guild, interaction, member, perm, name, type, level, category, officerRole, role);
+				await global.addChannel(guild, interaction, member, perm, name, type, level, category, officerRole, role);
+				return global.updateOnboarding(guild);
 			}
 			case 'delete': {
 				let channel = interaction.options.getChannel('channel');

@@ -25,7 +25,8 @@ const {
 	Events,
 	ActionRowBuilder,
 	ButtonBuilder,
-	ButtonStyle
+	ButtonStyle,
+	GuildOnboardingPromptType
 } = require('discord.js');
 
 //include node-fetch using esm-hook
@@ -1561,7 +1562,8 @@ const fetchTimeout = (url, ms, { signal, ...options } = {}) => {
 
 var _divisions;
 var _lastDivisionsRefresh;
-async function getDivisionsFromTracker() {
+
+function getDivisionsFromTracker() {
 	let promise = new Promise(async function(resolve, reject) {
 		let now = new Date();
 		if (_divisions && ((now - _lastDivisionsRefresh) < (60 * 1000))) {
@@ -1603,7 +1605,7 @@ async function getDivisionsFromTracker() {
 }
 global.getDivisionsFromTracker = getDivisionsFromTracker;
 
-async function updateTrackerDivisionData(divisionData, data) {
+function updateTrackerDivisionData(divisionData, data) {
 	let promise = new Promise(async function(resolve, reject) {
 		if (config.devMode === true) {
 			resolve();
@@ -1635,6 +1637,68 @@ function updateTrackerDivisionOfficerChannel(divisionData, channel) {
 }
 global.updateTrackerDivisionOfficerChannel = updateTrackerDivisionOfficerChannel;
 
+function updateOnboarding(guild, message) {
+	let promise = new Promise(async function(resolve, reject) {
+		let onboarding = await guild.fetchOnboarding().catch(console.log);
+		let prompts = [];
+		let existingPrompt;
+		if (onboarding) {
+			for (let [id, prompt] of onboarding.prompts) {
+				if (prompt.title == config.onboardingTitle) {
+					existingPrompt = prompt;
+				} else {
+					prompts.push(prompt.toJSON());
+				}
+			}
+		}
+
+		let prompt = {
+			guildId: guild.id,
+			inOnboarding: true,
+			required: false,
+			singleSelect: false,
+			title: config.onboardingTitle,
+			type: GuildOnboardingPromptType.MultipleChoice,
+			options: []
+		};
+		if (existingPrompt) {
+			prompt.id = existingPrompt.id;
+		}
+		await guild.emojis.fetch();
+		let divisions = await getDivisionsFromTracker();
+		for (const divisionName in divisions) {
+			if (divisions.hasOwnProperty(divisionName)) {
+				const division = divisions[divisionName];
+				const lcName = divisionName.toLowerCase();
+				let divisionCategory = guild.channels.cache.find(c => (c.type == ChannelType.GuildCategory && c.name.toLowerCase() == lcName));
+				let divisionRole = guild.roles.cache.find(r => r.name == divisionName);
+				if (divisionCategory && divisionRole) {
+					let emoji = guild.emojis.cache.find(e => e.name == division.abbreviation);
+					let option = {
+						title: divisionName,
+						channels: divisionCategory.children.cache.map(c => c.id),
+						roles: [divisionRole.id],
+						emoji: (emoji ? `<:${emoji.identifier}>` : '')
+					};
+					let existingOption = existingPrompt.options.find(p => p.title == divisionName);
+					if (existingOption) {
+						option.id = existingOption.id;
+					}
+					prompt.options.push(option);
+				}
+			}
+		}
+		prompts.push(prompt);
+		await guild.editOnboarding({ prompts: prompts }).catch(console.log);
+		if (message) {
+			await ephemeralReply(message, "Updated onboarding options");
+		}
+		resolve();
+	});
+	return promise;
+}
+global.updateOnboarding = updateOnboarding;
+
 async function addDivision(message, member, perm, guild, divisionName) {
 	let officerRoleName = divisionName + ' ' + config.discordOfficerSuffix;
 	let memberRoleName = divisionName + ' ' + config.discordMemberSuffix;
@@ -1642,7 +1706,7 @@ async function addDivision(message, member, perm, guild, divisionName) {
 	let lcName = divisionName.toLowerCase();
 	let simpleName = lcName.replace(/\s/g, '-');
 
-	let divisionCategory = guild.channels.cache.find(c => { return (c.name.toLowerCase() == lcName && c.type == ChannelType.GuildCategory); });
+	let divisionCategory = guild.channels.cache.find(c => (c.type == ChannelType.GuildCategory && c.name.toLowerCase() == lcName));
 	if (divisionCategory)
 		return ephemeralReply(message, "Division category already exists.");
 	let divisionOfficerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
@@ -1774,6 +1838,17 @@ async function addDivision(message, member, perm, guild, divisionName) {
 			await updateTrackerDivisionOfficerChannel(divisionData, officersChannel);
 		}
 
+		if (divisionData && divisionData.icon) {
+			await guild.emojis.fetch();
+			let emoji = guild.emojis.cache.find(e => e.name == divisionData.abbreviation);
+			if (!emoji) {
+				await guild.emojis.create({ attachment: divisionData.icon, name: divisionData.abbreviation })
+					.catch(console.log);
+			}
+		}
+
+		await updateOnboarding(guild, message);
+
 		return ephemeralReply(message, `${divisionName} division added`);
 	} catch (error) {
 		console.log(error);
@@ -1873,6 +1948,16 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 	} else {
 		await ephemeralReply(message, `${divisionRoleName} role not found`);
 	}
+
+	if (divisionData) {
+		await guild.emojis.fetch();
+		let emoji = guild.emojis.cache.find(e => e.name == divisionData.abbreviation);
+		if (emoji) {
+			await emoji.delete().catch(console.log);
+		}
+	}
+
+	await updateOnboarding(guild, message);
 }
 global.deleteDivision = deleteDivision;
 

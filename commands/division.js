@@ -25,7 +25,8 @@ module.exports = {
 			.addStringOption(option => option.setName('new-prefix').setDescription('New Prefix (if division name does not match tracker)')))
 		.addSubcommand(command => command.setName('officer-channel').setDescription('Update division channel prefix')
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
-			.addChannelOption(option => option.setName('channel').setDescription('Channel Name'))),
+			.addChannelOption(option => option.setName('channel').setDescription('Channel Name')))
+		.addSubcommand(command => command.setName('update-onboarding').setDescription('Update onboarding')),
 	help: true,
 	checkPerm(perm, commandName) {
 		return perm >= global.PERM_STAFF;
@@ -96,10 +97,15 @@ module.exports = {
 				try {
 					const confirmation = await response.awaitMessageComponent({ filter: filter, time: 10000 });
 					if (confirmation.customId === 'confirm_division_delete') {
-						await global.deleteDivision(interaction, member, perm, guild, name);
 						await confirmation.update({
-							content: `${name} division deleted`,
+							content: `Deleting ${name} division...`,
 							components: []
+						}).catch(() => {});
+						await global.deleteDivision(interaction, member, perm, guild, name);
+						await interaction.followUp({
+							content: `${name} division deleted`,
+							components: [],
+							ephemeral: true
 						}).catch(() => {});
 					} else if (confirmation.customId === 'cancel_division_delete') {
 						await confirmation.update({
@@ -215,6 +221,9 @@ module.exports = {
 				}
 
 				return global.updateTrackerDivisionOfficerChannel(divisionData, channel);
+			}
+			case 'update-onboarding': {
+				return global.updateOnboarding(guild, interaction);
 			}
 		}
 		return Promise.reject();
