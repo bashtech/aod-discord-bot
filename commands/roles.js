@@ -241,7 +241,7 @@ module.exports = {
 					let dependentRole = interaction.options.getRole('dependent-role');
 					let requiredRole = interaction.options.getRole('required-role');
 					if (perm < global.PERM_ADMIN) {
-						if (global.getPermissionLevelForRole(dependentRole) > global.PERM_MEMBER) {
+						if (global.getPermissionLevelForRole(guild, dependentRole) > global.PERM_MEMBER) {
 							return global.ephemeralReply(interaction, `You do not have permissions to add dependencies to ${dependentRole}`);
 						}
 					}

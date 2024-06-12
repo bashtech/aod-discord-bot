@@ -48,7 +48,7 @@ module.exports = {
 
 		if (targetMember) {
 			// Validate caller has permissions to kick/ban target if they are a member of the server
-			let targetPerm = global.getPermissionLevelForMember(targetMember);
+			let targetPerm = global.getPermissionLevelForMember(guild, targetMember);
 			if (!targetMember.kickable || perm <= targetPerm)
 				return global.ephemeralReply(interaction, `You do not have permissions to ${subCommand} ${targetMember}.`);
 		}

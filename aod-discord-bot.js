@@ -404,54 +404,59 @@ function getStringForPermission(perm) {
 global.getStringForPermission = getStringForPermission;
 
 //map roles to permissions based on config
-function getPermissionLevelForMember(member) {
+function getPermissionLevelForMember(guild, member) {
+	if (member.permissions.bitfield & PermissionsBitField.Flags.Administrator) {
+		if (guild.ownerId === member.id || (config.ownerIds && config.ownerIds[member.id]))
+			return PERM_OWNER;
+		return PERM_ADMIN;
+	}
+	//if (member.roles.cache.find(r => config.adminRoles.includes(r.name)))
+	if (member.permissions.bitfield & PermissionsBitField.Flags.ManageRoles)
+		return PERM_ADMIN;
+	//if (member.roles.cache.find(r => config.staffRoles.includes(r.name)))
+	if (member.permissions.bitfield & PermissionsBitField.Flags.ViewAuditLog)
+		return PERM_STAFF;
+
 	let perm = PERM_GUEST;
-	if (member.permissions.bitfield & BigInt(0x00000008))
-		perm = PERM_OWNER;
-	else {
-		//FIXME very inefficient
-		if (member.roles.cache.find(r => config.adminRoles.includes(r.name)))
-			perm = PERM_ADMIN;
-		else if (member.roles.cache.find(r => config.staffRoles.includes(r.name)))
-			perm = PERM_STAFF;
-		else if (member.roles.cache.find(r => config.divisionCommandRoles.includes(r.name)))
-			perm = PERM_DIVISION_COMMANDER;
-		else if (member.roles.cache.find(r => config.modRoles.includes(r.name)))
-			perm = PERM_MOD;
-		else if (member.roles.cache.find(r => r.name.endsWith('Officer')) ||
-			member.roles.cache.find(r => config.recruiterRoles.includes(r.name)))
+	//if (member.roles.cache.find(r => config.modRoles.includes(r.name)))
+	if (member.permissions.bitfield & PermissionsBitField.Flags.KickMembers)
+		perm = PERM_MOD;
+	//if (member.roles.cache.find(r => r.name == config.memberRole))
+	if (member.permissions.bitfield & PermissionsBitField.Flags.UseExternalEmojis)
+		perm = PERM_MEMBER;
+	for (let [roleId, role] of member.roles.cache) {
+		if ((perm < PERM_DIVISION_COMMANDER) && config.divisionCommandRoles.includes(role.name))
+			return PERM_DIVISION_COMMANDER; //highest after staff, just return now
+		if (perm < PERM_RECRUITER && (role.name.endsWith('Officer') || config.recruiterRoles.includes(role.name)))
 			perm = PERM_RECRUITER;
-		else if (member.roles.cache.find(r => r.name == config.memberRole))
-			perm = PERM_MEMBER;
-		else if (member.roles.cache.find(r => r.name == config.guestRole))
-			perm = PERM_GUEST;
+		//if (perm < PERM_GUEST && role.name == config.guestRole)
+		//	perm = PERM_GUEST;
 	}
 	return perm;
 }
 global.getPermissionLevelForMember = getPermissionLevelForMember;
 
-function getPermissionLevelForRole(role) {
-	let perm = PERM_GUEST;
-	if (role.permissions.bitfield & BigInt(0x00000008))
-		perm = PERM_OWNER;
-	else {
-		if (config.adminRoles.includes(role.name))
-			perm = PERM_ADMIN;
-		else if (config.staffRoles.includes(role.name))
-			perm = PERM_STAFF;
-		else if (config.divisionCommandRoles.includes(role.name))
-			perm = PERM_DIVISION_COMMANDER;
-		else if (config.modRoles.includes(role.name))
-			perm = PERM_MOD;
-		else if (role.name.endsWith('Officer') ||
-			config.recruiterRoles.includes(role.name))
-			perm = PERM_RECRUITER;
-		else if (role.name == config.memberRole)
-			perm = PERM_MEMBER;
-		else if (role.name == config.guestRole)
-			perm = PERM_GUEST;
-	}
-	return perm;
+function getPermissionLevelForRole(guild, role) {
+	if (role.permissions.bitfield & PermissionsBitField.Flags.Administrator)
+		return PERM_ADMIN;
+	//if (config.adminRoles.includes(role.name))
+	if (role.permissions.bitfield & PermissionsBitField.Flags.ManageRoles)
+		return PERM_ADMIN;
+	//if (config.staffRoles.includes(role.name))
+	if (role.permissions.bitfield & PermissionsBitField.Flags.ViewAuditLog)
+		return PERM_STAFF;
+	if (config.divisionCommandRoles.includes(role.name))
+		return PERM_DIVISION_COMMANDER;
+	//if (config.modRoles.includes(role.name))
+	if (role.permissions.bitfield & PermissionsBitField.Flags.KickMembers)
+		return PERM_MOD;
+	if (role.name.endsWith('Officer') || config.recruiterRoles.includes(role.name))
+		return PERM_RECRUITER;
+	if (role.name == config.memberRole)
+		return PERM_MEMBER;
+	//if (role.name == config.guestRole)
+	//	return PERM_GUEST;
+	return PERM_GUEST;
 }
 global.getPermissionLevelForRole = getPermissionLevelForRole;
 
@@ -3556,13 +3561,13 @@ client.on("messageCreate", message => {
 
 			message.member = member;
 			isDM = true;
-			perm = getPermissionLevelForMember(member);
+			perm = getPermissionLevelForMember(guild, member);
 		}
 	} else {
 		guild = member.guild;
 		if (!guild)
 			return; //must have guild
-		perm = getPermissionLevelForMember(member);
+		perm = getPermissionLevelForMember(guild, member);
 	}
 
 	//get command and argument string
@@ -3725,7 +3730,7 @@ client.on('interactionCreate', async interaction => {
 		guild = interaction.guild;
 		member = interaction.member;
 	}
-	let perm = getPermissionLevelForMember(member);
+	let perm = getPermissionLevelForMember(guild, member);
 
 	interaction.isInteraction = true;
 	if (interaction.isChatInputCommand()) {
@@ -3860,7 +3865,7 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 		if (newMemberState.channel) {
 			if (joinToCreateChannels.joinToCreateChannels[newMemberState.channelId] === 1) {
 				//user joined a join-to-create channel; create a new channel with the same parent and move the user to it
-				let perm = getPermissionLevelForMember(newMemberState.member);
+				let perm = getPermissionLevelForMember(guild, newMemberState.member);
 				if (perm < PERM_MEMBER) {
 					sendMessageToMember(newMemberState.member, 'You do not have permissions to create voice channels');
 					newMemberState.disconnect().catch(error => {});

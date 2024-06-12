@@ -247,7 +247,7 @@ module.exports = {
 				.join(', ')
 		});
 
-		let targetPerm = getPermissionLevelForMember(targetMember);
+		let targetPerm = getPermissionLevelForMember(guild, targetMember);
 		let components = getComponentsForTarget(member, perm, targetMember, targetPerm, true);
 
 		interaction.replied = true; //avoid common reply
