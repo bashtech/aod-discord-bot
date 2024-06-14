@@ -1,6 +1,10 @@
 /* jshint esversion: 11 */
 
-const { SlashCommandBuilder, PermissionFlagsBits, ApplicationCommandOptionType } = require('discord.js');
+const {
+	SlashCommandBuilder,
+	PermissionFlagsBits,
+	ApplicationCommandOptionType
+} = require('discord.js');
 
 function objectWithNameSort(a, b) {
 	if (a.name < b.name) return -1;
@@ -95,7 +99,9 @@ module.exports = {
 				}
 			}
 		});
-		await interaction.reply({ embeds: [embed], ephemeral: true });
+
+		const helpRow = global.getHelpButtons(guild, interaction);
+		await interaction.reply({ embeds: [embed], components: [helpRow], ephemeral: true });
 		if (!interaction.inGuild()) {
 			return interaction.followUp('Please note, most commands must be executed in a text channel of the Discord server.');
 		}

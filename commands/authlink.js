@@ -39,5 +39,8 @@ module.exports = {
 		} else {
 			return global.ephemeralReply(interaction, "Failed to generate login token");
 		}
+	},
+	async button(interaction, guild, member, perm, subCommand, args) {
+		return module.exports.execute(interaction, guild, member, perm);
 	}
 };

@@ -22,7 +22,10 @@ const {
 	InteractionType,
 	OverwriteType,
 	AuditLogEvent,
-	Events
+	Events,
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle
 } = require('discord.js');
 
 //include node-fetch using esm-hook
@@ -274,7 +277,7 @@ function ephemeralReply(message, msg, edit) {
 	if (message) {
 		if (message.isInteraction) {
 			if (typeof(msg) === 'object') {
-				if (msg.embeds !== undefined || msg.components !== undefined) {
+				if (msg.embeds !== undefined || msg.components !== undefined || msg.content !== undefined) {
 					msg.ephemeral = true;
 					return sendInteractionReply(message, msg, edit);
 				} else {
@@ -298,7 +301,7 @@ function messageReply(message, msg, edit) {
 	if (message) {
 		if (message.isInteraction) {
 			if (typeof(msg) === 'object') {
-				if (msg.embeds !== undefined || msg.components !== undefined) {
+				if (msg.embeds !== undefined || msg.components !== undefined || msg.content !== undefined) {
 					return sendInteractionReply(message, msg, edit);
 				} else {
 					return sendInteractionReply(message, { embeds: [msg] }, edit);
@@ -720,9 +723,18 @@ function getParams(string) {
 	return params;
 }
 
-function sendMessageToMember(member, data) {
-	if (member)
-		return member.send(data).catch(() => {});
+function sendMessageToMember(member, msg) {
+	if (member) {
+		if (typeof(msg) === 'object') {
+			if (msg.embeds !== undefined || msg.components !== undefined || msg.content !== undefined) {
+				return member.send(msg).catch(() => {});
+			} else {
+				return member.send({ embeds: [msg] }).catch(() => {});
+			}
+		} else {
+			return member.send(msg).catch(() => {});
+		}
+	}
 	return Promise.reject();
 }
 
@@ -1022,7 +1034,7 @@ async function userLogin(message, member, guild, username, password) {
 							if (!message.isInteraction && !message.channel.isDMBased())
 								msg += ` We recommend you delete the \`${config.prefix}login\` message from your history to protect your identity.`;
 							await sendReplyToMessageAuthor(message, member, msg);
-							await setRolesForMember(member, "Forum login");
+							await setRolesForMember(guild, member, "Forum login");
 							return resolve();
 						});
 					}
@@ -3624,6 +3636,8 @@ function logInteraction(command, interaction) {
 }
 
 function getButtonIdString(command, subCommand, args) {
+	if (!subCommand) subCommand = '';
+	if (!args) args = [];
 	return `::${command}::${subCommand}::` + args.join('::');
 }
 global.getButtonIdString = getButtonIdString;
@@ -3829,6 +3843,17 @@ client.on('interactionCreate', async interaction => {
 	}
 });
 
+function getHelpButtons(guild, message) {
+	const row = new ActionRowBuilder();
+	const authlink = new ButtonBuilder()
+		.setCustomId(getButtonIdString('authlink'))
+		.setLabel('Get Auth Link')
+		.setStyle(ButtonStyle.Primary);
+	row.addComponents(authlink);
+	return row;
+}
+global.getHelpButtons = getHelpButtons;
+
 var voiceStatusUpdates = {};
 
 function tempChannelCreatedBy(channelId) {
@@ -3950,7 +3975,7 @@ function getForumGroupsForMember(member) {
 	return promise;
 }
 
-function setRolesForMember(member, reason) {
+function setRolesForMember(guild, member, reason) {
 	let promise = new Promise(function(resolve, reject) {
 		getForumGroupsForMember(member)
 			.then(async function(data) {
@@ -3958,7 +3983,12 @@ function setRolesForMember(member, reason) {
 				let helpCommand = client.application.commands.cache.find(c => c.name === 'help');
 
 				if (data === undefined || data.groups.length === 0) {
-					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use </authlink:${authCommand.id}> to associate your Discord user to our [Forums](https://www.clanaod.net/forums/).`).catch(() => {});
+					const helpRow = global.getHelpButtons(guild);
+					await sendMessageToMember(member, {
+						content: `Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. ` +
+							`Use </authlink:${authCommand.id}> to associate your Discord user to our [Forums](https://www.clanaod.net/forums/).`,
+						components: [helpRow]
+					});
 					return resolve();
 				}
 
@@ -3989,7 +4019,12 @@ function setRolesForMember(member, reason) {
 					let added = rolesToAdd.map(r => r.name).join(',');
 					console.log(`Updated ${member.user.tag} (added: ${added}), ${reason}`);
 				} else if (!existingRoles.length) {
-					await member.send(`Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. Use </authlink:${authCommand.id}> to associate your Discord user to our [Forums](https://www.clanaod.net/forums/).`).catch(() => {});
+					const helpRow = global.getHelpButtons(guild);
+					await sendMessageToMember(member, {
+						content: `Hello ${member.displayName}! Welcome to the ClanAOD.net Discord. Roles in our server are based on forum permissions. ` +
+							`Use </authlink:${authCommand.id}> to associate your Discord user to our [Forums](https://www.clanaod.net/forums/).`,
+						components: [helpRow]
+					});
 					return resolve();
 				}
 
@@ -4013,7 +4048,7 @@ global.setRolesForMember = setRolesForMember;
 
 //guildMemberAdd event handler -- triggered when a user joins the guild
 client.on('guildMemberAdd', member => {
-	setRolesForMember(member, 'First time join');
+	setRolesForMember(member.guild, member, 'First time join');
 });
 
 function checkAddDependentRoles(guild, role, member) {

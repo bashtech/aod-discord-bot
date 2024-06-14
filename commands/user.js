@@ -143,7 +143,7 @@ module.exports = {
 			case 'update': {
 				if (!targetMember)
 					return global.ephemeralReply(interaction, 'User is invalid or left the server.');
-				return global.setRolesForMember(targetMember, `Requested by ${global.getNameFromMessage(interaction)}`);
+				return global.setRolesForMember(guild, targetMember, `Requested by ${global.getNameFromMessage(interaction)}`);
 			}
 		}
 		return Promise.reject();
