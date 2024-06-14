@@ -422,12 +422,12 @@ function getPermissionLevelForMember(guild, member) {
 	if (member.permissions.bitfield & PermissionsBitField.Flags.KickMembers)
 		perm = PERM_MOD;
 	//if (member.roles.cache.find(r => r.name == config.memberRole))
-	if (member.permissions.bitfield & PermissionsBitField.Flags.UseExternalEmojis)
+	else if (member.permissions.bitfield & PermissionsBitField.Flags.UseExternalEmojis)
 		perm = PERM_MEMBER;
 	for (let [roleId, role] of member.roles.cache) {
 		if ((perm < PERM_DIVISION_COMMANDER) && config.divisionCommandRoles.includes(role.name))
 			return PERM_DIVISION_COMMANDER; //highest after staff, just return now
-		if (perm < PERM_RECRUITER && (role.name.endsWith('Officer') || config.recruiterRoles.includes(role.name)))
+		if ((perm < PERM_RECRUITER) && (role.name.endsWith('Officer') || config.recruiterRoles.includes(role.name)))
 			perm = PERM_RECRUITER;
 		//if (perm < PERM_GUEST && role.name == config.guestRole)
 		//	perm = PERM_GUEST;

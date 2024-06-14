@@ -189,9 +189,12 @@ module.exports = {
 		return perm >= global.PERM_MEMBER;
 	},
 	async execute(interaction, guild, member, perm) {
-		await interaction.deferReply({ ephemeral: true });
-
 		const targetMember = interaction.options.getMember('user');
+		if (!targetMember) {
+			return global.ephemeralReply(interaction, 'Please mention a valid member of this server.');
+		}
+
+		await interaction.deferReply({ ephemeral: true });
 		const userData = await global.getForumInfoForMember(targetMember);
 		const memberRole = guild.roles.cache.find(r => { return r.name == global.config.memberRole; });
 
@@ -248,6 +251,13 @@ module.exports = {
 		});
 
 		let targetPerm = getPermissionLevelForMember(guild, targetMember);
+		if (perm >= global.PERM_STAFF) {
+			embed.fields.push({
+				name: 'Permission Level',
+				value: global.getStringForPermission(targetPerm)
+			});
+		}
+
 		let components = getComponentsForTarget(member, perm, targetMember, targetPerm, true);
 
 		interaction.replied = true; //avoid common reply
