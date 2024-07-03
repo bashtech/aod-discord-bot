@@ -206,7 +206,8 @@ module.exports = {
 
 		embed.fields.push({
 			name: 'Discord User',
-			value: `${targetMember.user.username} (${targetMember.id})`
+			value: `${targetMember.user.username} (${targetMember.id})\n` +
+				'Presence: ' + (targetMember.presence ? targetMember.presence.status : 'offline')
 		});
 
 		if (!userData || userData.length == 0) {
