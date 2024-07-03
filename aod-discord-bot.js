@@ -4208,8 +4208,9 @@ client.on('ready', async function() {
 client.on('guildAuditLogEntryCreate', async function(auditLogEntry, guild) {
 	let { action, executorId, targetId, reason } = auditLogEntry;
 
+
 	// Filter for kick or ban events
-	if (action === AuditLogEvent.MemberKick || action === AuditLogEvent.MemberBanAdd) {
+	if (action === AuditLogEvent.MemberKick || action === AuditLogEvent.MemberBanAdd || action === AuditLogEvent.MemberUpdate) {
 		let executor = await client.users.fetch(auditLogEntry.executorId);
 		let target = await client.users.fetch(auditLogEntry.targetId);
 
@@ -4219,12 +4220,30 @@ client.on('guildAuditLogEntryCreate', async function(auditLogEntry, guild) {
 			return;
 
 		reason = reason ?? 'No reason provided';
-		const actionDescription = {
-			[AuditLogEvent.MemberKick]: "kicked",
-			[AuditLogEvent.MemberBanAdd]: "banned",
-		};
+		let actionDescription;
+		switch (action) {
+			case AuditLogEvent.MemberKick:
+				actionDescription = 'kicked';
+				break;
+			case AuditLogEvent.MemberBanAdd:
+				actionDescription = 'banned';
+				break;
+			case AuditLogEvent.MemberUpdate:
+				// Determine if the MemberUpdate event is a timeout (communication_disabled_until)
+				auditLogEntry.changes.forEach(change => {
+					if (change.key === 'communication_disabled_until') {
+						if (change.new) {
+							let timeoutEnd = new Date(change.new).toLocaleString();
+							actionDescription = `timed out until ${timeoutEnd}`;
+						} else {
+							actionDescription = `removed from timeout`;
+						}
+					}
+				});
+				break;
+		}
 
-		await global.sendGlobalNotification(guild, `${target} has been ${actionDescription[action]} by ${executor} for: ${reason}`);
+		await global.sendGlobalNotification(guild, `${target} has been ${actionDescription} by ${executor} for: ${reason}`);
 	}
 });
 
