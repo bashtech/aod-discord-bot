@@ -3886,17 +3886,19 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 					}
 				}
 			}
-			if (newMemberState.channel) {
-				oldMemberState.channel.send({
-					content: `${oldMemberState.member} moved to ${newMemberState.channel}.`,
-					allowedMentions: { parse: [] }
-				}).catch(() => {});
+			if (joinToCreateChannels.joinToCreateChannels[oldMemberState.channelId] !== 1) {
+				if (newMemberState.channel) {
+					oldMemberState.channel.send({
+						content: `${oldMemberState.member} moved to ${newMemberState.channel}.`,
+						allowedMentions: { parse: [] }
+					}).catch(() => {});
 
-			} else {
-				oldMemberState.channel.send({
-					content: `${oldMemberState.member} left the channel.`,
-					allowedMentions: { parse: [] }
-				}).catch(() => {});
+				} else {
+					oldMemberState.channel.send({
+						content: `${oldMemberState.member} left the channel.`,
+						allowedMentions: { parse: [] }
+					}).catch(() => {});
+				}
 			}
 		}
 		if (newMemberState.channel) {
@@ -3925,12 +3927,13 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 						newMemberState.disconnect().catch(error => {});
 					}
 				}
+			} else {
+				voiceStatusUpdates[newMemberState.member.id] = (new Date()).getTime();
+				newMemberState.channel.send({
+					content: `${newMemberState.member} joined the channel.`,
+					allowedMentions: { parse: [] }
+				}).catch(() => {});
 			}
-			voiceStatusUpdates[newMemberState.member.id] = (new Date()).getTime();
-			newMemberState.channel.send({
-				content: `${newMemberState.member} joined the channel.`,
-				allowedMentions: { parse: [] }
-			}).catch(() => {});
 		}
 	}
 });
