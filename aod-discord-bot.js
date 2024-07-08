@@ -2725,6 +2725,37 @@ function convertForumDiscordName(discordName) {
 //get forum users from forum groups
 var discordTagRegEx = /^[^\s#@][^#@]{0,30}[^\s#@](#(0|[0-9]{4}))?$/g;
 
+const rankAbbr = {
+	"Forum Member": "",
+	"Prospective Member": "",
+	"Recruit": "[Rct] ",
+	"Cadet": "[Cdt] ",
+	"Private": "[Pvt] ",
+	"Private First Class": "[Pfc] ",
+	"Specialist": "[Spec] ",
+	"Trainer": "[Tr] ",
+	"Lance Corporal": "[LCpl] ",
+	"Corporal": "[Cpl] ",
+	"Sergeant": "[Sgt] ",
+	"Staff Sergeant": "[SSgt] ",
+	"Master Sergeant": "[MSgt] ",
+	"First Sergeant": "[1stSgt] ",
+	"Command Sergeant": "[CmdSgt] ",
+	"Sergeant Major": "[SgtMaj] "
+};
+
+function getRankAbbr(rank) {
+	return rankAbbr[rank] ?? '';
+}
+
+function getDiscordNickname(name, rank) {
+	if (name.startsWith('AOD_SgtMaj_'))
+		return name.replace('AOD_SgtMaj_', getRankAbbr(rank));
+	if (name.startsWith('AOD_'))
+		return name.replace('AOD_', getRankAbbr(rank));
+	return getRankAbbr(rank) + name;
+}
+
 function getForumUsersForGroups(groups, allowPending) {
 	var promise = new Promise(function(resolve, reject) {
 		let usersByIDOrDiscriminator = {};
@@ -2734,7 +2765,7 @@ function getForumUsersForGroups(groups, allowPending) {
 		let query =
 			`SELECT u.userid,u.username,` +
 			`  IF(f.field19 NOT LIKE "%#%" OR f.field19 LIKE "%#0", LOWER(f.field19), f.field19) AS field19,` +
-			`  f.field20,f.field13,f.field23,f.field24,` +
+			`  f.field20,f.field11,f.field13,f.field23,f.field24,` +
 			`  (CASE WHEN (r.requester_id IS NOT NULL) THEN 1 ELSE 0 END) AS pending, t.name AS pending_name ` +
 			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
@@ -2777,9 +2808,10 @@ function getForumUsersForGroups(groups, allowPending) {
 				} else {
 					usersByIDOrDiscriminator[index] = {
 						indexIsId: indexIsId,
-						name: (row.pending ? `AOD_${row.pending_name}` : row.username),
+						name: getDiscordNickname(row.pending ? row.pending_name : row.username, row.field11),
 						id: row.userid,
 						division: row.field13,
+						rank: row.field11,
 						discordid: discordid,
 						discordtag: discordtag,
 						discordstatus: row.field24,
@@ -4143,7 +4175,7 @@ function getForumGroupsForMember(member) {
 	let promise = new Promise(function(resolve, reject) {
 		let db = connectToDB();
 		let query =
-			`SELECT u.userid,u.username,u.usergroupid,u.membergroupids,` +
+			`SELECT u.userid,u.username,u.usergroupid,u.membergroupids,f.field11,` +
 			`  (CASE WHEN (r.requester_id IS NOT NULL) THEN 1 ELSE 0 END) AS pending, t.name AS pending_name ` +
 			`FROM ${config.mysql.prefix}user AS u ` +
 			`INNER JOIN ${config.mysql.prefix}userfield AS f ON u.userid=f.userid ` +
@@ -4181,7 +4213,7 @@ function getForumGroupsForMember(member) {
 				if (row.membergroupids !== undefined && row.membergroupids !== '') {
 					forumGroups = forumGroups.concat(row.membergroupids.split(','));
 				}
-				return resolve({ name: (row.pending ? `AOD_${row.pending_name}` : row.username), groups: forumGroups, pending: row.pending });
+				return resolve({ name: getDiscordNickname(row.pending ? row.pending_name : row.username, row.field11), groups: forumGroups, pending: row.pending });
 			}
 		});
 	});
@@ -4486,3 +4518,4 @@ function doLogin() {
 doLogin();
 
 startAPIServer();
+	
