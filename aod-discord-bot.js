@@ -3886,6 +3886,18 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 					}
 				}
 			}
+			if (newMemberState.channel) {
+				oldMemberState.channel.send({
+					content: `${oldMemberState.member} moved to ${newMemberState.channel}.`,
+					allowedMentions: { parse: [] }
+				}).catch(() => {});
+
+			} else {
+				oldMemberState.channel.send({
+					content: `${oldMemberState.member} left the channel.`,
+					allowedMentions: { parse: [] }
+				}).catch(() => {});
+			}
 		}
 		if (newMemberState.channel) {
 			if (joinToCreateChannels.joinToCreateChannels[newMemberState.channelId] === 1) {
@@ -3915,6 +3927,10 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 				}
 			}
 			voiceStatusUpdates[newMemberState.member.id] = (new Date()).getTime();
+			newMemberState.channel.send({
+				content: `${newMemberState.member} joined the channel.`,
+				allowedMentions: { parse: [] }
+			}).catch(() => {});
 		}
 	}
 });
@@ -4206,45 +4222,41 @@ client.on('ready', async function() {
 
 //GuildAuditLogEntryCreate handler -- Triggers when an audit log entry is created
 client.on('guildAuditLogEntryCreate', async function(auditLogEntry, guild) {
-	let { action, executorId, targetId, reason } = auditLogEntry;
-
-
-	// Filter for kick or ban events
-	if (action === AuditLogEvent.MemberKick || action === AuditLogEvent.MemberBanAdd || action === AuditLogEvent.MemberUpdate) {
-		let executor = await client.users.fetch(auditLogEntry.executorId);
-		let target = await client.users.fetch(auditLogEntry.targetId);
-
-		// Ignore actions issued by the bot to avoid double logging.
-		// These events will be logged from within the commands.
-		if (executor === client.user)
-			return;
-
-		reason = reason ?? 'No reason provided';
-		let actionDescription;
-		switch (action) {
-			case AuditLogEvent.MemberKick:
-				actionDescription = 'kicked';
-				break;
-			case AuditLogEvent.MemberBanAdd:
-				actionDescription = 'banned';
-				break;
-			case AuditLogEvent.MemberUpdate:
-				// Determine if the MemberUpdate event is a timeout (communication_disabled_until)
-				auditLogEntry.changes.forEach(change => {
-					if (change.key === 'communication_disabled_until') {
-						if (change.new) {
-							let timeoutEnd = new Date(change.new).toLocaleString();
-							actionDescription = `timed out until ${timeoutEnd}`;
-						} else {
-							actionDescription = `removed from timeout`;
-						}
-					}
-				});
-				break;
-		}
-
-		await global.sendGlobalNotification(guild, `${target} has been ${actionDescription} by ${executor} for: ${reason}`);
+	// Ignore actions issued by the bot to avoid double logging.
+	// These events will be logged from within the commands.
+	if (auditLogEntry.executorId === client.user.id || auditLogEntry.executorId === auditLogEntry.targetId) {
+		return;
 	}
+
+	let actionDescription;
+	switch (auditLogEntry.action) {
+		case AuditLogEvent.MemberKick:
+			actionDescription = 'kicked';
+			break;
+		case AuditLogEvent.MemberBanAdd:
+			actionDescription = 'banned';
+			break;
+		case AuditLogEvent.MemberUpdate:
+			// Determine if the MemberUpdate event is a timeout (communication_disabled_until)
+			auditLogEntry.changes.forEach(change => {
+				if (change.key === 'communication_disabled_until') {
+					if (change.new) {
+						let timeoutEnd = new Date(change.new).toLocaleString();
+						actionDescription = `timed out until ${timeoutEnd}`;
+					} else {
+						actionDescription = `removed from timeout`;
+					}
+				}
+			});
+			break;
+		default:
+			return;
+	}
+
+	let reason = auditLogEntry.reason ?? 'No reason provided';
+	let executor = await client.users.fetch(auditLogEntry.executorId);
+	let target = await client.users.fetch(auditLogEntry.targetId);
+	await global.sendGlobalNotification(guild, `${target} has been ${actionDescription} by ${executor} for: ${reason}`);
 });
 
 //guildCreate handler -- triggers when the bot joins a server for the first time
