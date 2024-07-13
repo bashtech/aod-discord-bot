@@ -4251,6 +4251,9 @@ client.on('guildAuditLogEntryCreate', async function(auditLogEntry, guild) {
 					}
 				}
 			});
+
+			if (actionDescription === undefined)
+				return;
 			break;
 		default:
 			return;
