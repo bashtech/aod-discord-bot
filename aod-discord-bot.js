@@ -4067,7 +4067,8 @@ global.setRolesForMember = setRolesForMember;
 
 //guildMemberAdd event handler -- triggered when a user joins the guild
 client.on('guildMemberAdd', member => {
-	setRolesForMember(member.guild, member, 'First time join');
+	setRolesForMember(member.guild, member, 'First time join')
+		.catch(console.error);
 });
 
 function checkAddDependentRoles(guild, role, member) {
