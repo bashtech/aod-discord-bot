@@ -4253,17 +4253,18 @@ client.on('guildAuditLogEntryCreate', async function(auditLogEntry, guild) {
 				}
 			});
 
-			if (actionDescription === undefined)
+			if (actionDescription === undefined) {
+				console.log(`Unsupported MemberUpdate on ${auditLogEntry.target.username} by ${auditLogEntry.executor.username}: ${JSON.stringify(auditLogEntry.changes)}`);
 				return;
+			}
+
 			break;
 		default:
 			return;
 	}
 
 	let reason = auditLogEntry.reason ?? 'No reason provided';
-	let executor = await client.users.fetch(auditLogEntry.executorId);
-	let target = await client.users.fetch(auditLogEntry.targetId);
-	await global.sendGlobalNotification(guild, `${target} has been ${actionDescription} by ${executor} for: ${reason}`);
+	await global.sendGlobalNotification(guild, `${auditLogEntry.target} has been ${actionDescription} by ${auditLogEntry.executor} for: ${reason}`);
 });
 
 //guildCreate handler -- triggers when the bot joins a server for the first time
