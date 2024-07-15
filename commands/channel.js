@@ -74,8 +74,8 @@ module.exports = {
 			case 'delete':
 			case 'rename':
 			case 'move':
-				return perm >= global.PERM_DIVISION_COMMANDER;
 			case 'update':
+				return perm >= global.PERM_DIVISION_COMMANDER;
 			case 'purge':
 				return perm >= global.PERM_STAFF;
 		}
