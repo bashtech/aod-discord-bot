@@ -1720,6 +1720,24 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 }
 global.deleteDivision = deleteDivision;
 
+function getPresence(member) {
+	let presence = ':black_circle:';
+	if (member.presence) {
+		switch (member.presence.status) {
+			case 'online':
+				presence = ':green_circle:';
+				break;
+			case 'idle':
+				presence = ':yellow_circle:';
+				break;
+			case 'dnd':
+				presence = ':red_circle:';
+				break;
+		}
+	}
+	return presence;
+}
+
 function escapeNameCharacter(ch) {
 	return ('\\' + ch);
 }
@@ -1728,27 +1746,15 @@ function escapeNameForOutput(name) {
 	return name.replace(/[*_]/g, escapeNameCharacter);
 }
 
-function escapeDisplayNameForOutput(member) {
-	return member.displayName.replace(/[*_]/g, escapeNameCharacter);
+function getUsernameWithPresence(member) {
+	return getPresence(member) + ' ' + escapeNameForOutput(member.user.username);
 }
+global.getUsernameWithPresence = getUsernameWithPresence;
 
 function getDisplayNameWithPresence(member) {
-	let presence = ':black_circle: ';
-	if (member.presence) {
-		switch (member.presence.status) {
-			case 'online':
-				presence = ':green_circle: ';
-				break;
-			case 'idle':
-				presence = ':yellow_circle: ';
-				break;
-			case 'dnd':
-				presence = ':red_circle: ';
-				break;
-		}
-	}
-	return presence + escapeDisplayNameForOutput(member);
+	return getPresence(member) + ' ' + escapeNameForOutput(member.displayName);
 }
+global.getDisplayNameWithPresence = getDisplayNameWithPresence;
 
 function listMembers(message, member, guild, roleName) {
 	let menuOrder = parseInt(roleName);

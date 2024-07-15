@@ -204,10 +204,10 @@ module.exports = {
 			fields: []
 		};
 
+		let nameWithPresence = getUsernameWithPresence(targetMember);
 		embed.fields.push({
 			name: 'Discord User',
-			value: `${targetMember.user.username} (${targetMember.id})\n` +
-				'Presence: ' + (targetMember.presence ? targetMember.presence.status : 'offline')
+			value: `${nameWithPresence} (${targetMember.id})\n`
 		});
 
 		if (!userData || userData.length == 0) {
