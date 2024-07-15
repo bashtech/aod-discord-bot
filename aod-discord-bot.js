@@ -1732,9 +1732,22 @@ function escapeDisplayNameForOutput(member) {
 	return member.displayName.replace(/[*_]/g, escapeNameCharacter);
 }
 
-function getMentionAndPresence(member) {
-	let presence = (member.presence ? member.presence.status : 'offline');
-	return `${member} (${presence})`;
+function getDisplayNameWithPresence(member) {
+	let presence = ':black_circle: ';
+	if (member.presence) {
+		switch (member.presence.status) {
+			case 'online':
+				presence = ':green_circle: ';
+				break;
+			case 'idle':
+				presence = ':yellow_circle: ';
+				break;
+			case 'dnd':
+				presence = ':red_circle: ';
+				break;
+		}
+	}
+	return presence + escapeDisplayNameForOutput(member);
 }
 
 function listMembers(message, member, guild, roleName) {
@@ -1749,7 +1762,7 @@ function listMembers(message, member, guild, roleName) {
 			return ephemeralReply(message, `Role ${role.name} has more than 256 members.`);
 		}
 		return sendListToMessageAuthor(message, member, guild, `Members of ${role.name} (${role.members.size})`,
-			role.members.sort((a, b) => a.displayName.localeCompare(b.displayName)).values(), "", getMentionAndPresence);
+			role.members.sort((a, b) => a.displayName.localeCompare(b.displayName)).values(), "", getDisplayNameWithPresence);
 	} else {
 		return ephemeralReply(message, `Role ${roleName} does not exist`);
 	}
