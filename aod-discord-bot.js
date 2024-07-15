@@ -1732,6 +1732,11 @@ function escapeDisplayNameForOutput(member) {
 	return member.displayName.replace(/[*_]/g, escapeNameCharacter);
 }
 
+function getMentionAndPresence(member) {
+	let presence = (member.presence ? member.presence.status : 'offline');
+	return `${member} (${presence})`;
+}
+
 function listMembers(message, member, guild, roleName) {
 	let menuOrder = parseInt(roleName);
 	if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= managedRoles.menuOrder.length) {
@@ -1744,7 +1749,7 @@ function listMembers(message, member, guild, roleName) {
 			return ephemeralReply(message, `Role ${role.name} has more than 256 members.`);
 		}
 		return sendListToMessageAuthor(message, member, guild, `Members of ${role.name} (${role.members.size})`,
-			role.members.sort((a, b) => a.displayName.localeCompare(b.displayName)).values(), "", escapeDisplayNameForOutput);
+			role.members.sort((a, b) => a.displayName.localeCompare(b.displayName)).values(), "", getMentionAndPresence);
 	} else {
 		return ephemeralReply(message, `Role ${roleName} does not exist`);
 	}
