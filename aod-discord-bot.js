@@ -1268,6 +1268,7 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 				});
 				//add officer permissions
 				if (divisionOfficerRole) {
+					officerAllow.push(PermissionsBitField.Flags.SendMessages);
 					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
 				}
 				//add role permissions
