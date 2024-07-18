@@ -2389,77 +2389,6 @@ function listDependentRoles(guild, message) {
 }
 global.listDependentRoles = listDependentRoles;
 
-//subrole command processing
-async function commandDependentRoles(message, member, cmd, args, guild, perm, isDM) {
-	if (args.length <= 0)
-		return message.reply('No parameters provided');
-
-	let subcmd = args.shift();
-	switch (subcmd) {
-		case 'set':
-		case 'unset': {
-			if (args.length < 2)
-				return message.reply('Dependent and Required Roles must be provided');
-
-			let dependentRoleName = args.shift();
-			const dependentRole = guild.roles.cache.find(r => { return r.name == dependentRoleName; });
-			if (!dependentRole)
-				return message.reply(`Role ${dependentRoleName} not found`);
-
-			let requiredRoleName = args.shift();
-			const requiredRole = guild.roles.cache.find(r => { return r.name == requiredRoleName; });
-			if (!requiredRole)
-				return message.reply(`Role ${requiredRoleName} not found`);
-
-			if (subcmd === 'set') {
-				await setDependentRole(guild, message, dependentRole, requiredRole, false);
-				return message.reply(`Added required role ${requiredRoleName} to dependent role ${dependentRoleName}`);
-			} else {
-				await unsetDependentRole(guild, message, dependentRole, requiredRole, false);
-				return message.reply(`Removed required role ${requiredRoleName} from dependent role ${dependentRoleName}`);
-			}
-			break;
-		}
-		case 'list': {
-			let embed = {
-				title: "Dependent Roles",
-				fields: []
-			};
-
-			for (var dependentRoleId in dependentRoles.requires) {
-				if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
-					let dependentRole = guild.roles.resolve(dependentRoleId);
-					if (dependentRole) {
-						let requiredRoles = dependentRoles.requires[dependentRoleId];
-						let requiredRoleNames = [];
-						for (let i = 0; i < requiredRoles.length; i++) {
-							let requiredRoleId = requiredRoles[i];
-							let requiredRole = guild.roles.resolve(requiredRoleId);
-							if (requiredRole)
-								requiredRoleNames.push(requiredRole.name);
-						}
-
-						let field = { name: dependentRole.name, value: requiredRoleNames.length ? requiredRoleNames.join("\n") : "*None*" };
-						embed.fields.push(field);
-					}
-				}
-			}
-			return sendReplyToMessageAuthor(message, member, { embeds: [embed] });
-		}
-		case 'prune': {
-			//FIXME
-			return message.reply('Not implemented');
-		}
-		case 'audit': {
-			auditDependentRoles(guild, message);
-			break;
-		}
-		default: {
-			return message.reply(`Unknown command: ${subcmd}`);
-		}
-	}
-}
-
 /*
 //retrieve all webhooks for the guild from the discord API
 // (for some reason discord.js framework doesn't give us token in the Webhook object
@@ -3467,17 +3396,6 @@ commands = {
 		args: ["[@mention]"],
 		helpText: "List subscribable roles. Use @mention to show assignable roles for someone else (requires Moderator permissions)",
 		callback: commandSub
-	},
-	deproles: {
-		minPermission: PERM_ADMIN,
-		args: ["<set|unset|list|prune>", "<dependent role name>", "<required role name>"],
-		helpText: ["Manage subscribable roles.",
-			"*set*: Set a dependent role that will be assigned when the required role(s) is added",
-			"*unset*: Unset a required role from a dependent role",
-			"*list*: List all dependent roles",
-			"*prune*: Prune roles that have been removed from discord",
-		],
-		callback: commandDependentRoles
 	},
 	purge: {
 		minPermission: PERM_STAFF,
