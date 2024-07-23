@@ -18,6 +18,7 @@ const typeChoices = [
 
 const permChoices = [
 	{ name: 'Feed', value: 'feed' },
+	{ name: 'Feed (Role Locked)', value: 'role-feed' },
 	{ name: 'Public', value: 'public' },
 	{ name: 'Guest+', value: 'guest' },
 	{ name: 'Member+', value: 'member' },
