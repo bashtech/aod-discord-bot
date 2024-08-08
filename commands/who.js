@@ -178,7 +178,8 @@ module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('who')
 		.setDescription('Get information about a member')
-		.addUserOption(option => option.setName('user').setDescription('User').setRequired(true)),
+		.addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
+		.addBooleanOption(option => option.setName('show').setDescription('Visible to Channel')),
 	menuCommands: [
 		new ContextMenuCommandBuilder()
 			.setName('Who')
@@ -190,11 +191,12 @@ module.exports = {
 	},
 	async execute(interaction, guild, member, perm) {
 		const targetMember = interaction.options.getMember('user');
+		const ephemeral = !(interaction.options.getBoolean('show') ?? false);
 		if (!targetMember) {
 			return global.ephemeralReply(interaction, 'Please mention a valid member of this server.');
 		}
 
-		await interaction.deferReply({ ephemeral: true });
+		await interaction.deferReply({ ephemeral: ephemeral });
 		const userData = await global.getForumInfoForMember(targetMember);
 		const memberRole = guild.roles.cache.find(r => { return r.name == global.config.memberRole; });
 
@@ -252,15 +254,18 @@ module.exports = {
 		});
 
 		let targetPerm = getPermissionLevelForMember(guild, targetMember);
-		if (perm >= global.PERM_STAFF) {
+		if (ephemeral && perm >= global.PERM_STAFF) {
 			embed.fields.push({
 				name: 'Permission Level',
 				value: global.getStringForPermission(targetPerm)
 			});
 		}
 
-		let components = getComponentsForTarget(member, perm, targetMember, targetPerm, true);
+		if (!ephemeral) {
+			return global.sendInteractionReply(interaction, { embeds: [embed], ephemeral: ephemeral }, true);
+		}
 
+		let components = getComponentsForTarget(member, perm, targetMember, targetPerm, true);
 		interaction.replied = true; //avoid common reply
 		const response = await global.ephemeralReply(interaction, { embeds: [embed], components: components }, true);
 		if (components.length) {
