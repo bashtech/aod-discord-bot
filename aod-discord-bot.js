@@ -4223,8 +4223,15 @@ client.on("guildDelete", guild => {
 //common client error handler
 client.on('error', console.log);
 
+function doLogin() {
+	client.login(config.token)
+		.catch(e => {
+			console.log('Client login failed');
+			console.log(e);
+			setTimeout(doLogin, 5000);
+		});
+}
 //everything is defined, start the client
-client.login(config.token)
-	.catch(console.error);
+doLogin();
 
 startAPIServer();
