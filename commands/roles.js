@@ -258,6 +258,9 @@ module.exports = {
 				case 'prune': {
 					return global.pruneDependentRoles(guild, interaction);
 				}
+				case 'audit': {
+					return global.auditDependentRoles(guild, interaction);
+				}
 			}
 		}
 		return Promise.reject();

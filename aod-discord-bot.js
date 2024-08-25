@@ -762,7 +762,9 @@ async function sendListToMessageAuthor(message, member, guild, title, list, foot
 	};
 	if (footer)
 		embed.footer = { text: footer };
+	let count = 0;
 	for (let desc of list) {
+		count++;
 		if (formatter)
 			desc = formatter(desc);
 		desc += "\n";
@@ -778,6 +780,8 @@ async function sendListToMessageAuthor(message, member, guild, title, list, foot
 				embed.footer = { text: footer };
 		}
 	}
+	if (count == 0)
+		embed.description = '<None>';
 	if (embed.description.length)
 		return sendReplyToMessageAuthor(message, member, { embeds: [embed] });
 	return Promise.resolve();
@@ -1747,6 +1751,10 @@ function escapeNameForOutput(name) {
 	return name.replace(/[*_]/g, escapeNameCharacter);
 }
 
+function escapeDisplayNameForOutput(member) {
+	return escapeNameForOutput(member.displayName);
+}
+
 function getUsernameWithPresence(member) {
 	return getPresence(member) + ' ' + escapeNameForOutput(member.user.username);
 }
@@ -2187,9 +2195,9 @@ async function auditDependentRole(guild, message, dependentRole, requiredRole) {
 		toRemove.each(m => {
 			m.roles.remove(dependentRole);
 			if (!msg)
-				msg = m.user.tag;
+				msg = escapeDisplayNameForOutput(m);
 			else
-				msg += `, ${m.user.tag}`;
+				msg += ',' + escapeDisplayNameForOutput(m);
 		});
 		msg = `Removed ${toRemove.size} members from ${dependentRole}: ` + msg;
 		await ephemeralReply(message, truncateStr(msg, 2000));
@@ -2199,9 +2207,9 @@ async function auditDependentRole(guild, message, dependentRole, requiredRole) {
 		toAdd.each(m => {
 			m.roles.add(dependentRole);
 			if (!msg)
-				msg = m.user.tag;
+				msg = escapeDisplayNameForOutput(m);
 			else
-				msg += `, ${m.user.tag}`;
+				msg += ',' + escapeDisplayNameForOutput(m);
 		});
 		msg = `Added ${toRemove.size} members to ${dependentRole}: ` + msg;
 		await ephemeralReply(message, truncateStr(msg, 2000));
