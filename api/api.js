@@ -13,7 +13,21 @@ app.use(express.json({
 	}
 })); //parse application/json input data
 
+
+function logRequest() {
+	let src = this.client_ip;
+	if (this.reqMember)
+		src = src + ' ' + this.reqMember.user.tag;
+	console.log(`API: [${src}] ${this.res.statusCode} ${this.method} ${this.baseUrl}${this.path} ${this.res.statusMessage}`);
+}
+
 //WARNING: handlers are processed in the order of definition
+
+//register log callback; Must be first middleware
+app.use(function(req, res, next) {
+	req.on('end', logRequest);
+	next();
+});
 
 //check Authorization header
 app.all('*', (req, res, next) => {
@@ -26,12 +40,10 @@ app.all('*', (req, res, next) => {
 			let token_data = auth_hdr.split(' ');
 			if (token_data.length >= 2 && token_data[0].toLowerCase() === 'bearer' &&
 				token_data[1] === global.config.botAPIToken) {
-				next();
-				return;
+				return next();
 			}
 		}
 	}
-	console.log(`API: [${req.client_ip}] Unauthorized access`);
 	res.status(401).send({ error: 'Not authorized' });
 });
 
@@ -45,9 +57,7 @@ app.use('/api', apiRouter);
 //ensure discord is ready before calling any APIs
 apiRouter.all('*', (req, res, next) => {
 	if (!global.client || !global.client.isReady()) {
-		console.log(`API: [${req.client_ip}] Discord client not ready`);
-		res.status(503).send({ error: 'Discord client not ready' });
-		return;
+		return res.status(503).send({ error: 'Discord client not ready' });
 	} else {
 		req.guild = global.client.guilds.resolve(config.guildId);
 	}
@@ -56,9 +66,7 @@ apiRouter.all('*', (req, res, next) => {
 		//FIXME: should this be required?
 		req.reqMember = getMember(req.guild, requested_by_hdr);
 		if (!req.reqMember) {
-			console.log(`API: [${req.client_ip}] Unknown requestor`);
-			res.status(400).send({ error: 'Unknown requestor' });
-			return;
+			return res.status(400).send({ error: 'Unknown requestor' });
 		}
 	}
 	next();
@@ -72,20 +80,14 @@ const messageRouter = express.Router();
 
 //common message_id processing
 messageRouter.param('message_id', async (req, res, next, message_id) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	if (!req.channel) {
-		res.status(404).send({ error: 'No channel' });
+		return res.status(404).send({ error: 'No channel' });
 	} else if (!req.channel.isTextBased()) {
-		res.status(400).send({ error: 'Channel must be text based' });
+		return res.status(400).send({ error: 'Channel must be text based' });
 	} else {
 		let message = await req.channel.messages.fetch(message_id).catch(() => {});
 		if (!message) {
-			res.status(404).send({ error: 'Unknown message' });
+			return res.status(404).send({ error: 'Unknown message' });
 		} else {
 			req.message = message;
 		}
@@ -96,15 +98,9 @@ messageRouter.param('message_id', async (req, res, next, message_id) => {
 const unicodeRegEx = /&#([0-9]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
 const unicodeHexRegEx = /&#x([0-9a-fA-F]+);/g; //BE CAREFUL OF CAPTURE GROUPS BELOW
 messageRouter.post('/:message_id/react', async (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	let emjoiId;
 	if (!req.body.emoji) {
-		res.status(400).send({ error: 'emoji must be provided' });
+		return res.status(400).send({ error: 'emoji must be provided' });
 	} else {
 		let emoji = global.client.emojis.resolve(req.body.emoji);
 		if (!emoji) {
@@ -135,20 +131,16 @@ messageRouter.post('/:message_id/react', async (req, res, next) => {
 			emjoiId = emoji.id;
 		}
 		if (!emojiId) {
-			res.status(404).send({ error: 'Unknown emoji' });
+			return res.status(404).send({ error: 'Unknown emoji' });
 		} else {
 			if (req.body.exclusive) {
 				if (req.message.author.id !== global.client.user.id) {
-					res.status(403).send({ error: 'Cannot clear reactions on messages authored by other users' });
-					next();
-					return;
+					return res.status(403).send({ error: 'Cannot clear reactions on messages authored by other users' });
 				}
 				await req.message.reactions.removeAll();
 				let reaction = await req.message.react(emojiId).catch((err) => {});
 				if (!reaction) {
-					res.status(500).send({ error: `Failed to add reaction` });
-					next();
-					return;
+					return res.status(500).send({ error: `Failed to add reaction` });
 				}
 			} else {
 				let reaction = req.message.reactions.cache.get(emojiId);
@@ -157,26 +149,17 @@ messageRouter.post('/:message_id/react', async (req, res, next) => {
 				} else {
 					reaction = await req.message.react(emojiId).catch((err) => {});
 					if (!reaction) {
-						res.status(500).send({ error: `Failed to add reaction` });
-						next();
-						return;
+						return res.status(500).send({ error: `Failed to add reaction` });
 					}
 				}
 			}
-			res.send({ id: req.message.id });
+			return res.send({ id: req.message.id });
 		}
 	}
-	next();
 });
 
 messageRouter.get('/:message_id', (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
-	res.send({
+	return res.send({
 		id: req.message.id,
 		content: req.message.content,
 		author: {
@@ -184,44 +167,30 @@ messageRouter.get('/:message_id', (req, res, next) => {
 			id: req.message.author.id,
 		}
 	});
-	next();
 });
 
 messageRouter.put('/:message_id', (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
 
 	if (req.message.author.id !== global.client.user.id) {
-		res.status(403).send({ error: 'Cannot edit messages authored by other users' });
+		return res.status(403).send({ error: 'Cannot edit messages authored by other users' });
 	} else if (!req.body.content && !req.body.embeds) {
-		res.status(400).send({ error: 'content or embeds must be provided' });
+		return res.status(400).send({ error: 'content or embeds must be provided' });
 	} else {
 		req.message.edit({
 			content: req.body.content,
 			embeds: req.body.embeds
 		});
-		res.send({ id: req.message.id });
+		return res.send({ id: req.message.id });
 	}
-	next();
 });
 
 messageRouter.delete('/:message_id', async (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	if (req.message.author.id !== global.client.user.id) {
-		res.status(403).send({ error: 'Cannot delete messages authored by other users' });
+		return res.status(403).send({ error: 'Cannot delete messages authored by other users' });
 	} else {
 		await req.message.delete().catch(() => {});
-		res.send({ id: req.message.id });
+		return res.send({ id: req.message.id });
 	}
-	next();
 });
 
 ////////////////////////////
@@ -243,15 +212,9 @@ function getChannel(guild, channel_id) {
 
 //common channel_id processing
 channelRouter.param('channel_id', (req, res, next, channel_id) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	let channel = getChannel(req.guild, channel_id);
 	if (!channel) {
-		res.status(404).send({ error: 'Unknown channel' });
+		return res.status(404).send({ error: 'Unknown channel' });
 	} else {
 		req.channel = channel;
 	}
@@ -299,12 +262,6 @@ function getChannelType(channel) {
 	}
 }
 channelRouter.get('/:channel_id', async (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	let children = [];
 	let category = req.channel.parent ?? req.channel;
 	let officerRole;
@@ -324,26 +281,18 @@ channelRouter.get('/:channel_id', async (req, res, next) => {
 			});
 		});
 	}
-	res.send({
+	return res.send({
 		name: req.channel.name,
 		id: req.channel.id,
 		type: getChannelType(req.channel),
 		info: await global.getChannelInfo(req.guild, req.channel, officerRole),
 		children: children
 	});
-
-	next();
 });
 
 channelRouter.post('/:channel_id', async (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	if (!req.body.content && !req.body.embeds) {
-		res.status(400).send({ error: 'content or embeds must be provided' });
+		return res.status(400).send({ error: 'content or embeds must be provided' });
 	} else {
 		let message = await req.channel.send({
 			content: req.body.content,
@@ -352,12 +301,11 @@ channelRouter.post('/:channel_id', async (req, res, next) => {
 			console.log(err);
 		});
 		if (message) {
-			res.send({ id: message.id });
+			return res.send({ id: message.id });
 		} else {
-			res.status(500).send({ error: 'Failed to send message' });
+			return res.status(500).send({ error: 'Failed to send message' });
 		}
 	}
-	next();
 });
 
 ////////////////////////////
@@ -376,15 +324,9 @@ function getMember(guild, role_id) {
 }
 
 roleRouter.param('role_id', (req, res, next, role_id) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	let role = getRole(req.guild, role_id);
 	if (!role) {
-		res.status(404).send({ error: 'Unknown role' });
+		return res.status(404).send({ error: 'Unknown role' });
 	} else {
 		req.role = role;
 	}
@@ -392,12 +334,6 @@ roleRouter.param('role_id', (req, res, next, role_id) => {
 });
 
 roleRouter.get('/export', async (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	let roles = [];
 	req.guild.roles.cache.forEach(async (r) => {
 		roles.push({
@@ -410,8 +346,7 @@ roleRouter.get('/export', async (req, res, next) => {
 			position: r.position
 		});
 	});
-	res.send(roles);
-	next();
+	return res.send(roles);
 });
 
 
@@ -434,15 +369,9 @@ function getMember(guild, member_id) {
 
 //common member_id processing
 memberRouter.param('member_id', (req, res, next, member_id) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	let member = getMember(req.guild, member_id);
 	if (!member) {
-		res.status(404).send({ error: 'Unknown member' });
+		return res.status(404).send({ error: 'Unknown member' });
 	} else {
 		req.member = member;
 		req.channel = member.dmChannel;
@@ -451,60 +380,38 @@ memberRouter.param('member_id', (req, res, next, member_id) => {
 });
 
 memberRouter.get('/:member_id', async (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
-	res.send({
+	return res.send({
 		id: req.member.id,
 		bot: req.member.bot,
 		displayName: req.member.displayName,
 		userName: req.member.user.username,
 		tag: req.member.user.tag
 	});
-	next();
 });
 
 memberRouter.get('/:member_id/update', async (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	global.setRolesForMember(req.guild, req.member, `Requested by ${req.reqMember ?? 'API'}`)
-		.then(() => res.send({
+		.then((roles) => res.send({
 			id: req.member.id,
-			displayName: req.member.displayName,
-			userName: req.member.user.username,
+			roles: roles.map(r => { return { id: r.id, name: r.name }; })
 		}))
-		.catch(() => res.status(500).send({ error: 'Failed to run member update' }))
-		.finally(() => next());
+		.catch(() => res.status(500).send({ error: 'Failed to run member update' }));
 });
 
 memberRouter.post('/:member_id', async (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	if (!req.body.content && !req.body.embeds) {
-		res.status(400).send({ error: 'content or embeds must be provided' });
+		return res.status(400).send({ error: 'content or embeds must be provided' });
 	} else {
 		let message = await req.member.send({
 			content: req.body.content,
 			embeds: req.body.embeds
 		}).catch(() => {});
 		if (message) {
-			res.send({ id: message.id });
+			return res.send({ id: message.id });
 		} else {
-			res.status(500).send({ error: 'Failed to send message' });
+			return res.status(500).send({ error: 'Failed to send message' });
 		}
 	}
-	next();
 });
 
 ////////////////////////////
@@ -515,12 +422,6 @@ const emojiRouter = express.Router();
 apiRouter.use('/emoji', emojiRouter);
 
 emojiRouter.get('/', async (req, res, next) => {
-	if (res.writableEnded) {
-		//do nothing if response already sent
-		next();
-		return;
-	}
-
 	let emojis = {};
 	global.client.emojis.cache.forEach(function(emoji, id) {
 		emojis[emoji.name] = {
@@ -529,8 +430,7 @@ emojiRouter.get('/', async (req, res, next) => {
 			url: emoji.imageURL({ extension: "png" })
 		};
 	});
-	res.send(emojis);
-	next();
+	return res.send(emojis);
 });
 
 ////////////////////////////
@@ -539,24 +439,12 @@ emojiRouter.get('/', async (req, res, next) => {
 
 //respond 404 to unprocessed get request
 apiRouter.get('*', (req, res, next) => {
-	if (!res.writableEnded)
-		res.status(404).send({ error: 'No endpoint' });
-	next();
+	return res.status(404).send({ error: 'No endpoint' });
 });
 
 //respond 400 to all other unprocessed requests
 apiRouter.all('*', (req, res, next) => {
-	if (!res.writableEnded)
-		res.status(400).send({ error: 'No endpoint' });
-	next();
-});
-
-//log reqs
-apiRouter.all('*', (req, res) => {
-	if (req.reqMember)
-		console.log(`API: [${req.client_ip} ${req.reqMember.user.tag}] ${res.statusCode} ${req.method} ${req.path}`);
-	else
-		console.log(`API: [${req.client_ip}] ${res.statusCode} ${req.method} ${req.path}`);
+	return res.status(400).send({ error: 'No endpoint' });
 });
 
 module.exports = {

@@ -3959,7 +3959,7 @@ function setRolesForMember(guild, member, reason) {
 							`Use </authlink:${authCommand.id}> to associate your Discord user to our [Forums](https://www.clanaod.net/forums/).`,
 						components: [helpRow]
 					});
-					return resolve();
+					return resolve([]);
 				}
 
 				let rolesByGroup = getRolesByForumGroup(member.guild);
@@ -3995,7 +3995,7 @@ function setRolesForMember(guild, member, reason) {
 							`Use </authlink:${authCommand.id}> to associate your Discord user to our [Forums](https://www.clanaod.net/forums/).`,
 						components: [helpRow]
 					});
-					return resolve();
+					return resolve([]);
 				}
 
 				if (member.displayName !== data.name) {
@@ -4005,7 +4005,7 @@ function setRolesForMember(guild, member, reason) {
 				}
 				let roles = existingRoles.concat(rolesToAdd);
 				await member.send(`Hello ${data.name}! The following roles have been granted: ${roles.map(r=>r.name).join(', ')}. Use </help:${helpCommand.id}> to see available commands.`).catch(() => {});
-				resolve();
+				resolve(rolesToAdd);
 			})
 			.catch(error => {
 				console.log(error);
