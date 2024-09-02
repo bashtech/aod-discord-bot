@@ -467,6 +467,23 @@ memberRouter.get('/:member_id', async (req, res, next) => {
 	next();
 });
 
+memberRouter.get('/:member_id/update', async (req, res, next) => {
+	if (res.writableEnded) {
+		//do nothing if response already sent
+		next();
+		return;
+	}
+
+	try {
+		await global.setRolesForMember(req.guild, req.member, 'Requested by API');
+		res.send({ status: 'Member update complete' });
+	} catch (error) {
+		res.status(500).send({ error: 'Failed to run member update' });
+	}
+
+	next();
+});
+
 memberRouter.post('/:member_id', async (req, res, next) => {
 	if (res.writableEnded) {
 		//do nothing if response already sent
