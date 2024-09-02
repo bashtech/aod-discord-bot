@@ -16,6 +16,15 @@ const typeChoices = [
 	{ name: 'Text', value: 'text' },
 ];
 
+function getTypeDisplay(type) {
+	for (let i in typeChoices) {
+		const choice = typeChoices[i];
+		if (choice.value === type)
+			return choice.name;
+	}
+	return 'Category';
+}
+
 const permChoices = [
 	{ name: 'Feed', value: 'feed' },
 	{ name: 'Feed (Role Locked)', value: 'role-feed' },
@@ -29,10 +38,35 @@ const permChoices = [
 	{ name: 'Admin Only', value: 'admin' },
 ];
 
+function getPermDisplay(perm) {
+	for (let i in permChoices) {
+		const choice = permChoices[i];
+		if (choice.value === perm)
+			return choice.name;
+	}
+	return 'Unknown';
+}
+
 const voiceTypeChoices = [
 	{ name: 'VAD', value: 'voice' },
 	{ name: 'PTT Only', value: 'ptt' },
 ];
+
+function getRolePermString(roleInfo, everyone) {
+	if (!roleInfo.view)
+		if (everyone)
+			return 'No Access';
+		else
+			return 'Default Permissions';
+	let perms = 'View';
+	if (roleInfo.send)
+		perms = perms + ', Send';
+	if (roleInfo.connect)
+		perms = perms + ', Connect';
+	if (roleInfo.manage)
+		perms = perms + ', Manage';
+	return perms;
+}
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -124,7 +158,7 @@ module.exports = {
 						if (level === 'member') {
 							let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
 							role = guild.roles.cache.find(r => { return r.name == memberRoleName; });
-						} else if (level === 'public' || level === 'feed') {
+						} else if (level === 'guest' || level === 'public' || level === 'feed') {
 							let divisionRoleName = category.name;
 							role = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
 						}
@@ -290,7 +324,7 @@ module.exports = {
 						if (level === 'member') {
 							let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
 							role = guild.roles.cache.find(r => { return r.name == memberRoleName; });
-						} else if (level === 'public' || level === 'feed') {
+						} else if (level === 'guest' || level === 'public' || level === 'feed') {
 							let divisionRoleName = category.name;
 							role = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
 						}
@@ -431,36 +465,47 @@ module.exports = {
 					description: `**Information for ${channel}**`,
 					fields: [{
 						name: 'Channel Type',
-						value: info.type
+						value: getTypeDisplay(info.type)
 					}, {
 						name: 'Permission Level',
-						value: info.perm
+						value: getPermDisplay(info.perm)
 					}],
 				};
 
 				if (info.details.officer) {
 					embed.fields.push({
-						name: 'Officer Role',
+						name: 'Officer Role (' + getRolePermString(info.details.officer) + ')',
 						value: `${info.details.officer.role}`
 					});
 				}
 				if (info.details.divisionMember) {
 					embed.fields.push({
-						name: 'Division Member Role',
+						name: 'Division Member Role (' + getRolePermString(info.details.divisionMember) + ')',
 						value: `${info.details.divisionMember.role}`
 					});
 				}
 				if (info.details.division) {
 					embed.fields.push({
-						name: 'Division Role',
+						name: 'Division Role (' + getRolePermString(info.details.division) + ')',
 						value: `${info.details.division.role}`
 					});
-				} else if (info.details.role) {
-					embed.fields.push({
-						name: 'Channel Role',
-						value: `${info.details.role.role}`
-					});
+				} else {
+					if (info.details.role) {
+						embed.fields.push({
+							name: 'Channel Role (' + getRolePermString(info.details.role) + ')',
+							value: `${info.details.role.role}`
+						});
+					} else if (info.details.member) {
+						embed.fields.push({
+							name: 'Member Role (' + getRolePermString(info.details.member) + ')',
+							value: `${info.details.member.role}`
+						});
+					}
 				}
+				embed.fields.push({
+					name: 'Everyone (' + getRolePermString(info.details.everyone, true) + ')',
+					value: ''
+				});
 
 				return global.ephemeralReply(interaction, embed);
 			}

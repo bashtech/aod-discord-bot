@@ -1234,7 +1234,7 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 				permissions = getPermissionsForModerators(guild, defaultAllow, defaultDeny, allow, deny);
 				//add officer permissions
 				if (divisionOfficerRole) {
-					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, allow, deny);
+					permissions = addRoleToPermissions(guild, divisionOfficerRole, permissions, officerAllow, deny);
 				}
 				//add role permissions
 				if (additionalRole) {
@@ -1305,7 +1305,7 @@ function getPermissionDetails(permBitField) {
 }
 
 function getChannelRole(guild, channel) {
-	let subRoles = getUserRoles(false);
+	const subRoles = getUserRoles(false);
 	let channelRole;
 	let overwrite = channel.permissionOverwrites.cache.find(o => {
 		if (o.type === OverwriteType.Role) {
@@ -1329,7 +1329,6 @@ function getChannelInfo(guild, channel) {
 		const modRole = guild.roles.cache.find(r => { return r.name == config.modRoles[0]; });
 		const staffRole = guild.roles.cache.find(r => { return r.name == config.staffRoles[0]; });
 		//const adminRole = guild.roles.cache.find(r => { return r.name == config.adminRoles[0]; });
-		const channelRole = getChannelRole(guild, channel);
 
 		let officerRole;
 		let divisionMemberRole;
@@ -1342,6 +1341,11 @@ function getChannelInfo(guild, channel) {
 			divisionRole = guild.roles.cache.find(r => { return r.name == channel.parent.name; });
 		}
 
+		let channelRole;
+		if (!divisionRole) {
+			channelRole = getChannelRole(guild, channel);
+		}
+
 		const everyonePerms = await channel.permissionsFor(guild.roles.everyone);
 		const guestPerms = await channel.permissionsFor(guestRole);
 		const memberPerms = await channel.permissionsFor(memberRole);
@@ -1352,65 +1356,75 @@ function getChannelInfo(guild, channel) {
 		const modPerms = await channel.permissionsFor(modRole);
 		const staffPerms = await channel.permissionsFor(staffRole);
 
-		let type = 'Text';
+		let type = 'text';
 		if (channel.type === ChannelType.GuildCategory) {
-			type = 'Category';
+			type = 'category';
 		} else if (channel.isVoiceBased()) {
 			if (joinToCreateChannels.joinToCreateChannels[channel.id] === 1) {
-				type = 'JTC';
+				type = 'jtc';
 			} else if (memberPerms && !memberPerms.has(PermissionsBitField.Flags.UseVAD)) {
-				type = 'PTT';
+				type = 'ptt';
 			} else {
-				type = 'VAD';
+				type = 'voice';
 			}
 		}
 
-		let perm = 'Public';
+		let perm = 'public';
 		if (everyonePerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			if (!everyonePerms.has(PermissionsBitField.Flags.SendMessages)) {
-				perm = 'Feed';
+				perm = 'feed';
 			}
-		} else if (guestPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'Guest';
-		} else if (memberPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'Member (Division Role Locked)';
+		} else if (guestPerms && guestPerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			perm = 'guest';
+		} else if (memberPerms && memberPerms.has(PermissionsBitField.Flags.ViewChannel)) {
+			perm = 'member';
 		} else if (divisionPerms && divisionPerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			if (!everyonePerms.has(PermissionsBitField.Flags.SendMessages)) {
-				perm = 'Feed (Division Role Locked)';
+				perm = 'role-feed';
 			} else {
-				perm = 'Public (Division Role Locked)';
+				perm = 'role';
 			}
 		} else if (divisionMemberPerms && divisionMemberPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'Member (Division Role Locked)';
+			perm = 'role';
 		} else if (channelRolePerms && channelRolePerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'Role';
+			if (!everyonePerms.has(PermissionsBitField.Flags.SendMessages)) {
+				perm = 'role-feed';
+			} else {
+				perm = 'role';
+			}
 		} else if (officerPerms && officerPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'Officer';
+			perm = 'officer';
 		} else if (modPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'Mod';
+			perm = 'mod';
 		} else if (staffPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'Staff';
+			perm = 'staff';
 		} else {
-			perm = 'Admin';
+			perm = 'admin';
 		}
 
 		let details = {};
 		details.everyone = getPermissionDetails(everyonePerms);
-		details.guest = getPermissionDetails(guestPerms);
-		details.member = getPermissionDetails(memberPerms);
-		if (divisionRole) {
+		if (guestPerms) {
+			details.guest = getPermissionDetails(guestPerms);
+			details.guest.role = guestRole;
+		}
+		if (memberPerms) {
+			details.member = getPermissionDetails(memberPerms);
+			details.member.role = memberRole;
+		}
+		if (divisionRole && divisionPerms) {
 			details.division = getPermissionDetails(divisionPerms);
 			details.division.role = divisionRole;
 		}
-		if (divisionMemberRole) {
+		if (divisionMemberRole && divisionMemberPerms) {
 			details.divisionMember = getPermissionDetails(divisionMemberPerms);
 			details.divisionMember.role = divisionMemberRole;
 		}
-		if (channelRole) {
+		if (channelRole && channelRolePerms) {
 			details.role = getPermissionDetails(channelRolePerms);
 			details.role.role = channelRole;
 		}
-		if (officerRole) {
+		if (officerRole && officerPerms) {
 			details.officer = getPermissionDetails(officerPerms);
 			details.officer.role = officerRole;
 		}
@@ -4519,4 +4533,3 @@ function doLogin() {
 doLogin();
 
 startAPIServer();
-	
