@@ -475,8 +475,12 @@ memberRouter.get('/:member_id/update', async (req, res, next) => {
 	}
 
 	try {
-		await global.setRolesForMember(req.guild, req.member, 'Requested by API');
-		res.send({ status: 'Member update complete' });
+		await global.setRolesForMember(req.guild, req.member, `Requested by ${req.reqMember ?? 'API'}`);
+		res.send({
+			id: req.member.id,
+			displayName: req.member.displayName,
+			userName: req.member.user.username,
+		});
 	} catch (error) {
 		res.status(500).send({ error: 'Failed to run member update' });
 	}
