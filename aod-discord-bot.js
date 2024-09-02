@@ -2575,7 +2575,7 @@ function getForumInfoForMember(member) {
 			query += `WHERE u.userid=${member} `;
 		} else {
 			let username = db.escape(member);
-			query += `WHERE u.username LIKE "${username}" `;
+			query += `WHERE u.username LIKE ${username} `;
 		}
 		let queryError = false;
 		db.query(query)

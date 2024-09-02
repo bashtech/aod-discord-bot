@@ -425,7 +425,7 @@ apiRouter.use('/forum_members', forumMemberRouter);
 //common forum_id processing
 forumMemberRouter.param('forum_id', async (req, res, next, forum_id) => {
 	let forumInfo = await global.getForumInfoForMember(forum_id);
-	if (!forumInfo) {
+	if (!forumInfo || forumInfo.length == 0) {
 		return res.status(404).send({ error: 'Unknown forum member' });
 	} else {
 		req.forumInfo = forumInfo;
