@@ -29,7 +29,8 @@ module.exports = {
 			return global.ephemeralReply(interaction, {
 				embeds: [{
 					title: 'ClanAOD.net Login',
-					description: 'Click the button below to associate your Discord user to your ClanAOD.net forum account. The link is valid for 15 minutes.',
+					description: '***WARNING: Do not share your auth link with anyone.***\n' +
+						'Click the button below to associate your Discord user to your ClanAOD.net forum account. The link is valid for 15 minutes.',
 					thumbnail: {
 						url: interaction.client.user.avatarURL({ extension: 'png' })
 					}
