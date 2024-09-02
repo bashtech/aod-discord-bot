@@ -2571,6 +2571,8 @@ function getForumInfoForMember(member) {
 			`INNER JOIN ${config.mysql.prefix}usergroup AS g ON u.usergroupid=g.usergroupid `;
 		if (typeof(member) === 'object') {
 			query += `WHERE f.field20 LIKE "${member.id}" `;
+		} else if (!isNaN(parseInt(member))) {
+			query += `WHERE u.userid=${member} `;
 		} else {
 			let username = db.escape(member);
 			query += `WHERE u.username LIKE "${username}" `;
