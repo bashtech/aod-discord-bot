@@ -474,18 +474,14 @@ memberRouter.get('/:member_id/update', async (req, res, next) => {
 		return;
 	}
 
-	try {
-		await global.setRolesForMember(req.guild, req.member, `Requested by ${req.reqMember ?? 'API'}`);
-		res.send({
+	global.setRolesForMember(req.guild, req.member, `Requested by ${req.reqMember ?? 'API'}`)
+		.then(() => res.send({
 			id: req.member.id,
 			displayName: req.member.displayName,
 			userName: req.member.user.username,
-		});
-	} catch (error) {
-		res.status(500).send({ error: 'Failed to run member update' });
-	}
-
-	next();
+		}))
+		.catch(() => res.status(500).send({ error: 'Failed to run member update' }))
+		.finally(() => next());
 });
 
 memberRouter.post('/:member_id', async (req, res, next) => {
