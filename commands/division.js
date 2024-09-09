@@ -26,6 +26,9 @@ module.exports = {
 		.addSubcommand(command => command.setName('officer-channel').setDescription('Update division channel prefix')
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
 			.addChannelOption(option => option.setName('channel').setDescription('Channel Name')))
+		.addSubcommand(command => command.setName('convert').setDescription('Convert Division Permissions')
+			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
+			.addBooleanOption(option => option.setName('test').setDescription('Test only').setRequired(true)))
 		.addSubcommand(command => command.setName('update-onboarding').setDescription('Update onboarding')),
 	help: true,
 	checkPerm(perm, commandName) {
@@ -40,13 +43,14 @@ module.exports = {
 			case 'delete':
 			case 'info':
 			case 'prefix':
-			case 'officer-channel': {
+			case 'officer-channel':
+			case 'convert': {
 				if (focusedOption.name === 'name') {
 					let divisions = await global.getDivisionsFromTracker();
 					let options = [];
 					for (const divisionName in divisions) {
 						if (divisions.hasOwnProperty(divisionName)) {
-							if (subCommand === 'info') {
+							if (subCommand === 'info' || subCommand === 'convert') {
 								options.push(divisionName);
 							} else if (guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory)) {
 								if (subCommand === 'delete' || subCommand === 'prefix' || subCommand === 'officer-channel') {
@@ -224,6 +228,105 @@ module.exports = {
 			}
 			case 'update-onboarding': {
 				return global.updateOnboarding(guild, interaction);
+			}
+			case 'convert': {
+				let name = interaction.options.getString('name');
+				let test = interaction.options.getBoolean('test');
+
+				let divisions = await global.getDivisionsFromTracker();
+				let divisionData = divisions[name];
+				if (typeof(divisionData) === 'undefined') {
+					return global.ephemeralReply(interaction, `${name} division is not defined on the tracker`);
+				}
+
+				let category = guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildCategory);
+				if (!category) {
+					return global.ephemeralReply(interaction, `No category for ${name} found`);
+				}
+				interaction.replied = true;
+
+				const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
+				const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
+
+				let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+				let divisionOfficerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+				if (!divisionOfficerRole) {
+					await global.ephemeralReply(interaction, `Add division officer role: ${officerRoleName}`, false);
+					if (!test) {
+						divisionOfficerRole = await guild.roles.create({
+							name: officerRoleName,
+							permissions: [],
+							mentionable: true,
+							reason: `Requested by ${getNameFromMessage(interaction)}`
+						});
+						await divisionOfficerRole.setPosition(memberRole.position + 1).catch(console.log);
+					}
+				}
+
+				let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
+				let divisionMemberRole = guild.roles.cache.find(r => { return r.name == memberRoleName; });
+				if (!divisionMemberRole) {
+					await global.ephemeralReply(interaction, `Add division member role: ${memberRoleName}`, false);
+					if (!test) {
+						divisionMemberRole = await guild.roles.create({
+							name: memberRoleName,
+							permissions: [],
+							mentionable: true,
+							reason: `Requested by ${getNameFromMessage(interaction)}`
+						});
+						await divisionMemberRole.setPosition(memberRole.position - 1).catch(console.log);
+					}
+				}
+
+				let divisionRoleName = category.name;
+				let divisionRole = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
+				if (!divisionRole) {
+					await global.ephemeralReply(interaction, `Add division role: ${divisionRoleName}`, false);
+					if (!test) {
+						divisionRole = await guild.roles.create({
+							name: divisionRoleName,
+							permissions: [],
+							mentionable: true,
+							reason: `Requested by ${getNameFromMessage(interaction)}`
+						});
+						await divisionRole.setPosition(guestRole.position - 1).catch(console.log);
+
+						await setDependentRole(guild, interaction, divisionMemberRole, memberRole, false);
+						await setDependentRole(guild, interaction, divisionMemberRole, divisionRole, false);
+						await addManagedRole(interaction, member, guild, divisionRoleName, false, false);
+						await addManagedRole(interaction, member, guild, divisionRoleName, false, true);
+					}
+				}
+
+				for (const [channelName, c] of category.children.cache) {
+					let info = await global.getChannelInfo(guild, c);
+					switch (info.perm) {
+						case 'public':
+						case 'guest': {
+							await global.ephemeralReply(interaction, `Convert ${c} to role locked channel, role: ${divisionRoleName}`, false);
+							if (!test) {
+								await global.setChannelPerms(guild, interaction, member, perm, c, null, 'role', category, divisionOfficerRole, divisionRole);
+							}
+							break;
+						}
+						case 'feed': {
+							await global.ephemeralReply(interaction, `Convert ${c} to role locked feed channel, role: ${divisionRoleName}`, false);
+							if (!test) {
+								await global.setChannelPerms(guild, interaction, member, perm, c, null, 'role-feed', category, divisionOfficerRole, divisionRole);
+							}
+							break;
+						}
+						case 'member': {
+							await global.ephemeralReply(interaction, `Convert ${c} to role locked channel, role: ${memberRoleName}`, false);
+							if (!test) {
+								await global.setChannelPerms(guild, interaction, member, perm, c, null, 'role', category, divisionOfficerRole, divisionMemberRole);
+							}
+							break;
+						}
+					}
+				}
+
+				return global.ephemeralReply(interaction, `Conversion for ${name} complete`, false);
 			}
 		}
 		return Promise.reject();

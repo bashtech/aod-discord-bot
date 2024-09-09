@@ -1778,6 +1778,7 @@ async function addDivision(message, member, perm, guild, divisionName) {
 		await setDependentRole(guild, message, divisionMemberRole, memberRole, false);
 		await setDependentRole(guild, message, divisionMemberRole, divisionRole, false);
 		await addManagedRole(message, member, guild, divisionRoleName, false, false);
+		await addManagedRole(message, member, guild, divisionRoleName, false, true);
 
 		//add category for division
 		let permissions = await getChannelPermissions(guild, message, perm,
@@ -1917,6 +1918,7 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 	let memberRole = guild.roles.cache.find(r => { return r.name == memberRoleName; });
 	let divisionRole = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
 
+	await removeManagedRole(message, member, guild, divisionRoleName, true);
 	await removeManagedRole(message, member, guild, divisionRoleName, false);
 	await unsetDependentRole(guild, message, memberRole, memberRole);
 	await unsetDependentRole(guild, message, memberRole, divisionRole);

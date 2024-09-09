@@ -6,6 +6,7 @@ const {
 	ApplicationCommandType,
 	PermissionFlagsBits,
 	PermissionsBitField,
+	GuildMemberFlags,
 	ChannelType,
 	ActionRowBuilder,
 	ButtonBuilder,
@@ -211,6 +212,20 @@ module.exports = {
 			name: 'Discord User',
 			value: `${nameWithPresence} (${targetMember.id})\n`
 		});
+
+		if (!targetMember.flags.has(GuildMemberFlags.CompletedOnboarding)) {
+			if (!targetMember.flags.has(GuildMemberFlags.StartedOnboarding)) {
+				embed.fields.push({
+					name: 'Onboarding',
+					value: 'Not started'
+				});
+			} else {
+				embed.fields.push({
+					name: 'Onboarding',
+					value: 'Not complete'
+				});
+			}
+		}
 
 		if (!userData || userData.length == 0) {
 			embed.fields.push({
