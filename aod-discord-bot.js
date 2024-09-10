@@ -1226,10 +1226,6 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 				break;
 			}
 			case 'role': {
-				if (perm < PERM_DIVISION_COMMANDER) {
-					await ephemeralReply(message, "You don't have permissions to add this channel type");
-					return resolve(null);
-				}
 				//get permissions for moderators
 				permissions = getPermissionsForModerators(guild, defaultAllow, defaultDeny, allow, deny);
 				//add officer permissions
@@ -1658,16 +1654,17 @@ function updateOnboarding(guild, message) {
 		let prompts = [];
 		let existingPrompt;
 		if (onboarding) {
-			for (let [id, prompt] of onboarding.prompts) {
-				if (prompt.title == config.onboardingTitle) {
-					existingPrompt = prompt;
+			for (let [id, p] of onboarding.prompts) {
+				if (p.title == config.onboardingTitle) {
+					existingPrompt = p;
 				} else {
-					prompts.push(prompt.toJSON());
+					//prompts.push(p.toJSON()); //FUCK YOU discord.js
+					//discord.js does not serialize the prompt options in to the proper format
 				}
 			}
 		}
 
-		let prompt = {
+		let newPrompt = {
 			guildId: guild.id,
 			inOnboarding: true,
 			required: false,
@@ -1677,7 +1674,7 @@ function updateOnboarding(guild, message) {
 			options: []
 		};
 		if (existingPrompt) {
-			prompt.id = existingPrompt.id;
+			newPrompt.id = existingPrompt.id;
 		}
 		await guild.emojis.fetch();
 		let divisions = await getDivisionsFromTracker();
@@ -1689,21 +1686,25 @@ function updateOnboarding(guild, message) {
 				let divisionRole = guild.roles.cache.find(r => r.name == divisionName);
 				if (divisionCategory && divisionRole) {
 					let emoji = guild.emojis.cache.find(e => e.name == division.abbreviation);
-					let option = {
+					let opt = {
 						title: divisionName,
 						channels: divisionCategory.children.cache.map(c => c.id),
 						roles: [divisionRole.id],
 						emoji: (emoji ? `<:${emoji.identifier}>` : '')
 					};
-					let existingOption = existingPrompt.options.find(p => p.title == divisionName);
-					if (existingOption) {
-						option.id = existingOption.id;
+					opt.channels.push(divisionCategory.id);
+					if (existingPrompt) {
+						let existingOption = existingPrompt.options.find(p => p.title == divisionName);
+						if (existingOption) {
+							opt.id = existingOption.id;
+						}
 					}
-					prompt.options.push(option);
+					newPrompt.options.push(opt);
 				}
 			}
 		}
-		prompts.push(prompt);
+		prompts.push(newPrompt);
+
 		await guild.editOnboarding({ prompts: prompts }).catch(console.log);
 		if (message) {
 			await ephemeralReply(message, "Updated onboarding options");
@@ -3147,16 +3148,18 @@ function doForumSync(message, member, guild, perm, doDaily) {
 							}
 						} else {
 							if (isMemberRole || isGuestRole) {
-								if (nickNameChanges[roleMember.user.id] === undefined && roleMember.displayName !== forumUser.name) {
-									nickNameChanges[roleMember.user.id] = true;
-									if (!isGuestRole) {
-										renames++;
-										toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
-									}
-									try {
-										await roleMember.setNickname(forumUser.name, reason);
-									} catch (error) {
-										console.error(`Failed to set nickname for ${roleMember.user.tag}`);
+								if (roleMember.manageable) {
+									if (nickNameChanges[roleMember.user.id] === undefined && roleMember.displayName !== forumUser.name) {
+										nickNameChanges[roleMember.user.id] = true;
+										if (!isGuestRole) {
+											renames++;
+											toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
+										}
+										try {
+											await roleMember.setNickname(forumUser.name, reason);
+										} catch (error) {
+											console.error(`Failed to set nickname for ${roleMember.user.tag}`);
+										}
 									}
 								}
 								setDiscordTagForForumUser(forumUser, roleMember);
