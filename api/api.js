@@ -264,14 +264,14 @@ function getChannelType(channel) {
 channelRouter.get('/:channel_id', async (req, res, next) => {
 	let children = [];
 	if (req.channel.children) {
-		req.channel.children.cache.forEach(async function(c) {
+		for (const [channelName, c] of req.channel.children.cache) {
 			children.push({
 				name: c.name,
 				id: c.id,
 				type: getChannelType(c),
 				info: await global.getChannelInfo(req.guild, c)
 			});
-		});
+		}
 	}
 	return res.send({
 		name: req.channel.name,
