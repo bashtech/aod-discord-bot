@@ -4526,6 +4526,47 @@ client.on('guildAuditLogEntryCreate', async function(auditLogEntry, guild) {
 	await global.sendGlobalNotification(guild, `${auditLogEntry.target} has been ${actionDescription} by ${auditLogEntry.executor} for: ${reason}`);
 });
 
+
+async function checkGuildEvent(event) {
+	let member = event.guild.members.resolve(event.creator.id);
+	if (!member) {
+		//???
+		return event.delete();
+	}
+	let perm = getPermissionLevelForMember(event.guild, member);
+	const divisions = await getDivisionsFromTracker();
+	if (!event.channel) {
+		await sendMessageToMember(event.creator, 'Events must occur in a voice channel. Please recreate your event.');
+		return event.delete();
+	}
+	if (event.channel.parent) {
+		if (!divisions[event.channel.parent.name]) {
+			if (perm < PERM_STAFF) {
+				await sendMessageToMember(event.creator, 'You do not have permission to create events outside your division.');
+				return event.delete();
+			}
+		} else if (!event.name.startsWith(event.channel.parent.name)) {
+			await event.setName(`${event.channel.parent.name} - ${event.name}`);
+			await sendMessageToMember(event.creator, `Your event has been renamed to "${event.name}"`);
+		}
+	} else {
+		if (perm < PERM_STAFF) {
+			await sendMessageToMember(event.creator, 'You do not have permission to create events outside your division.');
+			return event.delete();
+		}
+	}
+}
+//guildScheduledEventCreate handler
+client.on('guildScheduledEventCreate', async function(event) {
+	checkGuildEvent(event);
+});
+
+//guildScheduledEventUpdate handler
+client.on('guildScheduledEventUpdate', async function(oldEvent, newEvent) {
+	checkGuildEvent(newEvent);
+});
+
+
 //guildCreate handler -- triggers when the bot joins a server for the first time
 client.on("guildCreate", guild => {
 	console.log(`New guild joined: ${guild.name} (id: ${guild.id}). This guild has ${guild.memberCount} members!`);
