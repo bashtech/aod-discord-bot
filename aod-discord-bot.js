@@ -1582,7 +1582,7 @@ function getDivisionsFromTracker() {
 			resolve(_divisions);
 		}
 		try {
-			let response = await fetchTimeout(`${config.trackerAPIURL}/divisions`, 1000, {
+			let response = await fetchTimeout(`${config.trackerAPIURL}/divisions?include-shutdown`, 1000, {
 				method: 'get',
 				headers: {
 					'User-Agent': 'Discord Bot',
