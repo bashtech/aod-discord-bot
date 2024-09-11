@@ -3,6 +3,8 @@
 const {
 	SlashCommandBuilder,
 	PermissionFlagsBits,
+	PermissionsBitField,
+	OverwriteType,
 	ChannelType,
 	ActionRowBuilder,
 	ButtonBuilder,
@@ -29,7 +31,8 @@ module.exports = {
 		.addSubcommand(command => command.setName('convert').setDescription('Convert Division Permissions')
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
 			.addBooleanOption(option => option.setName('test').setDescription('Test only').setRequired(true)))
-		.addSubcommand(command => command.setName('update-onboarding').setDescription('Update onboarding')),
+		.addSubcommand(command => command.setName('update-onboarding').setDescription('Update onboarding'))
+		.addSubcommand(command => command.setName('bulk-update').setDescription('Do bulk permission updates')),
 	help: true,
 	checkPerm(perm, commandName) {
 		return perm >= global.PERM_STAFF;
@@ -243,7 +246,6 @@ module.exports = {
 				if (!category) {
 					return global.ephemeralReply(interaction, `No category for ${name} found`);
 				}
-				interaction.replied = true;
 
 				const memberRole = guild.roles.cache.find(r => { return r.name == config.memberRole; });
 				const guestRole = guild.roles.cache.find(r => { return r.name == config.guestRole; });
@@ -327,6 +329,54 @@ module.exports = {
 				}
 
 				return global.ephemeralReply(interaction, `Conversion for ${name} complete`, false);
+			}
+			case 'bulk-update': {
+				/*
+				const divisions = await global.getDivisionsFromTracker();
+				for (const divisionName in divisions) {
+					if (divisions.hasOwnProperty(divisionName)) {
+						let category = guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory);
+						if (!category) {
+							await global.ephemeralReply(interaction, `Could not find category for ${divisionName}`, false);
+							continue;
+						}
+
+						const divisionRoleName = category.name;
+						const divisionRole = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
+						if (!divisionRole) {
+							await global.ephemeralReply(interaction, `Could not find division role for ${divisionName}`, false);
+							continue;
+						}
+
+						const officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+						const divisionOfficerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+						if (!divisionOfficerRole) {
+							await global.ephemeralReply(interaction, `Could not find officer role for ${divisionName}`, false);
+							continue;
+						}
+
+						await global.ephemeralReply(interaction, `Reset permissions for ${category}`, false);
+						await global.setChannelPerms(guild, interaction, member, perm, category, null, 'role', category, divisionOfficerRole, divisionRole);
+
+						for (const [channelName, c] of category.children.cache) {
+							for (const [overwriteId, overwrite] of c.permissionOverwrites.cache) {
+								if (overwrite.type == OverwriteType.Role && overwrite.id == divisionOfficerRole.id) {
+									if (overwrite.allow & PermissionsBitField.Flags.ManageMessages) {
+										await global.ephemeralReply(interaction, `Add event permissions for ${divisionOfficerRole} to ${c}`, false);
+										overwrite.edit({
+											ManageEvents: true,
+											CreateEvents: true
+										}).catch(console.log);
+									}
+									break;
+								}
+							}
+						}
+					}
+				}
+				return global.ephemeralReply(interaction, `Bulk update complete`, false);
+				*/
+				return global.ephemeralReply(interaction, `Nothing to do`, false);
 			}
 		}
 		return Promise.reject();

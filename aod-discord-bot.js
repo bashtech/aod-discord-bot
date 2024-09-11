@@ -262,15 +262,18 @@ function getChannelFromMessageOrArgs(guild, message, args) {
 }
 
 function sendInteractionReply(interaction, data, edit) {
-	if (interaction.replied)
+	if (interaction.replied) {
 		if (edit === true)
 			return interaction.editReply(data).catch(() => {});
 		else
 			return interaction.followUp(data).catch(() => {});
-	else if (interaction.deferred)
+	} else if (interaction.deferred) {
 		return interaction.editReply(data).catch(() => {});
-	else
-		return interaction.reply(data).catch(() => {});
+	} else {
+		return interaction.reply(data)
+			.then(() => { interaction.replied = true; })
+			.catch(() => {});
+	}
 }
 global.sendInteractionReply = sendInteractionReply;
 
@@ -1117,6 +1120,8 @@ async function getChannelPermissions(guild, message, perm, level, type, division
 		let officerAllow = allow.concat([
 			PermissionsBitField.Flags.ManageMessages,
 			PermissionsBitField.Flags.MoveMembers,
+			PermissionsBitField.Flags.ManageEvents,
+			PermissionsBitField.Flags.CreateEvents,
 			FlagSetVoiceChannelStatus
 		]);
 		let memberAllow = allow.concat([
@@ -4155,6 +4160,7 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 				} else {
 					//FIXME what what if the member creates mulitple channels?
 					let tempChannelName = `${newMemberState.member.nickname}'s Channel`;
+					tempChannelName = tempChannelName.replace(/^\[\w+\]/g, '');
 					let type = 'voice';
 					let level = 'role';
 					let category = guild.channels.resolve(newMemberState.channel.parentId);
@@ -4175,10 +4181,17 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 				}
 			} else {
 				voiceStatusUpdates[newMemberState.member.id] = (new Date()).getTime();
-				newMemberState.channel.send({
-					content: `${newMemberState.member} joined the channel.`,
-					allowedMentions: { parse: [] }
-				}).catch(() => {});
+				if (oldMemberState.channel) {
+					newMemberState.channel.send({
+						content: `${newMemberState.member} joined the channel from ${oldMemberState.channel}.`,
+						allowedMentions: { parse: [] }
+					}).catch(() => {});
+				} else {
+					newMemberState.channel.send({
+						content: `${newMemberState.member} joined the channel.`,
+						allowedMentions: { parse: [] }
+					}).catch(() => {});
+				}
 			}
 		}
 	}
