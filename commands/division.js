@@ -271,7 +271,7 @@ module.exports = {
 						divisionMemberRole = await guild.roles.create({
 							name: memberRoleName,
 							permissions: [],
-							mentionable: true,
+							mentionable: false,
 							reason: `Requested by ${getNameFromMessage(interaction)}`
 						});
 						await divisionMemberRole.setPosition(memberRole.position - 1).catch(console.log);
@@ -286,7 +286,7 @@ module.exports = {
 						divisionRole = await guild.roles.create({
 							name: divisionRoleName,
 							permissions: [],
-							mentionable: true,
+							mentionable: false,
 							reason: `Requested by ${getNameFromMessage(interaction)}`
 						});
 						await divisionRole.setPosition(guestRole.position - 1).catch(console.log);
