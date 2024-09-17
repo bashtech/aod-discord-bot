@@ -2422,11 +2422,13 @@ function getMemberTag(m) {
 }
 
 async function auditDependentRole(guild, message, dependentRole, requiredRole) {
-	let toRemove;
-	let toAdd;
+	let toRemove = [];
+	let toAdd = [];
+	await ephemeralReply(message, `Auditing ${dependentRole}...`);
 	if (requiredRole) {
 		//Collection.difference returns elements from both sets; use filter instead
 		toRemove = dependentRole.members.filter(m => { return !requiredRole.members.has(m); });
+		//console.log(['req', dependentRole.name, requiredRole.name, toRemove.map(getMemberTag)]);
 	} else {
 		let dependentRoleId = '' + dependentRole.id;
 		let sharedMembers;
@@ -2445,34 +2447,38 @@ async function auditDependentRole(guild, message, dependentRole, requiredRole) {
 		}
 		if (sharedMembers) {
 			//Collection.difference returns elements from both sets; use filter instead
-			toRemove = dependentRole.members.filter(m => { return !sharedMembers.has(m); });
-			toAdd = sharedMembers.filter(m => { return !dependentRole.members.has(m); });
+			toRemove = dependentRole.members.filter(m => { return !sharedMembers.has(m.id); });
+			toAdd = sharedMembers.filter(m => { return !dependentRole.members.has(m.id); });
 		}
+		//console.log(['noreq', dependentRole.name, sharedMembers.map(getMemberTag), toRemove.map(getMemberTag), toAdd.map(getMemberTag)]);
 	}
+
 	if (toRemove && toRemove.size) {
-		let msg;
-		toRemove.each(m => {
-			m.roles.remove(dependentRole);
-			if (!msg)
+		let msg = '';
+		for (const [id, m] of toRemove) {
+			await m.roles.remove(dependentRole).catch(console.log);
+			if (msg === '')
 				msg = escapeDisplayNameForOutput(m);
 			else
 				msg += ',' + escapeDisplayNameForOutput(m);
-		});
+		}
 		msg = `Removed ${toRemove.size} members from ${dependentRole}: ` + msg;
 		await ephemeralReply(message, truncateStr(msg, 2000));
 	}
 	if (toAdd && toAdd.size) {
-		let msg;
-		toAdd.each(m => {
-			m.roles.add(dependentRole);
-			if (!msg)
+		let msg = '';
+		for (const [id, m] of toAdd) {
+			await m.roles.add(dependentRole).catch(console.log);
+			if (msg === '')
 				msg = escapeDisplayNameForOutput(m);
 			else
 				msg += ',' + escapeDisplayNameForOutput(m);
-		});
-		msg = `Added ${toRemove.size} members to ${dependentRole}: ` + msg;
+		}
+		msg = `Added ${toAdd.size} members to ${dependentRole}: ` + msg;
 		await ephemeralReply(message, truncateStr(msg, 2000));
 	}
+
+	return ephemeralReply(message, `${dependentRole} audit complete.`);
 }
 
 function auditDependentRoles(guild, message) {
@@ -2481,7 +2487,7 @@ function auditDependentRoles(guild, message) {
 			if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
 				let dependentRole = guild.roles.resolve(dependentRoleId);
 				if (dependentRole) {
-					auditDependentRole(guild, message, dependentRole);
+					await auditDependentRole(guild, message, dependentRole);
 				}
 			}
 		}
@@ -2831,10 +2837,13 @@ function getForumUsersForGroups(groups, allowPending) {
 				} else {
 					usersByIDOrDiscriminator[index] = {
 						indexIsId: indexIsId,
-						name: getDiscordNickname(row.pending ? row.pending_name : row.username, row.field11),
+						name: row.username,
+						pendingName: row.pending_name,
 						id: row.userid,
 						division: row.field13,
 						rank: row.field11,
+						rankAbbr: getRankAbbr(row.field11),
+						discordNickname: getDiscordNickname(row.pending ? row.pending_name : row.username, row.field11),
 						discordid: discordid,
 						discordtag: discordtag,
 						discordstatus: row.field24,
@@ -3154,14 +3163,14 @@ function doForumSync(message, member, guild, perm, doDaily) {
 						} else {
 							if (isMemberRole || isGuestRole) {
 								if (roleMember.manageable) {
-									if (nickNameChanges[roleMember.user.id] === undefined && roleMember.displayName !== forumUser.name) {
+									if (nickNameChanges[roleMember.user.id] === undefined && roleMember.displayName !== forumUser.discordNickname) {
 										nickNameChanges[roleMember.user.id] = true;
 										if (!isGuestRole) {
 											renames++;
-											toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.name})`);
+											toUpdate.push(`${roleMember.user.tag} (${roleMember.displayName} ==> ${forumUser.discordNickname})`);
 										}
 										try {
-											await roleMember.setNickname(forumUser.name, reason);
+											await roleMember.setNickname(forumUser.discordNickname, reason);
 										} catch (error) {
 											console.error(`Failed to set nickname for ${roleMember.user.tag}`);
 										}
