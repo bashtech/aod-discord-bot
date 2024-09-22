@@ -1374,7 +1374,7 @@ function getChannelInfo(guild, channel) {
 		let divPerm = perm;
 		if (everyonePerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			if (!everyonePerms.has(PermissionsBitField.Flags.SendMessages)) {
-				subPerm = perm = 'feed';
+				divPerm = perm = 'feed';
 			}
 		} else if (guestPerms && guestPerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			divPerm = perm = 'guest';
