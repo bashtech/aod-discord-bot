@@ -1361,8 +1361,8 @@ function getChannelInfo(guild, channel) {
 		if (channel.type === ChannelType.GuildCategory) {
 			type = 'category';
 		} else if (channel.isVoiceBased()) {
-			if (joinToCreateChannels.joinToCreateChannels[channel.id] === 1) {
-				type = 'jtc';
+			if (divisionMemberPerms && !memberPerms.has(PermissionsBitField.Flags.UseVAD)) {
+				type = 'ptt';
 			} else if (memberPerms && !memberPerms.has(PermissionsBitField.Flags.UseVAD)) {
 				type = 'ptt';
 			} else {
@@ -1371,36 +1371,40 @@ function getChannelInfo(guild, channel) {
 		}
 
 		let perm = 'public';
+		let divPerm = perm;
 		if (everyonePerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			if (!everyonePerms.has(PermissionsBitField.Flags.SendMessages)) {
-				perm = 'feed';
+				subPerm = perm = 'feed';
 			}
 		} else if (guestPerms && guestPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'guest';
+			divPerm = perm = 'guest';
 		} else if (memberPerms && memberPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'member';
+			divPerm = perm = 'member';
 		} else if (divisionPerms && divisionPerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			if (!everyonePerms.has(PermissionsBitField.Flags.SendMessages)) {
 				perm = 'role-feed';
+				divPerm = 'feed';
 			} else {
 				perm = 'role';
+				divPerm = 'public';
 			}
 		} else if (divisionMemberPerms && divisionMemberPerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			perm = 'role';
+			divPerm = 'member';
 		} else if (channelRolePerms && channelRolePerms.has(PermissionsBitField.Flags.ViewChannel)) {
 			if (!everyonePerms.has(PermissionsBitField.Flags.SendMessages)) {
-				perm = 'role-feed';
+				divPerm = perm = 'role-feed';
 			} else {
-				perm = 'role';
+				divPerm = perm = 'role';
 			}
 		} else if (officerPerms && officerPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'officer';
+			divPerm = perm = 'officer';
 		} else if (modPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'mod';
+			divPerm = perm = 'mod';
 		} else if (staffPerms.has(PermissionsBitField.Flags.ViewChannel)) {
-			perm = 'staff';
+			divPerm = perm = 'staff';
 		} else {
-			perm = 'admin';
+			divPerm = perm = 'admin';
 		}
 
 		let details = {};
@@ -1435,6 +1439,7 @@ function getChannelInfo(guild, channel) {
 		resolve({
 			type: type,
 			perm: perm,
+			divPerm: divPerm,
 			details: details
 		});
 	});
@@ -1503,7 +1508,7 @@ async function addChannel(guild, message, member, perm, name, type, level, categ
 }
 global.addChannel = addChannel;
 
-async function setChannelPerms(guild, message, member, perm, channel, type, level, category, officerRole, role) {
+async function setChannelPerms(guild, message, member, perm, channel, type, level, category, officerRole, role, targetMember) {
 	//get channel permissions
 	if (channel.isVoiceBased()) {
 		if (type !== 'voice' && type !== 'ptt') {
@@ -1518,7 +1523,7 @@ async function setChannelPerms(guild, message, member, perm, channel, type, leve
 	} else {
 		type = 'text';
 	}
-	var permissions = await getChannelPermissions(guild, message, perm, level, type, officerRole, role);
+	var permissions = await getChannelPermissions(guild, message, perm, level, type, officerRole, role, targetMember);
 	if (!permissions)
 		return;
 
@@ -4122,6 +4127,50 @@ function tempChannelCreatedBy(channelId) {
 }
 global.tempChannelCreatedBy = tempChannelCreatedBy;
 
+
+function getJTCButtons(channelInfo, member) {
+	const permRow = new ActionRowBuilder();
+	const set_public = new ButtonBuilder()
+		.setCustomId(getButtonIdString('channel', 'set_jtc_public'))
+		.setLabel('Set Public')
+		.setStyle(ButtonStyle.Primary)
+		.setDisabled((channelInfo.perm == 'public' || channelInfo.divPerm == 'public'));
+	permRow.addComponents(set_public);
+	const set_member = new ButtonBuilder()
+		.setCustomId(getButtonIdString('channel', 'set_jtc_member'))
+		.setLabel('Set Member')
+		.setStyle(ButtonStyle.Primary)
+		.setDisabled((channelInfo.perm == 'member' || channelInfo.divPerm == 'member'));
+	permRow.addComponents(set_member);
+
+	if (channelInfo.details.officer && channelInfo.details.officer.role &&
+		member.roles.cache.has(channelInfo.details.officer.role.id)) {
+		const set_officer = new ButtonBuilder()
+			.setCustomId(getButtonIdString('channel', 'set_jtc_officer'))
+			.setLabel('Set Officer')
+			.setStyle(ButtonStyle.Primary)
+			.setDisabled(channelInfo.perm == 'officer');
+		permRow.addComponents(set_officer);
+	}
+
+	const typeRow = new ActionRowBuilder();
+	const set_vad = new ButtonBuilder()
+		.setCustomId(getButtonIdString('channel', 'set_jtc_vad'))
+		.setLabel('Set VAD')
+		.setStyle(ButtonStyle.Primary)
+		.setDisabled(channelInfo.type == 'voice');
+	typeRow.addComponents(set_vad);
+	const set_ptt = new ButtonBuilder()
+		.setCustomId(getButtonIdString('channel', 'set_jtc_ptt'))
+		.setLabel('Set PTT')
+		.setStyle(ButtonStyle.Primary)
+		.setDisabled(channelInfo.type == 'ptt');
+	typeRow.addComponents(set_ptt);
+
+	return [permRow, typeRow];
+}
+global.getJTCButtons = getJTCButtons;
+
 //voiceStateUpdate event handler -- triggered when a user joins or leaves a channel or their status in the channel changes
 client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 	if (oldMemberState.channelId != newMemberState.channelId) {
@@ -4183,6 +4232,10 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 						newMemberState.member.voice.setChannel(tempChannel).catch(error => {});
 						joinToCreateChannels.tempChannels[tempChannel.id] = newMemberState.member.id;
 						fs.writeFileSync(config.joinToCreateChannels, JSON.stringify(joinToCreateChannels), 'utf8');
+
+						const channelInfo = await getChannelInfo(guild, tempChannel);
+						const buttons = getJTCButtons(channelInfo, newMemberState.member);
+						tempChannel.send({ components: buttons });
 					} else {
 						sendMessageToMember(newMemberState.member, 'Failed to create voice channel');
 						newMemberState.disconnect().catch(error => {});

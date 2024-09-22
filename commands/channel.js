@@ -529,5 +529,74 @@ module.exports = {
 			}
 		}
 		return Promise.reject();
+	},
+	async button(interaction, guild, member, perm, subCommand, args) {
+		if (args.length < 1) {
+			return global.ephemeralReply(interaction, 'Invalid request.');
+		}
+		switch (subCommand) {
+			case 'set_jtc_public':
+			case 'set_jtc_member':
+			case 'set_jtc_officer':
+			case 'set_jtc_vad':
+			case 'set_jtc_ptt': {
+				let createdBy = global.tempChannelCreatedBy(interaction.channel.id);
+				if (!createdBy) {
+					return global.ephemeralReply(interaction, 'This is not a JTC channel');
+				}
+				if (createdBy != member.id) {
+					return global.ephemeralReply(interaction, 'You are not the channel owner.');
+				}
+
+				const channel = interaction.channel;
+				const category = channel.parent;
+				if (!category) {
+					return global.ephemeralReply(interaction, 'JTC must be in a division category.');
+				}
+
+				const channelInfo = await global.getChannelInfo(guild, channel);
+				let role = null;
+				let level = 'role';
+				let type = null;
+				if (subCommand == 'set_jtc_public') {
+					role = channelInfo.details.division.role;
+					channelInfo.perm = 'role';
+					channelInfo.divPerm = 'public';
+				} else if (subCommand == 'set_jtc_member') {
+					role = channelInfo.details.divisionMember.role;
+					channelInfo.perm = 'role';
+					channelInfo.divPerm = 'member';
+				} else if (subCommand == 'set_jtc_officer') {
+					level = 'officer';
+					channelInfo.perm = 'officer';
+					channelInfo.divPerm = 'officer';
+				} else {
+					if (channelInfo.divPerm == 'public') {
+						role = channelInfo.details.division.role;
+					} else if (channelInfo.divPerm == 'member') {
+						role = channelInfo.details.divisionMember.role;
+					} else {
+						level = 'officer';
+					}
+					if (subCommand == 'set_jtc_vad') {
+						type = 'voice';
+						channelInfo.type = 'voice';
+					} else if (subCommand == 'set_jtc_ptt') {
+						type = 'ptt';
+						channelInfo.type = 'ptt';
+					}
+				}
+
+				return global.setChannelPerms(guild, interaction, member, perm, channel, type, level, category, channelInfo.details.officer.role, role, member)
+					.then(async function() {
+						const buttons = getJTCButtons(channelInfo, member);
+						await interaction.message.edit({ components: buttons });
+					});
+			}
+
+			default:
+				return global.ephemeralReply(interaction, 'Invalid request.');
+		}
+		return Promise.reject();
 	}
 };
