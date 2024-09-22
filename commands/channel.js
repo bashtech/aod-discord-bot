@@ -540,12 +540,9 @@ module.exports = {
 			case 'set_jtc_officer':
 			case 'set_jtc_vad':
 			case 'set_jtc_ptt': {
-				let createdBy = global.tempChannelCreatedBy(interaction.channel.id);
+				const createdBy = global.tempChannelCreatedBy(interaction.channel.id);
 				if (!createdBy) {
 					return global.ephemeralReply(interaction, 'This is not a JTC channel');
-				}
-				if (createdBy != member.id) {
-					return global.ephemeralReply(interaction, 'You are not the channel owner.');
 				}
 
 				const channel = interaction.channel;
@@ -555,6 +552,16 @@ module.exports = {
 				}
 
 				const channelInfo = await global.getChannelInfo(guild, channel);
+				let creator;
+				if (createdBy != member.id) {
+					if (perm < global.PERM_MOD && !member.roles.cache.has(channelInfo.details.officer.role.id)) {
+						return global.ephemeralReply(interaction, 'You are not the channel owner.');
+					}
+					creator = guild.members.resolve(createdBy);
+				} else {
+					creator = member;
+				}
+
 				let role = null;
 				let level = 'role';
 				let type = null;
@@ -567,6 +574,9 @@ module.exports = {
 					channelInfo.perm = 'role';
 					channelInfo.divPerm = 'member';
 				} else if (subCommand == 'set_jtc_officer') {
+					if (perm < global.PERM_MOD && !member.roles.cache.has(channelInfo.details.officer.role.id)) {
+						return global.ephemeralReply(interaction, 'You do not have permissions to set this channel type.');
+					}
 					level = 'officer';
 					channelInfo.perm = 'officer';
 					channelInfo.divPerm = 'officer';
@@ -587,7 +597,7 @@ module.exports = {
 					}
 				}
 
-				return global.setChannelPerms(guild, interaction, member, perm, channel, type, level, category, channelInfo.details.officer.role, role, member)
+				return global.setChannelPerms(guild, interaction, member, perm, channel, type, level, category, channelInfo.details.officer.role, role, creator)
 					.then(async function() {
 						const buttons = getJTCButtons(channelInfo, member);
 						await interaction.message.edit({ components: buttons });

@@ -1437,6 +1437,7 @@ function getChannelInfo(guild, channel) {
 		details.staff = getPermissionDetails(staffPerms);
 
 		resolve({
+			id: channel.id,
 			type: type,
 			perm: perm,
 			divPerm: divPerm,
@@ -4131,37 +4132,33 @@ global.tempChannelCreatedBy = tempChannelCreatedBy;
 function getJTCButtons(channelInfo, member) {
 	const permRow = new ActionRowBuilder();
 	const set_public = new ButtonBuilder()
-		.setCustomId(getButtonIdString('channel', 'set_jtc_public'))
+		.setCustomId(getButtonIdString('channel', 'set_jtc_public', [channelInfo.id]))
 		.setLabel('Set Public')
 		.setStyle(ButtonStyle.Primary)
 		.setDisabled((channelInfo.perm == 'public' || channelInfo.divPerm == 'public'));
 	permRow.addComponents(set_public);
 	const set_member = new ButtonBuilder()
-		.setCustomId(getButtonIdString('channel', 'set_jtc_member'))
+		.setCustomId(getButtonIdString('channel', 'set_jtc_member', [channelInfo.id]))
 		.setLabel('Set Member')
 		.setStyle(ButtonStyle.Primary)
 		.setDisabled((channelInfo.perm == 'member' || channelInfo.divPerm == 'member'));
 	permRow.addComponents(set_member);
-
-	if (channelInfo.details.officer && channelInfo.details.officer.role &&
-		member.roles.cache.has(channelInfo.details.officer.role.id)) {
-		const set_officer = new ButtonBuilder()
-			.setCustomId(getButtonIdString('channel', 'set_jtc_officer'))
-			.setLabel('Set Officer')
-			.setStyle(ButtonStyle.Primary)
-			.setDisabled(channelInfo.perm == 'officer');
-		permRow.addComponents(set_officer);
-	}
+	const set_officer = new ButtonBuilder()
+		.setCustomId(getButtonIdString('channel', 'set_jtc_officer', [channelInfo.id]))
+		.setLabel('Set Officer')
+		.setStyle(ButtonStyle.Primary)
+		.setDisabled(channelInfo.perm == 'officer');
+	permRow.addComponents(set_officer);
 
 	const typeRow = new ActionRowBuilder();
 	const set_vad = new ButtonBuilder()
-		.setCustomId(getButtonIdString('channel', 'set_jtc_vad'))
+		.setCustomId(getButtonIdString('channel', 'set_jtc_vad', [channelInfo.id]))
 		.setLabel('Set VAD')
 		.setStyle(ButtonStyle.Primary)
 		.setDisabled(channelInfo.type == 'voice');
 	typeRow.addComponents(set_vad);
 	const set_ptt = new ButtonBuilder()
-		.setCustomId(getButtonIdString('channel', 'set_jtc_ptt'))
+		.setCustomId(getButtonIdString('channel', 'set_jtc_ptt', [channelInfo.id]))
 		.setLabel('Set PTT')
 		.setStyle(ButtonStyle.Primary)
 		.setDisabled(channelInfo.type == 'ptt');
