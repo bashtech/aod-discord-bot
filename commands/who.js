@@ -237,7 +237,7 @@ module.exports = {
 				let data = userData[i];
 				embed.fields.push({
 					name: 'Forum Data',
-					value: `**Username**: ${data.name}\n` +
+					value: `**Username**: ${data.name} (${data.id})\n` +
 						`**Division**: ${data.division}\n` +
 						`**Rank**: ${data.rank}\n` +
 						`**Status**: ${data.loaStatus}\n` +
