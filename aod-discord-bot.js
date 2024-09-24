@@ -1615,6 +1615,9 @@ function getDivisionsFromTracker() {
 						officer_channel: division.officer_channel,
 						icon: division.icon
 					};
+					if (division.leadership) {
+						_divisions[division.name].leadership = division.leadership;
+					}
 				}
 			}
 			resolve(_divisions);

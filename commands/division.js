@@ -35,7 +35,12 @@ module.exports = {
 		.addSubcommand(command => command.setName('bulk-update').setDescription('Do bulk permission updates')),
 	help: true,
 	checkPerm(perm, commandName) {
-		return perm >= global.PERM_STAFF;
+		switch (commandName) {
+			case 'info':
+				return perm >= global.PERM_MEMBER;
+			default:
+				return perm >= global.PERM_STAFF;
+		}
 	},
 	async autocomplete(interaction, guild, member, perm) {
 		const subCommand = interaction.options.getSubcommand();
@@ -151,13 +156,24 @@ module.exports = {
 					value: category ? `${category}` : 'Not Found'
 				});
 
-				let officer_channel = guild.channels.resolve(divisionData.officer_channel);
-				embed.fields.push({
-					name: "Officer Channel",
-					value: officer_channel ? `${officer_channel}` : 'Not Found'
-				});
+				if (perm >= global.PERM_MOD) {
+					let officer_channel = guild.channels.resolve(divisionData.officer_channel);
+					embed.fields.push({
+						name: "Officer Channel",
+						value: officer_channel ? `${officer_channel}` : 'Not Found'
+					});
+				}
 
-				let roleName = name + ' ' + global.config.discordOfficerSuffix;
+				if (divisionData.leadership) {
+					for (const leader of divisionData.leadership) {
+						embed.fields.push({
+							name: leader.position,
+							value: `<@${leader.discord_id}>`
+						});
+					}
+				}
+
+				/*let roleName = name + ' ' + global.config.discordOfficerSuffix;
 				let officerRole = guild.roles.cache.find(r => { return r.name == roleName; });
 				if (officerRole) {
 					let officers = '';
@@ -168,7 +184,8 @@ module.exports = {
 						name: "Officers",
 						value: officers
 					});
-				}
+				}*/
+
 				return global.ephemeralReply(interaction, embed);
 			}
 			case 'prefix': {
