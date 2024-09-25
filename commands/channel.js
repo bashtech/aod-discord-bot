@@ -566,12 +566,22 @@ module.exports = {
 				let level = 'role';
 				let type = null;
 				if (subCommand == 'set_jtc_public') {
-					role = channelInfo.details.division.role;
-					channelInfo.perm = 'role';
+					if (channelInfo.details.division && channelInfo.details.division.role) {
+						role = channelInfo.details.division.role;
+						channelInfo.perm = 'role';
+					} else {
+						level = 'public';
+						channelInfo.perm = 'public';
+					}
 					channelInfo.divPerm = 'public';
 				} else if (subCommand == 'set_jtc_member') {
-					role = channelInfo.details.divisionMember.role;
-					channelInfo.perm = 'role';
+					if (channelInfo.details.divisionMember && channelInfo.details.divisionMember.role) {
+						role = channelInfo.details.divisionMember.role;
+						channelInfo.perm = 'role';
+					} else {
+						level = 'member';
+						channelInfo.perm = 'member';
+					}
 					channelInfo.divPerm = 'member';
 				} else if (subCommand == 'set_jtc_officer') {
 					if (perm < global.PERM_MOD && !member.roles.cache.has(channelInfo.details.officer.role.id)) {
