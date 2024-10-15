@@ -2433,13 +2433,18 @@ function getMemberTag(m) {
 async function auditDependentRole(guild, message, dependentRole, requiredRole) {
 	let toRemove = [];
 	let toAdd = [];
+
+	let dependentRoleId = '' + dependentRole.id;
+	if (dependentRoles.requires[dependentRoleId] === undefined) {
+		return ephemeralReply(message, `${dependentRole} is not a dependent role.`);
+	}
+
 	await ephemeralReply(message, `Auditing ${dependentRole}...`);
 	if (requiredRole) {
 		//Collection.difference returns elements from both sets; use filter instead
 		toRemove = dependentRole.members.filter(m => { return !requiredRole.members.has(m); });
 		//console.log(['req', dependentRole.name, requiredRole.name, toRemove.map(getMemberTag)]);
 	} else {
-		let dependentRoleId = '' + dependentRole.id;
 		let sharedMembers;
 		if (dependentRoles.requires[dependentRoleId] !== undefined) {
 			let requiredRoleIds = dependentRoles.requires[dependentRoleId];
@@ -2489,6 +2494,7 @@ async function auditDependentRole(guild, message, dependentRole, requiredRole) {
 
 	return ephemeralReply(message, `${dependentRole} audit complete.`);
 }
+global.auditDependentRole = auditDependentRole;
 
 function auditDependentRoles(guild, message) {
 	let promise = new Promise(async function(resolve, reject) {
@@ -2602,12 +2608,14 @@ function pruneDependentRoles(guild, message) {
 					let requiredRoleIds = dependentRoles.requires[dependentRoleId];
 					for (let i = 0; i < requiredRoleIds.length; i++) {
 						let requiredRoleId = requiredRoleIds[i];
-						let index = dependentRoles.requiredFor[requiredRoleId].indexOf(dependentRoleId);
-						if (index >= 0) {
-							dependentRoles.requiredFor[requiredRoleId].splice(index, 1);
-						}
-						if (dependentRoles.requiredFor[requiredRoleId].length == 0) {
-							delete dependentRoles.requiredFor[requiredRoleId];
+						if (dependentRoles.requiredFor[requiredRoleId] !== undefined) {
+							let index = dependentRoles.requiredFor[requiredRoleId].indexOf(dependentRoleId);
+							if (index >= 0) {
+								dependentRoles.requiredFor[requiredRoleId].splice(index, 1);
+							}
+							if (dependentRoles.requiredFor[requiredRoleId].length == 0) {
+								delete dependentRoles.requiredFor[requiredRoleId];
+							}
 						}
 					}
 					delete dependentRoles.requires[dependentRoleId];
@@ -2622,12 +2630,14 @@ function pruneDependentRoles(guild, message) {
 					let dependentRoleIds = dependentRoles.requiredFor[requiredRoleId];
 					for (let i = 0; i < dependentRoleIds.length; i++) {
 						let dependentRoleId = dependentRoleIds[i];
-						let index = dependentRoles.requires[dependentRoleId].indexOf(requiredRoleId);
-						if (index >= 0) {
-							dependentRoles.requires[dependentRoleId].splice(index, 1);
-						}
-						if (dependentRoles.requires[dependentRoleId].length == 0) {
-							delete dependentRoles.requires[dependentRoleId];
+						if (dependentRoles.requires[dependentRoleId] !== undefined) {
+							let index = dependentRoles.requires[dependentRoleId].indexOf(requiredRoleId);
+							if (index >= 0) {
+								dependentRoles.requires[dependentRoleId].splice(index, 1);
+							}
+							if (dependentRoles.requires[dependentRoleId].length == 0) {
+								delete dependentRoles.requires[dependentRoleId];
+							}
 						}
 					}
 					delete dependentRoles.requiredFor[requiredRoleId];
@@ -2642,6 +2652,33 @@ function pruneDependentRoles(guild, message) {
 	return promise;
 }
 global.pruneDependentRoles = pruneDependentRoles;
+
+function getDependentRoles(guild, message) {
+	let roles = [];
+	for (var dependentRoleId in dependentRoles.requires) {
+		if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
+			let dependentRole = guild.roles.resolve(dependentRoleId);
+			if (dependentRole) {
+				roles.push(dependentRole);
+			}
+		}
+	}
+	return roles;
+}
+global.getDependentRoles = getDependentRoles;
+
+function getRequiredRoles(guild, message, dependentRole) {
+	let roles = [];
+	let requiredRoles = dependentRoles.requires[dependentRole.id] ?? [];
+	for (let i = 0; i < requiredRoles.length; i++) {
+		let requiredRoleId = requiredRoles[i];
+		let requiredRole = guild.roles.resolve(requiredRoleId);
+		if (requiredRole)
+			roles.push(requiredRole);
+	}
+	return roles;
+}
+global.getRequiredRoles = getRequiredRoles;
 
 function listDependentRoles(guild, message) {
 	let embed = {
@@ -4392,16 +4429,17 @@ client.on('guildMemberAdd', member => {
 		.catch(console.log);
 });
 
-function checkAddDependentRoles(guild, role, member) {
+async function checkAddDependentRoles(guild, role, member, message) {
 	let roleId = '' + role.id;
 	if (dependentRoles.requiredFor[roleId] !== undefined) {
 		let potentialRoleIDs = dependentRoles.requiredFor[roleId];
 		for (let i = 0; i < potentialRoleIDs.length; i++) {
-			if (roleId === potentialRoleIDs[i]) {
+			let potentialRoleID = potentialRoleIDs[i];
+			if (roleId === potentialRoleID) {
 				//recursive add???
 				continue;
 			}
-			let requiredRoleIDs = dependentRoles.requires[potentialRoleIDs[i]];
+			let requiredRoleIDs = dependentRoles.requires[potentialRoleID];
 			let add = true;
 			for (let j = 0; j < requiredRoleIDs.length; j++) {
 				if (roleId === requiredRoleIDs[j]) {
@@ -4412,15 +4450,24 @@ function checkAddDependentRoles(guild, role, member) {
 					break;
 				}
 			}
-			if (add) {
-				//all roles are present
-				addRemoveRole(null, guild, true, potentialRoleIDs[i], member, true);
+			if (!member.roles.resolve(potentialRoleID)) {
+				if (add) {
+					//all roles are present
+					await addRemoveRole(message, guild, true, potentialRoleID, member, true);
+				}
+			} else {
+				if (!add) {
+					//roles are missing
+					await addRemoveRole(message, guild, false, potentialRoleID, member, true);
+				}
 			}
 		}
 	}
+	return Promise.resolve();
 }
+global.checkAddDependentRoles = checkAddDependentRoles;
 
-function checkRemoveDependentRoles(guild, role, member) {
+async function checkRemoveDependentRoles(guild, role, member) {
 	let roleId = '' + role.id;
 	if (dependentRoles.requiredFor[roleId] !== undefined) {
 		let requiredForIDs = dependentRoles.requiredFor[roleId];
@@ -4429,21 +4476,22 @@ function checkRemoveDependentRoles(guild, role, member) {
 				//recursive remove???
 				continue;
 			}
-			addRemoveRole(null, guild, false, requiredForIDs[i], member, true);
+			await addRemoveRole(null, guild, false, requiredForIDs[i], member, true);
 		}
 	}
+	return Promise.resolve();
 }
 
-client.on('guildMemberUpdate', (oldMember, newMember) => {
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
 	const removedRoles = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id));
-	removedRoles.forEach(r => {
+	removedRoles.forEach(async (r) => {
 		//console.log(`${r.name} removed from ${newMember.user.tag}`);
-		checkRemoveDependentRoles(newMember.guild, r, newMember);
+		await checkRemoveDependentRoles(newMember.guild, r, newMember);
 	});
 	const addedRoles = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id));
-	addedRoles.forEach(r => {
+	addedRoles.forEach(async (r) => {
 		//console.log(`${r.name} added to ${newMember.user.tag}`);
-		checkAddDependentRoles(newMember.guild, r, newMember);
+		await checkAddDependentRoles(newMember.guild, r, newMember);
 	});
 });
 

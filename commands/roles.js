@@ -58,7 +58,9 @@ module.exports = {
 				.addRoleOption(option => option.setName('dependent-role').setDescription('Dependent Role').setRequired(true))
 				.addRoleOption(option => option.setName('required-role').setDescription('Required Role').setRequired(true)))
 			.addSubcommand(command => command.setName('list').setDescription('List Dependent Roles'))
-			.addSubcommand(command => command.setName('audit').setDescription('Audit members of Dependent Roles'))
+			.addSubcommand(command => command.setName('audit').setDescription('Audit members of Dependent Roles')
+				.addStringOption(option => option.setName('role').setDescription('Role').setAutocomplete(true))
+				.addUserOption(option => option.setName('user').setDescription('User')))
 			.addSubcommand(command => command.setName('prune').setDescription('Prune Roles that have been manually removed'))),
 	help: true,
 	checkPerm(perm, commandName, parentName) {
@@ -132,6 +134,13 @@ module.exports = {
 				if (focusedOption.name === 'role') {
 					let managedRoles = global.getUserRoles(false);
 					return interaction.respond(global.sortAndLimitOptions(managedRoles, 25, search));
+				}
+				break;
+			}
+			case 'audit': {
+				if (focusedOption.name === 'role') {
+					let dependentRoles = global.getDependentRoles(guild, interaction).map(r => r.name);
+					return interaction.respond(global.sortAndLimitOptions(dependentRoles, 25, search));
 				}
 				break;
 			}
@@ -259,6 +268,29 @@ module.exports = {
 					return global.pruneDependentRoles(guild, interaction);
 				}
 				case 'audit': {
+					let roleName = interaction.options.getString('role', false);
+					let role;
+					if (roleName)
+						role = guild.roles.cache.find(r => { return r.name == roleName; });
+
+					let targetMember = interaction.options.getMember('user', false);
+					if (targetMember) {
+						await global.ephemeralReply(interaction, `Auditing ${targetMember}...`);
+						if (role) {
+							await checkAddDependentRoles(guild, role, targetMember, interaction);
+						} else {
+							for (const [roleId, r] of targetMember.roles.cache) {
+								await checkAddDependentRoles(guild, r, targetMember, interaction);
+							}
+						}
+						return global.ephemeralReply(interaction, `${targetMember} audit complete.`);
+					}
+					if (roleName) {
+						if (!role) {
+							return global.ephemeralReply(interaction, `Unknown role`);
+						}
+						return global.auditDependentRole(guild, interaction, role);
+					}
 					return global.auditDependentRoles(guild, interaction);
 				}
 			}
