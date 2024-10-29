@@ -6,7 +6,10 @@ const {
 	ChannelType,
 	ActionRowBuilder,
 	ButtonBuilder,
-	ButtonStyle
+	ButtonStyle,
+	ModalBuilder,
+	TextInputBuilder,
+	TextInputStyle
 } = require('discord.js');
 
 const typeChoices = [
@@ -613,7 +616,63 @@ module.exports = {
 						await interaction.message.edit({ components: buttons });
 					});
 			}
+			case 'set_jtc_status': {
+				const modal = new ModalBuilder()
+					.setCustomId(global.getButtonIdString('channel', 'set_jtc_status', [interaction.channel.id]))
+					.setTitle('Voice Channel Status');
+				const statusInput = new TextInputBuilder()
+					.setCustomId('status')
+					.setLabel('Enter the new voice channel status:')
+					.setMaxLength(30)
+					.setRequired(false)
+					.setStyle(TextInputStyle.Short);
+				const actionRow = new ActionRowBuilder()
+					.addComponents(statusInput);
+				modal.addComponents(actionRow)
 
+				return interaction.showModal(modal);
+			}
+			default:
+				return global.ephemeralReply(interaction, 'Invalid request.');
+		}
+		return Promise.reject();
+	},
+	async modal(interaction, guild, member, perm, subCommand, args) {
+		if (args.length < 1) {
+			return global.ephemeralReply(interaction, 'Invalid request.');
+		}
+		switch (subCommand) {
+			case 'set_jtc_status': {
+				const createdBy = global.tempChannelCreatedBy(interaction.channel.id);
+				if (!createdBy) {
+					return global.ephemeralReply(interaction, 'This is not a JTC channel');
+				}
+
+				const channel = interaction.channel;
+				const category = channel.parent;
+				if (!category) {
+					return global.ephemeralReply(interaction, 'JTC must be in a division category.');
+				}
+
+				const channelInfo = await global.getChannelInfo(guild, channel);
+				let creator;
+				if (createdBy != member.id) {
+					if (perm < global.PERM_MOD && !member.roles.cache.has(channelInfo.details.officer.role.id)) {
+						return global.ephemeralReply(interaction, 'You are not the channel owner.');
+					}
+					creator = guild.members.resolve(createdBy);
+				} else {
+					creator = member;
+				}
+
+				let topic = interaction.fields.getTextInputValue('status') ?? "";
+				return interaction.client.rest.put(`/channels/${interaction.channel.id}/voice-status`, {
+					body: {
+						status: topic,
+						reason: `Requested by ${global.getNameFromMessage(interaction)}`
+					}
+				});
+			}
 			default:
 				return global.ephemeralReply(interaction, 'Invalid request.');
 		}

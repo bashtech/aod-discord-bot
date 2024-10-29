@@ -4010,18 +4010,18 @@ loadSlashCommands();
 client.on('interactionCreate', async interaction => {
 	let command;
 	let commandName;
-	let buttonArgs;
-	if (interaction.isButton()) {
+	let interactionArgs;
+	if (interaction.isButton() || interaction.isModalSubmit()) {
 		if (!interaction.customId.startsWith('::')) {
 			//generic buttons handled through collectors
 			return;
 		}
-		buttonArgs = interaction.customId.split('::');
-		if (buttonArgs.length < 3) {
+		interactionArgs = interaction.customId.split('::');
+		if (interactionArgs.length < 3) {
 			return;
 		}
-		buttonArgs.shift(); //first is empty
-		commandName = buttonArgs.shift();
+		interactionArgs.shift(); //first is empty
+		commandName = interactionArgs.shift();
 		command = client.commands.get(commandName);
 	} else if (interaction.isContextMenuCommand()) {
 		commandName = client.menuMap[interaction.commandName];
@@ -4103,8 +4103,8 @@ client.on('interactionCreate', async interaction => {
 		}
 		console.log(`${getNameFromMessage(interaction)} executed: button:${interaction.customId}`);
 		try {
-			let subCommand = buttonArgs.shift();
-			await command.button(interaction, guild, member, perm, subCommand, buttonArgs);
+			let subCommand = interactionArgs.shift();
+			await command.button(interaction, guild, member, perm, subCommand, interactionArgs);
 			if (!interaction.replied)
 				ephemeralReply(interaction, "Done");
 		} catch (error) {
@@ -4135,6 +4135,24 @@ client.on('interactionCreate', async interaction => {
 				console.error(error);
 			try {
 				ephemeralReply(interaction, 'There was an error while executing your command');
+			} catch (error) {}
+		}
+	} else if (interaction.isModalSubmit()) {
+		if (command.modal === undefined) {
+			console.log(`No modal callback defined for ${commandName}`);
+			return;
+		}
+		console.log(`${getNameFromMessage(interaction)} executed: modal:${interaction.customId}`);
+		try {
+			let subCommand = interactionArgs.shift();
+			await command.modal(interaction, guild, member, perm, subCommand, interactionArgs);
+			if (!interaction.replied)
+				ephemeralReply(interaction, "Done");
+		} catch (error) {
+			if (error)
+				console.error(error);
+			try {
+				ephemeralReply(interaction, 'There was an error processing this action.');
 			} catch (error) {}
 		}
 	} else {
@@ -4203,8 +4221,14 @@ function getJTCButtons(channelInfo, member) {
 		.setStyle(ButtonStyle.Primary)
 		.setDisabled(channelInfo.type == 'ptt');
 	typeRow.addComponents(set_ptt);
+	const statusRow = new ActionRowBuilder();
+	const set_voice_status = new ButtonBuilder()
+		.setCustomId(getButtonIdString('channel', 'set_jtc_status', [channelInfo.id]))
+		.setLabel('Set Channel Status')
+		.setStyle(ButtonStyle.Primary);
+	statusRow.addComponents(set_voice_status);
 
-	return [permRow, typeRow];
+	return [permRow, typeRow, statusRow];
 }
 global.getJTCButtons = getJTCButtons;
 
