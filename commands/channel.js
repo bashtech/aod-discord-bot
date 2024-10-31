@@ -654,8 +654,8 @@ module.exports = {
 					return global.ephemeralReply(interaction, 'JTC must be in a division category.');
 				}
 
-				const channelInfo = await global.getChannelInfo(guild, channel);
 				if (createdBy != member.id) {
+					const channelInfo = await global.getChannelInfo(guild, channel);
 					if (perm < global.PERM_MOD && !member.roles.cache.has(channelInfo.details.officer.role.id)) {
 						return global.ephemeralReply(interaction, 'You are not the channel owner.');
 					}
