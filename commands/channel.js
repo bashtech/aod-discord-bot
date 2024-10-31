@@ -655,14 +655,10 @@ module.exports = {
 				}
 
 				const channelInfo = await global.getChannelInfo(guild, channel);
-				let creator;
 				if (createdBy != member.id) {
 					if (perm < global.PERM_MOD && !member.roles.cache.has(channelInfo.details.officer.role.id)) {
 						return global.ephemeralReply(interaction, 'You are not the channel owner.');
 					}
-					creator = guild.members.resolve(createdBy);
-				} else {
-					creator = member;
 				}
 
 				let topic = interaction.fields.getTextInputValue('status') ?? "";
