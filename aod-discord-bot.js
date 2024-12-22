@@ -1865,7 +1865,9 @@ async function addDivision(message, member, perm, guild, divisionName) {
 		}
 
 		addForumSyncMap(message, guild, officerRoleName, divisionName + ' ' + config.forumOfficerSuffix);
-		addForumSyncMap(message, guild, config.officerRole, divisionName + ' ' + config.forumOfficerSuffix);
+		if (config.officerRole) {
+			addForumSyncMap(message, guild, config.officerRole, divisionName + ' ' + config.forumOfficerSuffix);
+		}
 		if (divisionData && officersChannel) {
 			await updateTrackerDivisionOfficerChannel(divisionData, officersChannel);
 		}
@@ -1939,7 +1941,9 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 	await unsetDependentRole(guild, message, memberRole, memberRole);
 	await unsetDependentRole(guild, message, memberRole, divisionRole);
 
-	removeForumSyncMap(message, guild, config.officerRole, divisionName + ' ' + config.forumOfficerSuffix);
+	if (config.officerRole) {
+		removeForumSyncMap(message, guild, config.officerRole, divisionName + ' ' + config.forumOfficerSuffix);
+	}
 	if (forumIntegrationConfig[officerRoleName] !== undefined) {
 		delete(forumIntegrationConfig[officerRoleName]);
 		fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
@@ -3564,7 +3568,7 @@ function pruneForumSyncMap(message, guild) {
 				let groupMap = forumIntegrationConfig[roleName];
 				let forumGroups = await getForumGroups().catch(console.log);
 				let i = 0;
-				while (i < groupMap.forumGroups.length) {
+				while(i < groupMap.forumGroups.length) {
 					let group = groupMap.forumGroups[i];
 					if (forumGroups[group] === undefined) {
 						groupMap.forumGroups.splice(i, 1);
