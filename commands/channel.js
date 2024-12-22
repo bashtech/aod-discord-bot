@@ -628,7 +628,7 @@ module.exports = {
 					.setStyle(TextInputStyle.Short);
 				const actionRow = new ActionRowBuilder()
 					.addComponents(statusInput);
-				modal.addComponents(actionRow)
+				modal.addComponents(actionRow);
 
 				return interaction.showModal(modal);
 			}

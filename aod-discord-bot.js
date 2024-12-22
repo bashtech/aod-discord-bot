@@ -1865,6 +1865,7 @@ async function addDivision(message, member, perm, guild, divisionName) {
 		}
 
 		addForumSyncMap(message, guild, officerRoleName, divisionName + ' ' + config.forumOfficerSuffix);
+		addForumSyncMap(message, guild, config.officerRole, divisionName + ' ' + config.forumOfficerSuffix);
 		if (divisionData && officersChannel) {
 			await updateTrackerDivisionOfficerChannel(divisionData, officersChannel);
 		}
@@ -1938,6 +1939,7 @@ async function deleteDivision(message, member, perm, guild, divisionName) {
 	await unsetDependentRole(guild, message, memberRole, memberRole);
 	await unsetDependentRole(guild, message, memberRole, divisionRole);
 
+	removeForumSyncMap(message, guild, config.officerRole, divisionName + ' ' + config.forumOfficerSuffix);
 	if (forumIntegrationConfig[officerRoleName] !== undefined) {
 		delete(forumIntegrationConfig[officerRoleName]);
 		fs.writeFileSync(config.forumGroupConfig, JSON.stringify(forumIntegrationConfig), 'utf8');
@@ -3552,12 +3554,28 @@ function pruneForumSyncMap(message, guild) {
 	let promise = new Promise(async function(resolve, reject) {
 		let doWrite = false;
 		let reply = "";
-		Object.keys(forumIntegrationConfig).forEach(roleName => {
+		Object.keys(forumIntegrationConfig).forEach(async (roleName) => {
 			const role = guild.roles.cache.find(r => { return r.name == roleName; });
 			if (!role) {
 				reply += `Remove map for deleted role ${roleName}\n`;
 				delete forumIntegrationConfig[roleName];
 				doWrite = true;
+			} else {
+				let groupMap = forumIntegrationConfig[roleName];
+				let forumGroups = await getForumGroups().catch(console.log);
+				let i = 0;
+				while (i < groupMap.forumGroups.length) {
+					let group = groupMap.forumGroups[i];
+					if (forumGroups[group] === undefined) {
+						groupMap.forumGroups.splice(i, 1);
+						doWrite = true;
+						continue;
+					}
+					i++;
+				}
+				if (groupMap.forumGroups.length === 0) {
+					delete forumIntegrationConfig[roleName];
+				}
 			}
 		});
 		if (doWrite) {
