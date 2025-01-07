@@ -2610,11 +2610,13 @@ function pruneDependentRoles(guild, message) {
 			if (dependentRoles.requires.hasOwnProperty(dependentRoleId)) {
 				let dependentRole = guild.roles.resolve(dependentRoleId);
 				if (!dependentRole) {
+					console.log(`Role dependency prune: Removing dependent role ${dependentRoleId}: no longer exists`);
 					doWrite = true;
 					let requiredRoleIds = dependentRoles.requires[dependentRoleId];
 					for (let i = 0; i < requiredRoleIds.length; i++) {
 						let requiredRoleId = requiredRoleIds[i];
 						if (dependentRoles.requiredFor[requiredRoleId] !== undefined) {
+							console.log(`Role dependency prune: Removing dependent role ${dependentRoleId} from ${requiredRoleId}`);
 							let index = dependentRoles.requiredFor[requiredRoleId].indexOf(dependentRoleId);
 							if (index >= 0) {
 								dependentRoles.requiredFor[requiredRoleId].splice(index, 1);
@@ -2632,11 +2634,13 @@ function pruneDependentRoles(guild, message) {
 			if (dependentRoles.requiredFor.hasOwnProperty(requiredRoleId)) {
 				let requiredRole = guild.roles.resolve(requiredRoleId);
 				if (!requiredRole) {
+					console.log(`Role dependency prune: Removing required role ${requiredRoleId}: no longer exists`);
 					doWrite = true;
 					let dependentRoleIds = dependentRoles.requiredFor[requiredRoleId];
 					for (let i = 0; i < dependentRoleIds.length; i++) {
 						let dependentRoleId = dependentRoleIds[i];
 						if (dependentRoles.requires[dependentRoleId] !== undefined) {
+							console.log(`Role dependency prune: Removing required role ${requiredRoleId} for ${dependentRoleId}`);
 							let index = dependentRoles.requires[dependentRoleId].indexOf(requiredRoleId);
 							if (index >= 0) {
 								dependentRoles.requires[dependentRoleId].splice(index, 1);
