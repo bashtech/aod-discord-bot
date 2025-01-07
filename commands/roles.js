@@ -64,8 +64,16 @@ module.exports = {
 			.addSubcommand(command => command.setName('prune').setDescription('Prune Roles that have been manually removed'))),
 	help: true,
 	checkPerm(perm, commandName, parentName) {
-		if (parentName === 'manage' || parentName === 'dependencies')
+		if (parentName === 'manage') {
 			return perm >= global.PERM_STAFF;
+		} else if (parentName === 'dependencies') {
+			switch (commandName) {
+				case 'audit':
+					return perm >= global.PERM_MOD;
+				default:
+					return perm >= global.PERM_STAFF;
+			}
+		}
 		switch (commandName) {
 			case 'roles':
 			case 'sub':
@@ -285,6 +293,11 @@ module.exports = {
 						}
 						return global.ephemeralReply(interaction, `${targetMember} audit complete.`);
 					}
+
+					if (perm <= global.PERM_STAFF) {
+						return global.ephemeralReply(interaction, 'You do not have permissions to audit roles. Please provided a user to audit.');
+					}
+
 					if (roleName) {
 						if (!role) {
 							return global.ephemeralReply(interaction, `Unknown role`);

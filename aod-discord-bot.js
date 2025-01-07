@@ -351,7 +351,7 @@ async function addRemoveRole(message, guild, add, roleData, member, assigned) {
 	}
 
 	if (!role)
-		return ephemeralReply(message, "Invalid Role");
+		return ephemeralReply(message, `Invalid Role: ${roleData}`);
 	if (!member)
 		return ephemeralReply(message, "Please mention a valid member of this server");
 
@@ -3568,7 +3568,7 @@ function pruneForumSyncMap(message, guild) {
 				let groupMap = forumIntegrationConfig[roleName];
 				let forumGroups = await getForumGroups().catch(console.log);
 				let i = 0;
-				while(i < groupMap.forumGroups.length) {
+				while (i < groupMap.forumGroups.length) {
 					let group = groupMap.forumGroups[i];
 					if (forumGroups[group] === undefined) {
 						groupMap.forumGroups.splice(i, 1);
@@ -4531,12 +4531,12 @@ async function checkRemoveDependentRoles(guild, role, member) {
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
 	const removedRoles = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id));
 	removedRoles.forEach(async (r) => {
-		//console.log(`${r.name} removed from ${newMember.user.tag}`);
+		console.log(`Dependent role ${r.name} removed from ${newMember.user.tag}`);
 		await checkRemoveDependentRoles(newMember.guild, r, newMember);
 	});
 	const addedRoles = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id));
 	addedRoles.forEach(async (r) => {
-		//console.log(`${r.name} added to ${newMember.user.tag}`);
+		console.log(`Dependent role ${r.name} added to ${newMember.user.tag}`);
 		await checkAddDependentRoles(newMember.guild, r, newMember);
 	});
 });
