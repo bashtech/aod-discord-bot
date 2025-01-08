@@ -4503,14 +4503,16 @@ async function checkAddDependentRoles(guild, role, member, message) {
 			if (!member.roles.resolve(potentialRoleID)) {
 				if (add) {
 					//all roles are present
-					await addRemoveRole(message, guild, true, potentialRoleID, member, true);
-					console.log(`Dependent role ${role.name} added to ${member.user.tag}`);
+					let roleToAdd = guild.roles.resolve(potentialRoleID);
+					await addRemoveRole(message, guild, true, roleToAdd, member, true);
+					console.log(`Dependent role ${roleToAdd.name} added to ${member.user.tag}`);
 				}
 			} else {
 				if (!add) {
 					//roles are missing
-					await addRemoveRole(message, guild, false, potentialRoleID, member, true);
-					console.log(`Dependent role ${role.name} removed from ${member.user.tag} (check for add)`);
+					let roleToRem = guild.roles.resolve(potentialRoleID);
+					await addRemoveRole(message, guild, false, roleToRem, member, true);
+					console.log(`Dependent role ${roleToRem.name} removed from ${member.user.tag} (check for add)`);
 				}
 			}
 		}
@@ -4528,8 +4530,11 @@ async function checkRemoveDependentRoles(guild, role, member) {
 				//recursive remove???
 				continue;
 			}
-			await addRemoveRole(null, guild, false, requiredForIDs[i], member, true);
-			console.log(`Dependent role ${role.name} removed from ${member.user.tag}`);
+			if (member.roles.resolve(requiredForIDs[i])) {
+				let roleToRem = guild.roles.resolve(requiredForIDs[i]);
+				await addRemoveRole(null, guild, false, roleToRem, member, true);
+				console.log(`Dependent role ${roleToRem.name} removed from ${member.user.tag}`);
+			}
 		}
 	}
 	return Promise.resolve();
