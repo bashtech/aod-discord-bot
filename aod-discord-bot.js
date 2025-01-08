@@ -4504,11 +4504,13 @@ async function checkAddDependentRoles(guild, role, member, message) {
 				if (add) {
 					//all roles are present
 					await addRemoveRole(message, guild, true, potentialRoleID, member, true);
+					console.log(`Dependent role ${r.name} added to ${newMember.user.tag}`);
 				}
 			} else {
 				if (!add) {
 					//roles are missing
 					await addRemoveRole(message, guild, false, potentialRoleID, member, true);
+					console.log(`Dependent role ${r.name} removed from ${newMember.user.tag} (check for add)`);
 				}
 			}
 		}
@@ -4527,6 +4529,7 @@ async function checkRemoveDependentRoles(guild, role, member) {
 				continue;
 			}
 			await addRemoveRole(null, guild, false, requiredForIDs[i], member, true);
+			console.log(`Dependent role ${r.name} removed from ${newMember.user.tag}`);
 		}
 	}
 	return Promise.resolve();
@@ -4535,12 +4538,10 @@ async function checkRemoveDependentRoles(guild, role, member) {
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
 	const removedRoles = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id));
 	removedRoles.forEach(async (r) => {
-		console.log(`Dependent role ${r.name} removed from ${newMember.user.tag}`);
 		await checkRemoveDependentRoles(newMember.guild, r, newMember);
 	});
 	const addedRoles = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id));
 	addedRoles.forEach(async (r) => {
-		console.log(`Dependent role ${r.name} added to ${newMember.user.tag}`);
 		await checkAddDependentRoles(newMember.guild, r, newMember);
 	});
 });
