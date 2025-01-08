@@ -4504,13 +4504,13 @@ async function checkAddDependentRoles(guild, role, member, message) {
 				if (add) {
 					//all roles are present
 					await addRemoveRole(message, guild, true, potentialRoleID, member, true);
-					console.log(`Dependent role ${r.name} added to ${newMember.user.tag}`);
+					console.log(`Dependent role ${role.name} added to ${member.user.tag}`);
 				}
 			} else {
 				if (!add) {
 					//roles are missing
 					await addRemoveRole(message, guild, false, potentialRoleID, member, true);
-					console.log(`Dependent role ${r.name} removed from ${newMember.user.tag} (check for add)`);
+					console.log(`Dependent role ${role.name} removed from ${member.user.tag} (check for add)`);
 				}
 			}
 		}
@@ -4529,7 +4529,7 @@ async function checkRemoveDependentRoles(guild, role, member) {
 				continue;
 			}
 			await addRemoveRole(null, guild, false, requiredForIDs[i], member, true);
-			console.log(`Dependent role ${r.name} removed from ${newMember.user.tag}`);
+			console.log(`Dependent role ${role.name} removed from ${member.user.tag}`);
 		}
 	}
 	return Promise.resolve();
