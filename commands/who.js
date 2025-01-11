@@ -250,6 +250,11 @@ module.exports = {
 						value: `[[Profile](${global.config.trackerURL}/members/${data.id})]`
 					});
 				}
+				if (userData.length == 1) {
+					embed.image = {
+						url: `https://tracker-dev.clanaod.net/members/${data.id}/my-awards.png`
+					};
+				}
 			}
 		}
 		if (targetMember.voice.channel) {
