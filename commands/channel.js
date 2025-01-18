@@ -86,6 +86,9 @@ module.exports = {
 		.addSubcommand(command => command.setName('topic').setDescription('Set the topic for a channel')
 			.addStringOption(option => option.setName('topic').setDescription('Channel Topic (leave empty to clear topic)'))
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to update').addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice)))
+		.addSubcommand(command => command.setName('announce').setDescription('Send an announcement')
+			.addStringOption(option => option.setName('role').setDescription('Role to mention').setRequired(true).setAutocomplete(true))
+			.addStringOption(option => option.setName('message').setDescription('Message').setRequired(true)))
 		.addSubcommand(command => command.setName('update').setDescription('Update the permissions for a channel')
 			.addStringOption(option => option.setName('perm').setDescription('Channel Permissions (default=Member)').setRequired(true).setChoices(...permChoices))
 			.addChannelOption(option => option.setName('channel').setDescription('Channel to update').addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice))
@@ -109,6 +112,7 @@ module.exports = {
 			case 'info':
 			case 'add':
 				return perm >= global.PERM_RECRUITER;
+			case 'announce':
 			case 'delete':
 			case 'rename':
 			case 'move':
@@ -128,6 +132,32 @@ module.exports = {
 			case 'update': {
 				if (focusedOption.name === 'role') {
 					return interaction.respond(global.sortAndLimitOptions(global.getUserRoles(false, null).concat(global.getUserRoles(true, null)), 25, search));
+				}
+				break;
+			}
+			case 'announce': {
+				if (focusedOption.name === 'role') {
+					let roles = [];
+					let category = interaction.channel.parent;
+					if (category) {
+						if (perm >= global.PERM_DIVISION_COMMANDER) {
+							let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+							let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+							let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
+							let memberRole = guild.roles.cache.find(r => { return r.name == memberRoleName; });
+							if (perm >= global.PERM_STAFF || (officerRole && member.roles.cache.get(officerRole.id))) {
+								if (officerRole)
+									roles.push(officerRoleName);
+								if (memberRole)
+									roles.push(memberRoleName);
+							}
+						}
+					}
+					if (perm >= global.PERM_STAFF) {
+						roles.push(global.config.memberRole);
+						roles.push(global.config.officerRole);
+					}
+					return interaction.respond(global.sortAndLimitOptions(roles, 25, search));
 				}
 				break;
 			}
@@ -303,6 +333,42 @@ module.exports = {
 					});
 				}
 				break;
+			}
+			case 'announce': {
+				let message = interaction.options.getString('message');
+				let channel = interaction.channel;
+				let category = channel.parent;
+				let role = interaction.options.getString('role');
+				role = guild.roles.cache.find(r => { return r.name == role; });
+				if (!role) {
+					return global.ephemeralReply(interaction, "Select a role to mention in the announcement.");
+				}
+				if (perm < global.PERM_STAFF) {
+					if (category) {
+						let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
+						let officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
+						if (!officerRole || !member.roles.cache.get(officerRole.id)) {
+							return global.ephemeralReply(interaction, "You do not have permissions to announce in this channel.");
+						}
+					} else {
+						return global.ephemeralReply(interaction, "You do not have permissions to edit this channel.");
+					}
+					if (!role.name.startsWith(category.name)) {
+						return global.ephemeralReply(interaction, "You do not have permissions to announce using the selected role.");
+					}
+				}
+
+				let embed = {
+					author: {
+						name: member.displayName
+					},
+					description: message
+				};
+
+				return channel.send({
+					content: `:mega: ${role}`,
+					embeds: [embed]
+				});
 			}
 			case 'update': {
 				let level = interaction.options.getString('perm') ?? 'member';
