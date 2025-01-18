@@ -4612,6 +4612,9 @@ client.on('ready', async function() {
 	await guild.commands.fetch().catch(console.log);
 	await client.application.commands.fetch().catch(console.log);
 	console.log(`Data fetch complete`);
+	
+	let clientMember = guild.members.cache.get(client.user.id);
+	clientMember.setNickname(config.nickname).catch(console.log);
 
 	const tempChannelCategory = guild.channels.cache.find(c => { return c.name === config.tempChannelCategory; });
 	if (tempChannelCategory && tempChannelCategory.children && tempChannelCategory.children.size) {
