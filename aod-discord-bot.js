@@ -1655,12 +1655,34 @@ function updateTrackerDivisionData(divisionData, data) {
 	return promise;
 }
 
-function updateTrackerDivisionOfficerChannel(divisionData, channel) {
-	return updateTrackerDivisionData(divisionData, { officer_channel: channel.id })
-		.then(function() { divisionData.officer_channel = channel.id; })
+function updateTrackerDivisionChannels(divisionData, officersChannel, membersChannel) {
+	const updates = {};
+
+	if (officersChannel) {
+		updates.officer_channel = officersChannel.id;
+	}
+
+	if (membersChannel) {
+		updates.member_channel = membersChannel.id;
+	}
+
+	if (Object.keys(updates).length === 0) {
+		return;
+	}
+
+	return updateTrackerDivisionData(divisionData, updates)
+		.then(function() {
+			if (officersChannel) {
+				divisionData.officer_channel = officersChannel.id;
+			}
+			if (membersChannel) {
+				divisionData.member_channel = membersChannel.id;
+			}
+		})
 		.catch(() => {});
 }
-global.updateTrackerDivisionOfficerChannel = updateTrackerDivisionOfficerChannel;
+
+global.updateTrackerDivisionChannels = updateTrackerDivisionChannels;
 
 function updateOnboarding(guild, message) {
 	let promise = new Promise(async function(resolve, reject) {
@@ -1869,7 +1891,7 @@ async function addDivision(message, member, perm, guild, divisionName) {
 			addForumSyncMap(message, guild, config.officerRole, divisionName + ' ' + config.forumOfficerSuffix);
 		}
 		if (divisionData && officersChannel) {
-			await updateTrackerDivisionOfficerChannel(divisionData, officersChannel);
+			await updateTrackerDivisionChannels(divisionData, officersChannel, membersChannel);
 		}
 
 		if (divisionData && divisionData.icon) {
