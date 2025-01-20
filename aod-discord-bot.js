@@ -1655,15 +1655,11 @@ function updateTrackerDivisionData(divisionData, data) {
 	return promise;
 }
 
-function updateTrackerDivisionChannels(divisionData, officersChannel, membersChannel) {
+function updateTrackerDivisionChannel(divisionData, channelType, channel) {
 	const updates = {};
 
-	if (officersChannel) {
-		updates.officer_channel = officersChannel.id;
-	}
-
-	if (membersChannel) {
-		updates.member_channel = membersChannel.id;
+	if (channel) {
+		updates[channelType] = channel.id;
 	}
 
 	if (Object.keys(updates).length === 0) {
@@ -1672,17 +1668,14 @@ function updateTrackerDivisionChannels(divisionData, officersChannel, membersCha
 
 	return updateTrackerDivisionData(divisionData, updates)
 		.then(function() {
-			if (officersChannel) {
-				divisionData.officer_channel = officersChannel.id;
-			}
-			if (membersChannel) {
-				divisionData.member_channel = membersChannel.id;
+			if (channel) {
+				divisionData[channelType] = channel.id;
 			}
 		})
 		.catch(() => {});
 }
 
-global.updateTrackerDivisionChannels = updateTrackerDivisionChannels;
+global.updateTrackerDivisionChannel = updateTrackerDivisionChannel;
 
 function updateOnboarding(guild, message) {
 	let promise = new Promise(async function(resolve, reject) {
@@ -1891,7 +1884,8 @@ async function addDivision(message, member, perm, guild, divisionName) {
 			addForumSyncMap(message, guild, config.officerRole, divisionName + ' ' + config.forumOfficerSuffix);
 		}
 		if (divisionData && officersChannel) {
-			await updateTrackerDivisionChannels(divisionData, officersChannel, membersChannel);
+			await updateTrackerDivisionChannel(divisionData, officersChannel, 'officer_channel');
+			await updateTrackerDivisionChannel(divisionData, membersChannel, 'member_channel');
 		}
 
 		if (divisionData && divisionData.icon) {
