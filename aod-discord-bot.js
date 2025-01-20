@@ -1656,15 +1656,8 @@ function updateTrackerDivisionData(divisionData, data) {
 }
 
 function updateTrackerDivisionChannel(divisionData, channelType, channel) {
-	const updates = {};
-
-	if (channel) {
-		updates[channelType] = channel.id;
-	}
-
-	if (Object.keys(updates).length === 0) {
-		return;
-	}
+	let updates = {};
+	updates[channelType] = channel.id;
 
 	return updateTrackerDivisionData(divisionData, updates)
 		.then(function() {
