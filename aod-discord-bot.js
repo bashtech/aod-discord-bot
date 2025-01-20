@@ -1877,8 +1877,8 @@ async function addDivision(message, member, perm, guild, divisionName) {
 			addForumSyncMap(message, guild, config.officerRole, divisionName + ' ' + config.forumOfficerSuffix);
 		}
 		if (divisionData && officersChannel) {
-			await updateTrackerDivisionChannel(divisionData, officersChannel, 'officer_channel');
-			await updateTrackerDivisionChannel(divisionData, membersChannel, 'member_channel');
+			await updateTrackerDivisionChannel(divisionData, 'officer_channel', officersChannel);
+			await updateTrackerDivisionChannel(divisionData, 'member_channel', membersChannel);
 		}
 
 		if (divisionData && divisionData.icon) {
