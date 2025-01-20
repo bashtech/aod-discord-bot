@@ -25,7 +25,10 @@ module.exports = {
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
 			.addStringOption(option => option.setName('old-prefix').setDescription('Old Prefix (if not the division name)'))
 			.addStringOption(option => option.setName('new-prefix').setDescription('New Prefix (if division name does not match tracker)')))
-		.addSubcommand(command => command.setName('officer-channel').setDescription('Update division channel prefix')
+		.addSubcommand(command => command.setName('officer-channel').setDescription('Update division Officer channel')
+			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
+			.addChannelOption(option => option.setName('channel').setDescription('Channel Name')))
+		.addSubcommand(command => command.setName('member-channel').setDescription('Update division Member channel')
 			.addStringOption(option => option.setName('name').setDescription('Division Name').setAutocomplete(true).setRequired(true))
 			.addChannelOption(option => option.setName('channel').setDescription('Channel Name')))
 		.addSubcommand(command => command.setName('convert').setDescription('Convert Division Permissions')
@@ -51,6 +54,7 @@ module.exports = {
 			case 'delete':
 			case 'info':
 			case 'prefix':
+			case 'member-channel':
 			case 'officer-channel':
 			case 'convert': {
 				if (focusedOption.name === 'name') {
@@ -244,7 +248,22 @@ module.exports = {
 					return global.ephemeralReply(interaction, `Officer Channel must be a channel in the division category`);
 				}
 
-				return global.updateTrackerDivisionOfficerChannel(divisionData, channel);
+				return updateTrackerDivisionChannel(divisionData, 'officer_channel', channel);
+			}
+			case 'member-channel': {
+				let name = interaction.options.getString('name');
+				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
+
+				let divisions = await global.getDivisionsFromTracker();
+				let divisionData = divisions[name];
+				if (typeof(divisionData) === 'undefined') {
+					return global.ephemeralReply(interaction, `${name} division is not defined on the tracker`);
+				}
+				if (!channel.parent || channel.parent.name !== name) {
+					return global.ephemeralReply(interaction, `Member Channel must be a channel in the division category`);
+				}
+
+				return updateTrackerDivisionChannel(divisionData, 'member_channel', channel);
 			}
 			case 'update-onboarding': {
 				return global.updateOnboarding(guild, interaction);
