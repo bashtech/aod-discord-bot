@@ -65,7 +65,8 @@ module.exports = {
 							if (subCommand === 'info' || subCommand === 'convert') {
 								options.push(divisionName);
 							} else if (guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory)) {
-								if (subCommand === 'delete' || subCommand === 'prefix' || subCommand === 'officer-channel') {
+								if (subCommand === 'delete' || subCommand === 'prefix' ||
+										subCommand === 'officer-channel' || subCommand === 'member-channel') {
 									options.push(divisionName);
 								}
 							} else {
