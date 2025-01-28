@@ -26,7 +26,8 @@ const {
 	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonStyle,
-	GuildOnboardingPromptType
+	GuildOnboardingPromptType,
+	MessageFlags
 } = require('discord.js');
 
 //include node-fetch using esm-hook
@@ -282,13 +283,13 @@ function ephemeralReply(message, msg, edit) {
 		if (message.isInteraction) {
 			if (typeof(msg) === 'object') {
 				if (msg.embeds !== undefined || msg.components !== undefined || msg.content !== undefined) {
-					msg.ephemeral = true;
+					msg.flags = MessageFlags.Ephemeral;
 					return sendInteractionReply(message, msg, edit);
 				} else {
-					return sendInteractionReply(message, { embeds: [msg], ephemeral: true }, edit);
+					return sendInteractionReply(message, { embeds: [msg], flags: MessageFlags.Ephemeral }, edit);
 				}
 			} else {
-				return sendInteractionReply(message, { content: msg, ephemeral: true }, edit);
+				return sendInteractionReply(message, { content: msg, flags: MessageFlags.Ephemeral }, edit);
 			}
 		} else {
 			if (typeof(msg) === 'object')
@@ -747,9 +748,9 @@ function sendReplyToMessageAuthor(message, member, data) {
 	if (message) {
 		if (message.isInteraction) {
 			if (typeof data === 'object')
-				data.ephemeral = true;
+				data.flags = MessageFlags.Ephemeral;
 			else
-				data = { content: data, ephemeral: true };
+				data = { content: data, flags: MessageFlags.Ephemeral };
 			return sendInteractionReply(message, data);
 		} else if (member) {
 			return sendMessageToMember(member, data);
@@ -1593,7 +1594,7 @@ function getDivisionsFromTracker() {
 			resolve(_divisions);
 		}
 		try {
-			let response = await fetchTimeout(`${config.trackerAPIURL}/divisions?include-shutdown`, 1000, {
+			let response = await fetchTimeout(`${config.trackerAPIURL}/divisions?include-shutdown&include-settings`, 1000, {
 				method: 'get',
 				headers: {
 					'User-Agent': 'Discord Bot',
@@ -1608,12 +1609,19 @@ function getDivisionsFromTracker() {
 				let len = body.data.length;
 				for (i = 0; i < len; i++) {
 					let division = body.data[i];
+					let always_visible = false;
+					if (division.settings !== undefined) {
+						if (division.settings.always_visible_in_discord !== undefined) {
+							//always_visible = division.settings.always_visible_in_discord;
+						}
+					}
 					_divisions[division.name] = {
 						abbreviation: division.abbreviation,
 						slug: division.slug,
 						forum_app_id: division.forum_app_id,
 						officer_channel: division.officer_channel,
-						icon: division.icon
+						icon: division.icon,
+						always_visible: always_visible
 					};
 					if (division.leadership) {
 						_divisions[division.name].leadership = division.leadership;
@@ -1804,8 +1812,19 @@ async function addDivision(message, member, perm, guild, divisionName) {
 		await addManagedRole(message, member, guild, divisionRoleName, false, true);
 
 		//add category for division
-		let permissions = await getChannelPermissions(guild, message, perm,
-			'role', 'text', divisionOfficerRole, divisionRole);
+		let permissions;
+		let always_visible = false;
+		if (divisionData) {
+			always_visible = divisionData.always_visible;
+		}
+
+		if (!always_visible) {
+			permissions = await getChannelPermissions(guild, message, perm,
+				'role', 'text', divisionOfficerRole, divisionRole);
+		} else {
+			permissions = await getChannelPermissions(guild, message, perm,
+				'public', 'text', divisionOfficerRole);
+		}
 		divisionCategory = await guild.channels.create({
 			type: ChannelType.GuildCategory,
 			name: divisionName,
@@ -1817,8 +1836,13 @@ async function addDivision(message, member, perm, guild, divisionName) {
 		}
 
 		//create members channel
-		permissions = await getChannelPermissions(guild, message, perm,
-			'role', 'text', divisionOfficerRole, divisionMemberRole);
+		if (!always_visible) {
+			permissions = await getChannelPermissions(guild, message, perm,
+				'role', 'text', divisionOfficerRole, divisionMemberRole);
+		} else {
+			permissions = await getChannelPermissions(guild, message, perm,
+				'member', 'text', divisionOfficerRole);
+		}
 		let membersChannel = await guild.channels.create({
 			type: ChannelType.GuildText,
 			name: divisionMembersChannel,
@@ -1845,8 +1869,13 @@ async function addDivision(message, member, perm, guild, divisionName) {
 		}
 
 		//create public channel
-		permissions = await getChannelPermissions(guild, message, perm,
-			'role', 'text', divisionOfficerRole, divisionRole);
+		if (!always_visible) {
+			permissions = await getChannelPermissions(guild, message, perm,
+				'role', 'text', divisionOfficerRole, divisionRole);
+		} else {
+			permissions = await getChannelPermissions(guild, message, perm,
+				'public', 'text', divisionOfficerRole);
+		}
 		let publicChannel = await guild.channels.create({
 			type: ChannelType.GuildText,
 			name: divisionPublicChannel,
@@ -1859,8 +1888,13 @@ async function addDivision(message, member, perm, guild, divisionName) {
 		}
 
 		//create member voice channel
-		permissions = await getChannelPermissions(guild, message, perm,
-			'role', 'voice', divisionOfficerRole, divisionMemberRole);
+		if (!always_visible) {
+			permissions = await getChannelPermissions(guild, message, perm,
+				'role', 'voice', divisionOfficerRole, divisionMemberRole);
+		} else {
+			permissions = await getChannelPermissions(guild, message, perm,
+				'member', 'voice', divisionOfficerRole);
+		}
 		let memberVoipChannel = await guild.channels.create({
 			type: ChannelType.GuildVoice,
 			name: divisionMemberVoiceChannel,
@@ -4164,7 +4198,7 @@ client.on('interactionCreate', async interaction => {
 			logInteraction(command, interaction);
 			await command.menu(interaction, guild, member, perm);
 			if (!interaction.replied)
-				sendInteractionReply(interaction, { content: "Done", ephemeral: true });
+				ephemeralReply(interaction, 'Done');
 		} catch (error) {
 			if (error)
 				console.error(error);
@@ -4621,7 +4655,7 @@ client.on('ready', async function() {
 	await guild.commands.fetch().catch(console.log);
 	await client.application.commands.fetch().catch(console.log);
 	console.log(`Data fetch complete`);
-	
+
 	let clientMember = guild.members.cache.get(client.user.id);
 	clientMember.setNickname(config.nickname).catch(console.log);
 

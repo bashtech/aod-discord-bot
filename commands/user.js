@@ -4,7 +4,8 @@ const {
 	SlashCommandBuilder,
 	ActionRowBuilder,
 	ButtonBuilder,
-	ButtonStyle
+	ButtonStyle,
+	MessageFlags
 } = require('discord.js');
 const config = require("../config/aod-discord-bot.config.json");
 
@@ -93,7 +94,7 @@ module.exports = {
 						});
 					}
 				} catch (e) {
-					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
+					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], flags: MessageFlags.Ephemeral });
 				}
 				return Promise.resolve();
 			}
@@ -115,7 +116,7 @@ module.exports = {
 				const response = await global.ephemeralReply(interaction, {
 					content: `Are you sure you want to ban ${userToBan} from the server?`,
 					components: [row],
-					ephemeral: true
+					flags: MessageFlags.Ephemeral
 				});
 
 				const filter = (i) => (i.customId === 'confirm_user_ban' || i.customId === 'cancel_user_ban') && i.user.id === interaction.user.id;
@@ -136,7 +137,7 @@ module.exports = {
 						});
 					}
 				} catch (e) {
-					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
+					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], flags: MessageFlags.Ephemeral });
 				}
 				return Promise.resolve();
 			}

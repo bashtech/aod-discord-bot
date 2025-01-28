@@ -1,6 +1,10 @@
 /* jshint esversion: 8 */
 
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const {
+	SlashCommandBuilder,
+	PermissionFlagsBits,
+	MessageFlags
+} = require('discord.js');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -14,7 +18,7 @@ module.exports = {
 	async execute(interaction, guild, member, perm) {
 		let username = interaction.options.getString('username');
 		let password = interaction.options.getString('password');
-		await interaction.deferReply({ ephemeral: true });
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		return global.userLogin(interaction, member, guild, username, password);
 	},
 };

@@ -101,7 +101,7 @@ module.exports = {
 		});
 
 		const helpRow = global.getHelpButtons(guild, interaction);
-		await interaction.reply({ embeds: [embed], components: [helpRow], ephemeral: true });
+		await global.ephemeralReply(interaction, { embeds: [embed], components: [helpRow] });
 		if (!interaction.inGuild()) {
 			return interaction.followUp('Please note, most commands must be executed in a text channel of the Discord server.');
 		}

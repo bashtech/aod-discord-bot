@@ -14,7 +14,7 @@ module.exports = {
 		let object = interaction.options.getString('object') ?? 'a large trout';
 
 		if (!interaction.channel)
-			return interaction.reply({ content: "You can only slap people in text channels", ephemeral: true });
+			return global.ephemeralReply(interaction, { content: "You can only slap people in text channels" });
 
 		return interaction.channel.send(`_${member} slaps ${targetMember} around a bit with ${object}._`)
 			.then(() => { message.delete(); })

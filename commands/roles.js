@@ -5,7 +5,8 @@ const {
 	PermissionFlagsBits,
 	ActionRowBuilder,
 	ButtonBuilder,
-	ButtonStyle
+	ButtonStyle,
+	MessageFlags
 } = require('discord.js');
 
 module.exports = {
@@ -184,7 +185,7 @@ module.exports = {
 				}
 			}
 		} else if (commandGroup === 'manage') {
-			await interaction.deferReply({ ephemeral: true });
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 			switch (subCommand) {
 				case 'list': {
 					return global.listManagedRoles(interaction, member, guild);
@@ -252,7 +253,7 @@ module.exports = {
 				}
 			}
 		} else if (commandGroup === 'dependencies') {
-			await interaction.deferReply({ ephemeral: true });
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 			switch (subCommand) {
 				case 'add': {
 					let dependentRole = interaction.options.getRole('dependent-role');
@@ -323,13 +324,13 @@ module.exports = {
 			case 'get_role': {
 				if (member.roles.resolve(roleId))
 					return global.ephemeralReply(interaction, `${role.name} already assigned.`);
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				return addRemoveRole(interaction, guild, true, role, member);
 			}
 			case 'remove_role': {
 				if (!member.roles.resolve(roleId))
 					return global.ephemeralReply(interaction, `${role.name} not assigned.`);
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				return addRemoveRole(interaction, guild, false, role, member);
 			}
 			default:

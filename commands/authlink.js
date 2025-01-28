@@ -4,7 +4,8 @@ const {
 	SlashCommandBuilder,
 	ActionRowBuilder,
 	ButtonBuilder,
-	ButtonStyle
+	ButtonStyle,
+	MessageFlags
 } = require('discord.js');
 
 module.exports = {
@@ -17,7 +18,7 @@ module.exports = {
 		return true;
 	},
 	async execute(interaction, guild, member, perm) {
-		await interaction.deferReply({ ephemeral: true });
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		let token = await global.getLoginToken(member).catch(() => {});
 		if (token) {
 			const login = new ButtonBuilder()

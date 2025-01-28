@@ -2,7 +2,8 @@
 
 const {
 	SlashCommandBuilder,
-	PermissionFlagsBits
+	PermissionFlagsBits,
+	MessageFlags
 } = require('discord.js');
 
 module.exports = {
@@ -52,7 +53,7 @@ module.exports = {
 		const subCommand = interaction.options.getSubcommand();
 		switch (subCommand) {
 			case 'show-map': {
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				let forumGroups = await global.getForumGroups()
 					.catch(console.log);
 				var fields = [];
@@ -85,7 +86,7 @@ module.exports = {
 				return global.ephemeralReply(interaction, { embeds: [embed] });
 			}
 			case 'show-forumgroups': {
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				let forumGroups = await global.getForumGroups()
 					.catch(console.log);
 				var list = Object.keys(forumGroups).map(k => `${forumGroups[k]} (${k})`).sort();
@@ -104,7 +105,7 @@ module.exports = {
 				return Promise.resolve();
 			}
 			case 'sync': {
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				return doForumSync(interaction, member, guild, perm, false);
 			}
 			case 'add':
@@ -117,7 +118,7 @@ module.exports = {
 				if (!groupName.endsWith(global.config.forumOfficerSuffix))
 					return global.ephemeralReply(interaction, 'Only Officer Groups may be mapped');
 
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				if (subCommand === 'add')
 					return global.addForumSyncMap(interaction, guild, roleName, groupName);
 				else
@@ -125,7 +126,7 @@ module.exports = {
 				break;
 			}
 			case 'prune': {
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				return pruneForumSyncMap(interaction, guild);
 			}
 		}

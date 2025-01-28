@@ -8,7 +8,8 @@ const {
 	ChannelType,
 	ActionRowBuilder,
 	ButtonBuilder,
-	ButtonStyle
+	ButtonStyle,
+	MessageFlags
 } = require('discord.js');
 
 module.exports = {
@@ -66,7 +67,7 @@ module.exports = {
 								options.push(divisionName);
 							} else if (guild.channels.cache.find(c => c.name === divisionName && c.type === ChannelType.GuildCategory)) {
 								if (subCommand === 'delete' || subCommand === 'prefix' ||
-										subCommand === 'officer-channel' || subCommand === 'member-channel') {
+									subCommand === 'officer-channel' || subCommand === 'member-channel') {
 									options.push(divisionName);
 								}
 							} else {
@@ -85,7 +86,7 @@ module.exports = {
 	},
 	async execute(interaction, guild, member, perm) {
 		const subCommand = interaction.options.getSubcommand();
-		await interaction.deferReply({ ephemeral: true });
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		switch (subCommand) {
 			case 'add': {
 				let name = interaction.options.getString('name');
@@ -107,7 +108,7 @@ module.exports = {
 				const response = await interaction.editReply({
 					content: `Are you sure you want to delete the ${name} division?`,
 					components: [row],
-					ephemeral: true
+					flags: MessageFlags.Ephemeral
 				});
 
 				const filter = (i) => (i.customId === 'confirm_division_delete' || i.customId === 'cancel_division_delete') && i.user.id === interaction.user.id;
@@ -122,7 +123,7 @@ module.exports = {
 						await interaction.followUp({
 							content: `${name} division deleted`,
 							components: [],
-							ephemeral: true
+							flags: MessageFlags.Ephemeral
 						}).catch(() => {});
 					} else if (confirmation.customId === 'cancel_division_delete') {
 						await confirmation.update({
@@ -133,10 +134,10 @@ module.exports = {
 				} catch (e) {
 					if (!e.code || e.code !== 'InteractionCollectorError') {
 						console.log(e);
-						await interaction.editReply({ components: [], ephemeral: true });
+						await interaction.editReply({ components: [], flags: MessageFlags.Ephemeral });
 						await global.ephemeralReply(interaction, `An error occured while deleting the ${name} division`);
 					} else {
-						await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
+						await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], flags: MessageFlags.Ephemeral });
 					}
 				}
 				return Promise.resolve();

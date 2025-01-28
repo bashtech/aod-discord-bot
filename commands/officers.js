@@ -35,13 +35,13 @@ module.exports = {
 			officerRole = guild.roles.cache.find(r => { return r.name == roleName; });
 		}
 		if (!officerRole) {
-			return interaction.reply({ content: 'Please choose an officer role or run the command in a division channel.', ephemeral: true });
+			return global.ephemeralReply(interaction, { content: 'Please choose an officer role or run the command in a division channel.' });
 		}
 
 		let reply = `${roleName}s\n`;
 		officerRole.members.each(m => {
 			reply += `${m}\n`;
 		});
-		return interaction.reply({ content: reply, ephemeral: true });
+		return global.ephemeralReply(interaction, { content: reply });
 	},
 };

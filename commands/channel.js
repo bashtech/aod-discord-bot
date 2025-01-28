@@ -9,7 +9,8 @@ const {
 	ButtonStyle,
 	ModalBuilder,
 	TextInputBuilder,
-	TextInputStyle
+	TextInputStyle,
+	MessageFlags
 } = require('discord.js');
 
 const typeChoices = [
@@ -177,6 +178,17 @@ module.exports = {
 
 				let officerRole;
 				if (category) {
+					let prefix;
+					let divisions = await global.getDivisionsFromTracker();
+					let divisionData = divisions[category.name];
+					if (typeof(divisionData) !== 'undefined') {
+						prefix = divisionData.abbreviation;
+					} else {
+						prefix = category.name.toLowerCase().replace(/\s/g, '-');
+					}
+					if (name.indexOf(prefix) < 0)
+						name = prefix + '-' + name;
+
 					//check if this category has an associated officer role
 					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
 					officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
@@ -188,32 +200,23 @@ module.exports = {
 						return global.ephemeralReply(interaction, "Category is full");
 
 					if (officerRole) {
-						if (level === 'member') {
-							let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
-							role = guild.roles.cache.find(r => { return r.name == memberRoleName; });
-						} else if (level === 'guest' || level === 'public' || level === 'feed') {
-							let divisionRoleName = category.name;
-							role = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
-						}
-						if (role) {
-							roleName = null;
-							if (level === 'feed')
-								level = 'role-feed';
-							else
-								level = 'role';
+						if (!divisionData || !divisionData.alwaysVisible) {
+							if (level === 'member') {
+								let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
+								role = guild.roles.cache.find(r => { return r.name == memberRoleName; });
+							} else if (level === 'guest' || level === 'public' || level === 'feed') {
+								let divisionRoleName = category.name;
+								role = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
+							}
+							if (role) {
+								roleName = null;
+								if (level === 'feed')
+									level = 'role-feed';
+								else
+									level = 'role';
+							}
 						}
 					}
-
-					let prefix;
-					let divisions = await global.getDivisionsFromTracker();
-					let divisionData = divisions[category.name];
-					if (typeof(divisionData) !== 'undefined') {
-						prefix = divisionData.abbreviation;
-					} else {
-						prefix = category.name.toLowerCase().replace(/\s/g, '-');
-					}
-					if (name.indexOf(prefix) < 0)
-						name = prefix + '-' + name;
 				} else {
 					if (type === 'text')
 						return global.ephemeralReply(interaction, "A category must be set for text channels");
@@ -240,7 +243,7 @@ module.exports = {
 				if (existingChannel)
 					return global.ephemeralReply(interaction, "Channel already exists");
 
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				await global.addChannel(guild, interaction, member, perm, name, type, level, category, officerRole, role);
 				return global.updateOnboarding(guild);
 			}
@@ -275,7 +278,7 @@ module.exports = {
 				const response = await interaction.reply({
 					content: `Are you sure you want to delete ${channel}?`,
 					components: [row],
-					ephemeral: true
+					flags: MessageFlags.Ephemeral
 				});
 
 				const filter = (i) => (i.customId === 'confirm_channel_delete' || i.customId === 'cancel_channel_delete') && i.user.id === interaction.user.id;
@@ -296,7 +299,7 @@ module.exports = {
 						});
 					}
 				} catch (e) {
-					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], ephemeral: true });
+					await interaction.editReply({ content: 'Timeout waiting for confirmation', components: [], flags: MessageFlags.Ephemeral });
 				}
 				return Promise.resolve();
 			}
@@ -320,11 +323,11 @@ module.exports = {
 					}
 				}
 
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				if (channel.type === ChannelType.GuildText) {
 					return channel.setTopic(topic, `Requested by ${global.getNameFromMessage(interaction)}`);
 				} else if (channel.type === ChannelType.GuildVoice) {
-					//return interaction.editReply({ content: "Not supported.", ephemeral: true });
+					//return interaction.editReply({ content: "Not supported.", flags: MessageFlags.Ephemeral });
 					return interaction.client.rest.put(`/channels/${channel.id}/voice-status`, {
 						body: {
 							status: topic,
@@ -383,6 +386,9 @@ module.exports = {
 				let category = channel.parent;
 				let officerRole;
 				if (category) {
+					let divisions = await global.getDivisionsFromTracker();
+					let divisionData = divisions[category.name];
+
 					//check if this category has an associated officer role
 					let officerRoleName = category.name + ' ' + global.config.discordOfficerSuffix;
 					officerRole = guild.roles.cache.find(r => { return r.name == officerRoleName; });
@@ -390,19 +396,21 @@ module.exports = {
 						return global.ephemeralReply(interaction, 'You can only update channels from a division you command');
 
 					if (officerRole) {
-						if (level === 'member') {
-							let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
-							role = guild.roles.cache.find(r => { return r.name == memberRoleName; });
-						} else if (level === 'guest' || level === 'public' || level === 'feed') {
-							let divisionRoleName = category.name;
-							role = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
-						}
-						if (role) {
-							roleName = null;
-							if (level === 'feed')
-								level = 'role-feed';
-							else
-								level = 'role';
+						if (!divisionData || !divisionData.alwaysVisible) {
+							if (level === 'member') {
+								let memberRoleName = category.name + ' ' + global.config.discordMemberSuffix;
+								role = guild.roles.cache.find(r => { return r.name == memberRoleName; });
+							} else if (level === 'guest' || level === 'public' || level === 'feed') {
+								let divisionRoleName = category.name;
+								role = guild.roles.cache.find(r => { return r.name == divisionRoleName; });
+							}
+							if (role) {
+								roleName = null;
+								if (level === 'feed')
+									level = 'role-feed';
+								else
+									level = 'role';
+							}
 						}
 					}
 				} else {
@@ -420,7 +428,7 @@ module.exports = {
 				} else if (level === 'role' || level === 'role-feed') {
 					return global.ephemeralReply(interaction, "Role must be provided if Channel Permissions is 'role'");
 				}
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				return global.setChannelPerms(guild, interaction, member, perm, channel, type, level, category, officerRole, role);
 			}
 			case 'rename': {
@@ -459,9 +467,9 @@ module.exports = {
 				if (existingChannel)
 					return global.ephemeralReply(interaction, `A channel already exists with the name ${existingChannel}`);
 
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				await channel.setName(name, `Requested by ${global.getNameFromMessage(interaction)}`);
-				return interaction.editReply({ content: `#${channelName} renamed to ${channel}`, ephemeral: true });
+				return interaction.editReply({ content: `#${channelName} renamed to ${channel}`, flags: MessageFlags.Ephemeral });
 			}
 			case 'move': {
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
@@ -495,7 +503,7 @@ module.exports = {
 				const response = await interaction.reply({
 					content: `Move ${channel}...`,
 					components: [row],
-					ephemeral: true
+					flags: MessageFlags.Ephemeral
 				});
 
 				const filter = (i) =>
@@ -511,15 +519,15 @@ module.exports = {
 						} else if (action.customId === 'move_channel_down') {
 							await channel.setPosition(1, { relative: true, reason: `Requested by ${global.getNameFromMessage(interaction)}` });
 						} else {
-							return interaction.editReply({ content: 'Done', components: [], ephemeral: true });
+							return interaction.editReply({ content: 'Done', components: [], flags: MessageFlags.Ephemeral });
 						}
 						await action.update({
 							content: `Move ${channel}...`,
 							components: [row],
-							ephemeral: true
+							flags: MessageFlags.Ephemeral
 						});
 					} catch (e) {
-						return await interaction.editReply({ content: 'Timeout', components: [], ephemeral: true });
+						return await interaction.editReply({ content: 'Timeout', components: [], flags: MessageFlags.Ephemeral });
 					}
 				}
 				return Promise.resolve();
@@ -527,7 +535,7 @@ module.exports = {
 			case 'info': {
 				let channel = interaction.options.getChannel('channel') ?? interaction.channel;
 
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				info = await global.getChannelInfo(guild, channel);
 
 				let embed = {
@@ -584,7 +592,7 @@ module.exports = {
 				if (deleteCount < 1 || deleteCount > 100)
 					return global.ephemeralReply(interaction, "Please provide a number between 1 and 100 for the number of messages to delete");
 
-				await interaction.deferReply({ ephemeral: true });
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				try {
 					let fetched = await interaction.channel.messages.fetch({ limit: deleteCount });
 					await interaction.channel.bulkDelete(fetched);

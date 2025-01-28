@@ -10,7 +10,8 @@ const {
 	ChannelType,
 	ActionRowBuilder,
 	ButtonBuilder,
-	ButtonStyle
+	ButtonStyle,
+	MessageFlags
 } = require('discord.js');
 
 function getComponentsForTarget(member, perm, targetMember, targetPerm, invite) {
@@ -197,7 +198,10 @@ module.exports = {
 			return global.ephemeralReply(interaction, 'Please mention a valid member of this server.');
 		}
 
-		await interaction.deferReply({ ephemeral: ephemeral });
+		if (ephemeral)
+			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+		else
+			await interaction.deferReply();
 		const userData = await global.getForumInfoForMember(targetMember);
 		const memberRole = guild.roles.cache.find(r => { return r.name == global.config.memberRole; });
 
@@ -282,7 +286,7 @@ module.exports = {
 		}
 
 		if (!ephemeral) {
-			return global.sendInteractionReply(interaction, { embeds: [embed], ephemeral: ephemeral }, true);
+			return global.sendInteractionReply(interaction, { embeds: [embed] }, true);
 		}
 
 		let components = getComponentsForTarget(member, perm, targetMember, targetPerm, true);
