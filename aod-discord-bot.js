@@ -8,9 +8,6 @@
 
 /* jshint esversion: 11 */
 
-//include esm-hook to adapt ESM to commonjs
-require("esm-hook");
-
 //include discord.js
 const {
 	Client,
@@ -29,9 +26,6 @@ const {
 	GuildOnboardingPromptType,
 	MessageFlags
 } = require('discord.js');
-
-//include node-fetch using esm-hook
-const fetch = require('node-fetch').default;
 
 //include entities
 const htmlEntitiesDecode = require('html-entities').decode;
@@ -1601,7 +1595,10 @@ function getDivisionsFromTracker() {
 					'Accept': 'application/json',
 					'Authorization': `Bearer ${config.trackerAPIToken}`
 				}
-			});
+			}).catch(err => {
+				console.log(err);
+				return resolve(_divisions);
+			})
 			let body = await response.json();
 			if (body.data !== undefined) {
 				_divisions = {};
@@ -1655,7 +1652,7 @@ function updateTrackerDivisionData(divisionData, data) {
 			}
 		}).catch(err => {
 			console.log(err);
-			reject('Failed to update divsision data');
+			return reject('Failed to update divsision data');
 		});
 		await response.json(); //wait for content to finish
 		resolve();
