@@ -7,12 +7,10 @@
     "@discordjs/rest": "^2.0.1",
     "discord-api-types": "^0.37.76",
     "discord.js": "^14.7.1",
-    "esm-hook": "^0.1.4",
     "express": "^4.19.2",
     "html-entities": "^2.3.3",
     "md5": "^2.3.0",
     "mysql2": "^3.9.8",
-    "node-fetch": "^3.3.0",
     "sprintf-js": "^1.1.2"
   },
   "scripts": {
