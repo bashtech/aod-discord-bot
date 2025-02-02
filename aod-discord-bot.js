@@ -4344,7 +4344,7 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 					newMemberState.disconnect().catch(error => {});
 				} else {
 					//FIXME what what if the member creates mulitple channels?
-					let tempChannelName = `${newMemberState.member.nickname}'s Channel`;
+					let tempChannelName = `${newMemberState.member.displayName}'s Channel`;
 					tempChannelName = tempChannelName.replace(/^\[\w+\]/g, '');
 					let type = 'voice';
 					let level = 'role';
