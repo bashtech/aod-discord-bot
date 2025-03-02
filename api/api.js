@@ -308,10 +308,10 @@ const roleRouter = express.Router();
 apiRouter.use('/role', roleRouter);
 apiRouter.use('/roles', roleRouter);
 
-function getMember(guild, role_id) {
-	let role = guild.roles.resolve(member_id);
+function getRole(guild, role_id) {
+	let role = guild.roles.resolve(role_id);
 	if (!role)
-		member = guild.roles.cache.find(r => r.name === member_id);
+		member = guild.roles.cache.find(r => r.name === role_id);
 	return member;
 }
 
@@ -325,6 +325,14 @@ roleRouter.param('role_id', (req, res, next, role_id) => {
 	next();
 });
 
+roleRouter.get('/:role_id', async (req, res, next) => {
+	return res.send({
+		id: req.role.id,
+		name: req.role.name,
+	});
+});
+
+/*
 roleRouter.get('/export', async (req, res, next) => {
 	let roles = [];
 	req.guild.roles.cache.forEach(async (r) => {
@@ -340,7 +348,18 @@ roleRouter.get('/export', async (req, res, next) => {
 	});
 	return res.send(roles);
 });
+*/
 
+////////////////////////////
+// role router
+////////////////////////////
+
+/*
+const managedRoleRouter = express.Router();
+apiRouter.use('/managedRole', managedRoleRouter);
+apiRouter.use('/managedRoles', managedRoleRouter);
+managedRoleRouter.use('/:role_id');
+*/
 
 ////////////////////////////
 // member router
@@ -397,7 +416,7 @@ memberRouter.post('/:member_id', async (req, res, next) => {
 		let message = await req.member.send({
 			content: req.body.content,
 			embeds: req.body.embeds
-		}).catch(() => {});
+		}).catch((err) => { console.log(err); });
 		if (message) {
 			return res.send({ id: message.id });
 		} else {

@@ -97,7 +97,8 @@ module.exports = {
 			case 'sub':
 			case 'unsub': {
 				if (focusedOption.name === 'role')
-					return interaction.respond(global.sortAndLimitOptions(global.getUserRoles(false, member, subCommand !== 'sub'), 25, search));
+					return interaction.respond(global.sortAndLimitOptions(
+						global.getUserRoleNames(guild, false, member, subCommand !== 'sub'), 25, search));
 				break;
 			}
 			case 'assign':
@@ -106,13 +107,14 @@ module.exports = {
 				if (!targetMember)
 					return;
 				if (focusedOption.name === 'role')
-					return interaction.respond(global.sortAndLimitOptions(global.getUserRoles(true, targetMember, subCommand !== 'assign'), 25, search));
+					return interaction.respond(global.sortAndLimitOptions(
+						global.getUserRoleNames(guild, true, targetMember, subCommand !== 'assign'), 25, search));
 				break;
 			}
 			case 'add-assignable':
 			case 'add-subscribable': {
 				if (focusedOption.name === 'role') {
-					let managedRoles = global.getUserRoles(subCommand === 'add-assignable');
+					let managedRoles = global.getUserRoleNames(guild, subCommand === 'add-assignable');
 					let guildRoles = [];
 					for (let role of guild.roles.cache.values()) {
 						if (managedRoles.includes(role.name) || !global.isManageableRole(role)) {
@@ -127,21 +129,21 @@ module.exports = {
 			case 'remove-assignable':
 			case 'remove-subscribable': {
 				if (focusedOption.name === 'role') {
-					let managedRoles = global.getUserRoles(subCommand === 'remove-assignable');
+					let managedRoles = global.getUserRoleNames(guild, subCommand === 'remove-assignable');
 					return interaction.respond(global.sortAndLimitOptions(managedRoles, 25, search));
 				}
 				break;
 			}
 			case 'rename': {
 				if (focusedOption.name === 'role') {
-					let managedRoles = global.getUserRoles(true).concat(global.getUserRoles(false));
+					let managedRoles = global.getUserRoleNames(guild, true).concat(global.getUserRoleNames(guild, false));
 					return interaction.respond(global.sortAndLimitOptions(managedRoles, 25, search));
 				}
 				break;
 			}
 			case 'button': {
 				if (focusedOption.name === 'role') {
-					let managedRoles = global.getUserRoles(false);
+					let managedRoles = global.getUserRoleNames(guild, false);
 					return interaction.respond(global.sortAndLimitOptions(managedRoles, 25, search));
 				}
 				break;
@@ -222,7 +224,7 @@ module.exports = {
 					if (!role || !global.isManageableRole(role)) {
 						return global.ephemeralReply(interaction, 'Invalid role.');
 					}
-					let managedRoles = global.getUserRoles(false);
+					let managedRoles = global.getUserRoleNames(guild, false);
 					if (!managedRoles.includes(role.name)) {
 						return global.ephemeralReply(interaction, 'Invalid role.');
 					}

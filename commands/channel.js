@@ -132,7 +132,8 @@ module.exports = {
 			case 'add':
 			case 'update': {
 				if (focusedOption.name === 'role') {
-					return interaction.respond(global.sortAndLimitOptions(global.getUserRoles(false, null).concat(global.getUserRoles(true, null)), 25, search));
+					return interaction.respond(global.sortAndLimitOptions(
+						global.getUserRoleNames(guild, false, null).concat(global.getUserRoleNames(guild, true, null)), 25, search));
 				}
 				break;
 			}

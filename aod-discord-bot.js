@@ -72,7 +72,7 @@ try {
 	managedRoles = require(config.managedRoles);
 } catch (error) {
 	console.log(error);
-	managedRoles = { subscribable: {}, assignable: {}, menuOrder: [] };
+	managedRoles = { subscribable: {}, assignable: {} };
 }
 
 //include dependentRoles
@@ -1301,16 +1301,14 @@ function getPermissionDetails(permBitField) {
 }
 
 function getChannelRole(guild, channel) {
-	const subRoles = getUserRoles(false);
+	const subRoles = getUserRoles(guild, false);
 	let channelRole;
 	let overwrite = channel.permissionOverwrites.cache.find(o => {
 		if (o.type === OverwriteType.Role) {
-			let role = guild.roles.resolve(o.id);
+			let role = subRoles.find(r.id == o.id);
 			if (role) {
-				if (subRoles.includes(role.name)) {
-					channelRole = role;
-					return true;
-				}
+				channelRole = role;
+				return true;
 			}
 		}
 		return false;
@@ -1598,7 +1596,7 @@ function getDivisionsFromTracker() {
 			}).catch(err => {
 				console.log(err);
 				return resolve(_divisions);
-			})
+			});
 			let body = await response.json();
 			if (body.data !== undefined) {
 				_divisions = {};
@@ -2080,10 +2078,6 @@ function getDisplayNameWithPresence(member) {
 global.getDisplayNameWithPresence = getDisplayNameWithPresence;
 
 function listMembers(message, member, guild, roleName) {
-	let menuOrder = parseInt(roleName);
-	if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= managedRoles.menuOrder.length) {
-		roleName = managedRoles.menuOrder[menuOrder - 1];
-	}
 	roleName = roleName.toLowerCase();
 	let role = guild.roles.cache.find(r => { return r.name.toLowerCase() == roleName; });
 	if (role) {
@@ -2102,28 +2096,44 @@ async function listRoles(message, member, guild, targetMember, assign) {
 	let subedRoles = [];
 	let assignedRoles = [];
 	let availRoles = [];
-	for (let index = 0; index < managedRoles.menuOrder.length; index++) {
-		let roleName = managedRoles.menuOrder[index];
-		let subConfig;
-		let assignConfig;
-		if ((subConfig = managedRoles.subscribable[roleName])) {
-			if (targetMember.roles.cache.get(subConfig.roleID)) {
-				let role = guild.roles.resolve(subConfig.roleID);
-				let size = (role ? role.members.size : 0);
-				subedRoles.push(`[${subConfig.menuOrder}] ${roleName} (${size} members)`);
-			} else if (!assign) {
-				availRoles.push(`[${subConfig.menuOrder}] ${roleName}`);
-			}
-		} else if (assign && (assignConfig = managedRoles.assignable[roleName])) {
-			if (targetMember.roles.cache.get(assignConfig.roleID)) {
-				let role = guild.roles.resolve(assignConfig.roleID);
-				let size = (role ? role.members.size : 0);
-				assignedRoles.push(`[${assignConfig.menuOrder}] ${roleName} (${size} members)`);
-			} else {
-				availRoles.push(`[${assignConfig.menuOrder}] ${roleName}`);
+	let seen = {};
+
+	for (let roleId in managedRoles.subscribable) {
+		if (managedRoles.subscribable.hasOwnProperty(roleId)) {
+			let role = guild.roles.resolve(roleId);
+			if (role) {
+				let str = `${role.name} (${role.members.size} members)`;
+				if (targetMember.roles.cache.get(role.id)) {
+					subedRoles.push(str);
+					seen[role.id] = true;
+				} else if (!assign) {
+					availRoles.push(str);
+					seen[role.id] = true;
+				}
 			}
 		}
 	}
+	subedRoles.sort();
+	if (assign) {
+		for (let roleId in managedRoles.assignable) {
+			if (managedRoles.assignable.hasOwnProperty(roleId)) {
+				if (seen[roleId] !== true) {
+					let role = guild.roles.resolve(roleId);
+					if (role) {
+						let str = `${role.name} (${role.members.size} members)`;
+						if (targetMember.roles.cache.get(role.id)) {
+							assignedRoles.push(str);
+						} else {
+							availRoles.push(str);
+						}
+					}
+				}
+			}
+		}
+	}
+	assignedRoles.sort();
+	availRoles.sort();
+
 	if (assign) {
 		let displayName = escapeDisplayNameForOutput(targetMember);
 		await sendListToMessageAuthor(message, member, guild, `Subscribed Roles for ${displayName}`, subedRoles);
@@ -2136,174 +2146,98 @@ async function listRoles(message, member, guild, targetMember, assign) {
 }
 global.listRoles = listRoles;
 
-function getUserRoles(assign, member, hasRole) {
+function getUserRoleIds(assign, member, hasRole) {
 	let config = assign ? managedRoles.assignable : managedRoles.subscribable;
-	let roles = Object.keys(config);
-	if (!member)
-		return roles;
-	return roles.filter(r => {
-		if (member.roles.cache.get(config[r].roleID))
+	let roleIds = Object.keys(config);
+	if (!member) {
+		return roleIds;
+	}
+	return roleIds.filter(id => {
+		if (member.roles.cache.get(id))
 			return hasRole;
 		else
 			return !hasRole;
 	});
 }
-global.getUserRoles = getUserRoles;
 
-async function subUnsubRole(message, member, guild, targetMember, assign, sub, roleName) {
-	let rolesConfig;
-	let otherRolesConfig;
-	if (assign) {
-		rolesConfig = managedRoles.assignable;
-		otherRolesConfig = managedRoles.subscribable;
-	} else {
-		rolesConfig = managedRoles.subscribable;
-		otherRolesConfig = managedRoles.assignable;
-	}
+function getUserRoles(guild, assign, member, hasRole) {
+	let roleIds = getUserRoleIds(assign, member, hasRole);
+	let roles = [];
 
-	let config = rolesConfig[roleName];
-	if (!config && assign && !sub)
-		config = otherRolesConfig[roleName];
-	if (!config) {
-		let menuOrder = parseInt(roleName);
-		if (Number.isInteger(menuOrder) && menuOrder > 0 && menuOrder <= managedRoles.menuOrder.length) {
-			roleName = managedRoles.menuOrder[menuOrder - 1];
-			config = rolesConfig[roleName];
-			if (!config && assign && !sub)
-				config = otherRolesConfig[roleName];
+	for (let id of roleIds) {
+		let role = guild.roles.resolve(id);
+		if (role) {
+			roles.push(role);
 		}
 	}
-	if (!config) {
-		if (assign)
-			return ephemeralReply(message, `Role ${roleName} is not assignable`);
-		else
-			return ephemeralReply(message, `Role ${roleName} is not subscribable`);
+	return roles;
+}
+global.getUserRoles = getUserRoles;
+
+function getUserRoleNames(guild, assign, member, hasRole) {
+	let roles = getUserRoles(guild, assign, member, hasRole);
+	return roles.map(r => r.name).sort();
+}
+global.getUserRoleNames = getUserRoleNames;
+
+function getManagedRolesConfig(assign) {
+	if (assign) {
+		return [
+			managedRoles.assignable,
+			managedRoles.subscribable,
+			'assignable'
+		];
+	} else {
+		return [
+			managedRoles.subscribable,
+			managedRoles.assignable,
+			'subscribable'
+		];
 	}
-	return addRemoveRole(message, guild, sub, config.roleID, targetMember);
+}
+
+async function subUnsubRole(message, member, guild, targetMember, assign, sub, roleName) {
+	let [rolesConfig, otherRolesConfig, action] = getManagedRolesConfig(assign);
+	let role = guild.roles.cache.find(r => r.name === roleName);
+	if (!role || rolesConfig[role.id] === undefined) {
+		if (!config) {
+			return ephemeralReply(message, `Role ${roleName} is not ${action}`);
+		}
+	}
+
+	return addRemoveRole(message, guild, sub, role, targetMember);
 }
 global.subUnsubRole = subUnsubRole;
 
-//sub/unsub/list command processing
-function commandSub(message, member, cmd, args, guild, perm, isDM) {
-	let targetMember = getMemberFromMessageOrArgs(guild, message, args);
-	let assign = false;
-	if (targetMember) {
-		if (perm < PERM_MOD)
-			return message.reply("You don't have permissions assign roles.");
-		if (args.length > 0)
-			args.shift();
-		assign = true;
-	} else {
-		targetMember = member;
-	}
-
-	switch (cmd) {
-		case 'sub':
-		case 'unsub': {
-			if (args.length <= 0)
-				return ephemeralReply(message, 'Role must be provided');
-			let roleName = args.join(' ');
-			return subUnsubRole(message, member, guild, targetMember, assign, cmd === 'sub', roleName);
-		}
-		case 'list': {
-			if (args.length) {
-				if (perm < PERM_MOD) {
-					return ephemeralReply(message, "You don't have permissions to show role members.");
-				}
-				let roleName = args.join(' ');
-				return listMembers(message, member, guild, roleName);
-			} else {
-				return listRoles(message, member, guild, targetMember, assign);
-			}
-		}
-	}
-}
-
 function saveRolesConfigFile() {
-	let roles = [];
-	for (let roleName in managedRoles.subscribable) {
-		if (managedRoles.subscribable.hasOwnProperty(roleName)) {
-			roles.push(roleName);
-		}
-	}
-	for (let roleName in managedRoles.assignable) {
-		if (managedRoles.assignable.hasOwnProperty(roleName)) {
-			if (!roles.includes(roleName))
-				roles.push(roleName);
-		}
-	}
-	roles.sort();
-	let menuOrder = 1;
-	for (let roleName of roles) {
-		if (managedRoles.subscribable[roleName] !== undefined)
-			managedRoles.subscribable[roleName].menuOrder = menuOrder;
-		if (managedRoles.assignable[roleName] !== undefined)
-			managedRoles.assignable[roleName].menuOrder = menuOrder;
-		menuOrder++;
-	}
-	managedRoles.menuOrder = roles;
 	fs.writeFileSync(config.managedRoles, JSON.stringify(managedRoles), 'utf8');
 }
 
-async function doAddManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, role, isNew, commonString) {
-	if (rolesConfig[roleName] === undefined) {
-		rolesConfig[roleName] = {
-			roleID: role.id,
+async function doAddManagedRole(message, guild, rolesConfig, otherRolesConfig, role, isNew, action) {
+	if (rolesConfig[role.id] === undefined) {
+		rolesConfig[role.id] = {
 			created: isNew
 		};
-		if (otherRolesConfig && otherRolesConfig[roleName] !== undefined && otherRolesConfig[roleName].created === true) {
-			rolesConfig[roleName].created = true;
+		if (otherRolesConfig && otherRolesConfig[role.id] !== undefined && otherRolesConfig[role.id].created === true) {
+			rolesConfig[role.id].created = true;
 		}
 		saveRolesConfigFile();
-		return ephemeralReply(message, `Role ${roleName} created and added to ${commonString} roles`);
+		return ephemeralReply(message, `Role ${role.name} created and added to ${action} roles`);
 	} else {
-		if (rolesConfig[roleName].roleID !== role.id)
-			return ephemeralReply(message, `Role ${roleName} already managed, but ID is different`);
-		else
-			return ephemeralReply(message, `Role ${roleName} already managed`);
+		return ephemeralReply(message, `Role ${role.name} already managed`);
 	}
 }
 
-async function doRemoveManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, commonString) {
-	if (rolesConfig[roleName] === undefined) {
-		return ephemeralReply(message, `Role ${roleName} is not managed`);
+async function doRemoveManagedRole(message, guild, rolesConfig, otherRolesConfig, role, action) {
+	if (rolesConfig[role.id] === undefined) {
+		return ephemeralReply(message, `Role ${role.name} is not managed`);
 	} else {
-		let deleteRole = (rolesConfig[roleName].created && otherRolesConfig[roleName] === undefined);
-		let role = guild.roles.resolve(rolesConfig[roleName].roleID);
-		delete rolesConfig[roleName];
+		let deleteRole = (rolesConfig[role.id].created && otherRolesConfig[role.id] === undefined);
+		delete rolesConfig[role.id];
 		saveRolesConfigFile();
 		if (deleteRole && role)
 			await role.delete(`Requested by ${getNameFromMessage(message)}`);
-		return ephemeralReply(message, `Role ${roleName} removed from ${commonString} roles`);
-	}
-}
-
-async function doRenameManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, newRoleName) {
-	if (rolesConfig[roleName] === undefined) {
-		return ephemeralReply(message, `Role ${roleName} is not managed`);
-	} else {
-		if (rolesConfig[newRoleName] !== undefined || otherRolesConfig[newRoleName] ||
-			guild.roles.cache.find(r => r.name === newRoleName)) {
-			return ephemeralReply(message, `Role ${newRoleName} already exists`);
-		}
-
-		let role = guild.roles.resolve(rolesConfig[roleName].roleID);
-		let renamed = true;
-		await role.setName(newRoleName)
-			.then(() => {
-				rolesConfig[newRoleName] = rolesConfig[roleName];
-				delete rolesConfig[roleName];
-				if (otherRolesConfig[roleName] !== undefined) {
-					otherRolesConfig[newRoleName] = otherRolesConfig[roleName];
-					delete otherRolesConfig[roleName];
-				}
-				saveRolesConfigFile();
-			})
-			.catch(error => {
-				console.log(error);
-				ephemeralReply(message, `Failed to rename ${roleName}`);
-			});
-		return ephemeralReply(message, `Role ${roleName} renamed to ${newRoleName}`);
+		return ephemeralReply(message, `Role ${role.name} removed from ${action} roles`);
 	}
 }
 
@@ -2333,23 +2267,30 @@ global.isManageableRole = isManageableRole;
 async function listManagedRoles(message, member, guild) {
 	let subRoles = [];
 	let assignRoles = [];
-	for (let roleName of new Set(managedRoles.menuOrder)) {
-		let config = managedRoles.subscribable[roleName];
-		if (config) {
-			let role = guild.roles.resolve(config.roleID);
-			let size = (role ? role.members.size : 0);
-			let createdFlag = (config.created === true ? '*' : '');
-			subRoles.push(`${roleName}${createdFlag} (${size} members)`);
-		}
-		config = managedRoles.assignable[roleName];
-		if (config) {
-			let role = guild.roles.resolve(config.roleID);
-			let size = (role ? role.members.size : 0);
-			let createdFlag = (config.created === true ? '*' : '');
-			assignRoles.push(`${roleName}${createdFlag} (${size} members)`);
+
+	for (let roleId in managedRoles.subscribable) {
+		if (managedRoles.subscribable.hasOwnProperty(roleId)) {
+			let config = managedRoles.subscribable[roleId];
+			let role = guild.roles.resolve(roleId);
+			if (role) {
+				let size = role.members.size;
+				let createdFlag = (config.created === true ? '*' : '');
+				subRoles.push(`${role.name}${createdFlag} (${role.members.size} members)`);
+			}
 		}
 	}
 	subRoles.sort();
+	for (let roleId in managedRoles.assignable) {
+		if (managedRoles.assignable.hasOwnProperty(roleId)) {
+			let config = managedRoles.assignable[roleId];
+			let role = guild.roles.resolve(roleId);
+			if (role) {
+				let size = role.members.size;
+				let createdFlag = (config.created === true ? '*' : '');
+				assignRoles.push(`${role.name}${createdFlag} (${role.members.size} members)`);
+			}
+		}
+	}
 	assignRoles.sort();
 
 	await sendListToMessageAuthor(message, member, guild, `Subscribable Roles`, subRoles,
@@ -2362,25 +2303,26 @@ global.listManagedRoles = listManagedRoles;
 async function pruneManagedRoles(message, member, guild) {
 	let subRoles = [];
 	let assignRoles = [];
-	for (let roleName of new Set(managedRoles.menuOrder)) {
-		if (managedRoles.subscribable[roleName]) {
-			let role = guild.roles.resolve(managedRoles.subscribable[roleName].roleID);
+
+	for (let roleId in managedRoles.subscribable) {
+		if (managedRoles.subscribable.hasOwnProperty(roleId)) {
+			let role = guild.roles.resolve(roleId);
 			if (!role) {
-				delete managedRoles.subscribable[roleName];
-				subRoles.push(roleName);
+				delete managedRoles.subscribable[roleId];
+				subRoles.push(roleId);
 			}
 		}
-		if (managedRoles.assignable[roleName]) {
-			let role = guild.roles.resolve(managedRoles.assignable[roleName].roleID);
+	}
+	for (let roleId in managedRoles.assignable) {
+		if (managedRoles.assignable.hasOwnProperty(roleId)) {
+			let role = guild.roles.resolve(roleId);
 			if (!role) {
-				delete managedRoles.assignable[roleName];
-				assignRoles.push(roleName);
+				delete managedRoles.assignable[roleId];
+				assignRoles.push(roleId);
 			}
 		}
 	}
 
-	subRoles.sort();
-	assignRoles.sort();
 	if (subRoles.length || assignRoles.length)
 		saveRolesConfigFile();
 	return ephemeralReply(message, {
@@ -2396,15 +2338,7 @@ async function pruneManagedRoles(message, member, guild) {
 global.pruneManagedRoles = pruneManagedRoles;
 
 async function addManagedRole(message, member, guild, roleName, create, assign) {
-	if (assign) {
-		rolesConfig = managedRoles.assignable;
-		otherRolesConfig = managedRoles.subscribable;
-		commonString = 'assignable';
-	} else {
-		rolesConfig = managedRoles.subscribable;
-		otherRolesConfig = managedRoles.assignable;
-		commonString = 'subscribable';
-	}
+	let [rolesConfig, otherRolesConfig, action] = getManagedRolesConfig(assign);
 
 	let role = guild.roles.cache.find(r => r.name == roleName);
 	if (role) {
@@ -2414,7 +2348,7 @@ async function addManagedRole(message, member, guild, roleName, create, assign) 
 		if (!isManageableRole(role)) {
 			return ephemeralReply(message, `Role ${roleName} is not manageable`);
 		}
-	} else if (!role) {
+	} else {
 		if (!create) {
 			return ephemeralReply(message, `Role ${roleName} not found`);
 		}
@@ -2426,37 +2360,41 @@ async function addManagedRole(message, member, guild, roleName, create, assign) 
 		roleName = role.name; //in case discord alters
 	}
 
-	return doAddManagedRole(message, guild, rolesConfig, null, roleName, role, create, commonString);
+	return doAddManagedRole(message, guild, rolesConfig, null, role, create, action);
 }
 global.addManagedRole = addManagedRole;
 
 async function removeManagedRole(message, member, guild, roleName, assign) {
-	if (assign) {
-		rolesConfig = managedRoles.assignable;
-		otherRolesConfig = managedRoles.subscribable;
-		commonString = 'assignable';
-	} else {
-		rolesConfig = managedRoles.subscribable;
-		otherRolesConfig = managedRoles.assignable;
-		commonString = 'subscribable';
+	let role = guild.roles.cache.find(r => r.name == roleName);
+	if (!role) {
+		return ephemeralReply(message, `Role ${roleName} not found`);
 	}
 
-	return doRemoveManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, commonString);
+	let [rolesConfig, otherRolesConfig, action] = getManagedRolesConfig(assign);
+
+	return doRemoveManagedRole(message, guild, rolesConfig, otherRolesConfig, role, action);
 }
 global.removeManagedRole = removeManagedRole;
 
 async function renameManagedRole(message, member, guild, roleName, newRoleName) {
-	if (managedRoles.assignable[roleName] !== undefined) {
-		rolesConfig = managedRoles.assignable;
-		otherRolesConfig = managedRoles.subscribable;
-	} else if (managedRoles.subscribable[roleName] !== undefined) {
-		rolesConfig = managedRoles.subscribable;
-		otherRolesConfig = managedRoles.assignable;
-	} else {
+	let role = guild.roles.cache.find(r => r.name == roleName);
+	if (!role) {
+		return ephemeralReply(message, `Role ${roleName} not found`);
+	}
+
+	if (managedRoles.assignable[role.id] === undefined &&
+		managedRoles.subscribable[role.id] === undefined) {
 		return ephemeralReply(message, `Role ${roleName} is not manageable`);
 	}
 
-	return doRenameManagedRole(message, guild, rolesConfig, otherRolesConfig, roleName, newRoleName);
+	return role.setName(newRoleName)
+		.then(() => {
+			ephemeralReply(message, `Role ${roleName} renamed to ${newRoleName}`);
+		})
+		.catch(error => {
+			console.log(error);
+			ephemeralReply(message, `Failed to rename ${roleName}`);
+		});
 }
 global.renameManagedRole = renameManagedRole;
 
@@ -3805,24 +3743,6 @@ commands = {
 			"*message*: The message to be send in the reminder."],
 		callback: commandReminder,
 		doLog: false
-	},
-	sub: {
-		minPermission: PERM_GUEST,
-		args: ["[@mention]", "<role>"],
-		helpText: "Subscribe to a role. Use @mention to assign a role to someone else (requires Moderator permissions)",
-		callback: commandSub
-	},
-	unsub: {
-		minPermission: PERM_GUEST,
-		args: ["[@mention]", "<role>"],
-		helpText: "Unsubscribe from a role. Use @mention to remove a role from someone else (requires Moderator permissions)",
-		callback: commandSub
-	},
-	list: {
-		minPermission: PERM_GUEST,
-		args: ["[@mention]"],
-		helpText: "List subscribable roles. Use @mention to show assignable roles for someone else (requires Moderator permissions)",
-		callback: commandSub
 	},
 	purge: {
 		minPermission: PERM_STAFF,
