@@ -164,7 +164,7 @@ function getRolesByForumGroup(guild, doUpdate) {
 		var groupMap = forumIntegrationConfig[roleName];
 		var role;
 		if (groupMap.roleID === undefined || groupMap.roleID === '') {
-			const role = guild.roles.cache.find(r => { return r.name == roleName; });
+			role = guild.roles.cache.find(r => { return r.name == roleName; });
 			if (role)
 				groupMap.roleID = role.id;
 		} else
@@ -287,7 +287,7 @@ function ephemeralReply(message, msg, edit) {
 			}
 		} else {
 			if (typeof(msg) === 'object')
-				return message.reply(message, { embeds: [msg] }).catch(() => {});
+				return message.reply({ embeds: [msg] }).catch(() => {});
 			else
 				return message.reply(msg).catch(() => {});
 		}
@@ -310,7 +310,7 @@ function messageReply(message, msg, edit) {
 			}
 		} else {
 			if (typeof(msg) === 'object')
-				return message.reply(message, { embeds: [msg] }).catch(() => {});
+				return message.reply({ embeds: [msg] }).catch(() => {});
 			else
 				return message.reply(msg).catch(() => {});
 		}
