@@ -187,12 +187,22 @@ var mysql = require('mysql2');
 var mysqlConnection = null;
 
 function connectToDB() {
-	if (mysqlConnection !== null && mysqlConnection.state !== 'disconnected')
-		return mysqlConnection;
+	if (mysqlConnection !== null) {
+		let alive = true;
+		mysqlConnection.ping(error => {
+			if (error) {
+				alive = false;
+			}
+		});
+		if (alive) {
+			return mysqlConnection;
+		}
+	}
 	mysqlConnection = mysql.createConnection(config.mysql.config);
 	mysqlConnection.connect(error => {
-		if (error)
+		if (error) {
 			console.log(error);
+		}
 	});
 	mysqlConnection
 		.on('close', error => {
@@ -203,8 +213,9 @@ function connectToDB() {
 		})
 		.on('error', error => {
 			console.log(error);
-			if (error.code === 'PROTOCOL_CONNECTION_LOST')
+			if (error.code === 'PROTOCOL_CONNECTION_LOST') {
 				connectToDB();
+			}
 		});
 	return mysqlConnection;
 }
