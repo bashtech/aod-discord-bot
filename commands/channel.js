@@ -612,34 +612,35 @@ module.exports = {
 		if (args.length < 1) {
 			return global.ephemeralReply(interaction, 'Invalid request.');
 		}
+
+		const createdBy = global.tempChannelCreatedBy(interaction.channel.id);
+		if (!createdBy) {
+			return global.ephemeralReply(interaction, 'This is not a JTC channel');
+		}
+
+		const channel = interaction.channel;
+		const category = channel.parent;
+		if (!category) {
+			return global.ephemeralReply(interaction, 'JTC must be in a division category.');
+		}
+
+		const channelInfo = await global.getChannelInfo(guild, channel);
+		let creator;
+		if (createdBy != member.id) {
+			if (perm < global.PERM_MOD && !member.roles.cache.has(channelInfo.details.officer.role.id)) {
+				return global.ephemeralReply(interaction, 'You are not the channel owner.');
+			}
+			creator = guild.members.resolve(createdBy);
+		} else {
+			creator = member;
+		}
+
 		switch (subCommand) {
 			case 'set_jtc_public':
 			case 'set_jtc_member':
 			case 'set_jtc_officer':
 			case 'set_jtc_vad':
 			case 'set_jtc_ptt': {
-				const createdBy = global.tempChannelCreatedBy(interaction.channel.id);
-				if (!createdBy) {
-					return global.ephemeralReply(interaction, 'This is not a JTC channel');
-				}
-
-				const channel = interaction.channel;
-				const category = channel.parent;
-				if (!category) {
-					return global.ephemeralReply(interaction, 'JTC must be in a division category.');
-				}
-
-				const channelInfo = await global.getChannelInfo(guild, channel);
-				let creator;
-				if (createdBy != member.id) {
-					if (perm < global.PERM_MOD && !member.roles.cache.has(channelInfo.details.officer.role.id)) {
-						return global.ephemeralReply(interaction, 'You are not the channel owner.');
-					}
-					creator = guild.members.resolve(createdBy);
-				} else {
-					creator = member;
-				}
-
 				let role = null;
 				let level = 'role';
 				let type = null;
@@ -706,6 +707,16 @@ module.exports = {
 				modal.addComponents(actionRow);
 
 				return interaction.showModal(modal);
+			}
+			case 'toggle_jtc_recording': {
+				let name;
+				if (interaction.channel.name.codePointAt(0) == 128308) {
+					name = interaction.channel.name.slice(2);
+				} else {
+					name = String.fromCodePoint(128308) + interaction.channel.name;
+				}
+				return interaction.channel.setName(name, `Requested by ${global.getNameFromMessage(interaction)}`)
+					.catch(console.log);
 			}
 			default:
 				return global.ephemeralReply(interaction, 'Invalid request.');

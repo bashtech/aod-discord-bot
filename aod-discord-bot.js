@@ -1442,6 +1442,7 @@ function getChannelInfo(guild, channel) {
 
 		resolve({
 			id: channel.id,
+			name: channel.name,
 			type: type,
 			perm: perm,
 			divPerm: divPerm,
@@ -4218,12 +4219,18 @@ function getJTCButtons(channelInfo, member) {
 		.setStyle(ButtonStyle.Primary)
 		.setDisabled(channelInfo.type == 'ptt');
 	typeRow.addComponents(set_ptt);
+
 	const statusRow = new ActionRowBuilder();
 	const set_voice_status = new ButtonBuilder()
 		.setCustomId(getButtonIdString('channel', 'set_jtc_status', [channelInfo.id]))
 		.setLabel('Set Channel Status')
 		.setStyle(ButtonStyle.Primary);
 	statusRow.addComponents(set_voice_status);
+	const toggle_recording = new ButtonBuilder()
+		.setCustomId(getButtonIdString('channel', 'toggle_jtc_recording', [channelInfo.id]))
+		.setLabel('Toggle Recording')
+		.setStyle(ButtonStyle.Primary);
+	statusRow.addComponents(toggle_recording);
 
 	return [permRow, typeRow, statusRow];
 }
