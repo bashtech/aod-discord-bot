@@ -1316,7 +1316,7 @@ function getChannelRole(guild, channel) {
 	let channelRole;
 	let overwrite = channel.permissionOverwrites.cache.find(o => {
 		if (o.type === OverwriteType.Role) {
-			let role = subRoles.find(r.id == o.id);
+			let role = subRoles.find((r) => {r.id == o.id});
 			if (role) {
 				channelRole = role;
 				return true;
