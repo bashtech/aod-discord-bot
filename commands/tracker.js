@@ -12,10 +12,8 @@ module.exports = {
 		.addSubcommandGroup(command => command.setName('search').setDescription('Search for members in AOD Tracker')
 			.addSubcommand(command => command.setName('name').setDescription('Search for members in AOD Tracker by AOD username')
 				.addStringOption(option => option.setName('username').setDescription('AOD Username').setRequired(true)))
-			.addSubcommand(command => command.setName('discord').setDescription('Search for members in AOD Tracker by Discord user')
-				.addUserOption(option => option.setName('user').setDescription('Discord User').setRequired(true)))
-			.addSubcommand(command => command.setName('teamspeak').setDescription('Search for members in AOD Tracker by TeamSpeak unique ID')
-				.addStringOption(option => option.setName('unique-id').setDescription('TeamSpeak Unique ID').setRequired(true))))
+			.addSubcommand(command => command.setName('discord').setDescription('Search for members in AOD Tracker by Discord username')
+				.addStringOption(option => option.setName('username').setDescription('Discord Username').setRequired(true))))
 		.addSubcommand(command => command.setName('division').setDescription('Query basic division information')
 			.addStringOption(option => option.setName('name').setDescription('Division name or abbreviation').setRequired(true))),
 	help: true,
@@ -62,12 +60,7 @@ module.exports = {
 				}
 				case 'discord': {
 					field = 'discord';
-					value = interaction.options.getUser('user').username;
-					break;
-				}
-				case 'teamspeak': {
-					field = 'ts_unique_id';
-					value = interaction.options.getString('unique-id');
+					value = interaction.options.getString('username');
 					break;
 				}
 			}
