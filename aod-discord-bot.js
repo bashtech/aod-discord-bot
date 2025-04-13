@@ -1316,7 +1316,7 @@ function getChannelRole(guild, channel) {
 	let channelRole;
 	let overwrite = channel.permissionOverwrites.cache.find(o => {
 		if (o.type === OverwriteType.Role) {
-			let role = subRoles.find((r) => {r.id == o.id});
+			let role = subRoles.find(r => r.id == o.id);
 			if (role) {
 				channelRole = role;
 				return true;
@@ -1549,6 +1549,30 @@ async function setChannelPerms(guild, message, member, perm, channel, type, leve
 	return promise;
 }
 global.setChannelPerms = setChannelPerms;
+
+function setChannelRecordingIndicator(channel, set) {
+	//assume first character for now
+	let name = null;
+
+	if (channel.members.some(m => m.user.bot === true)) {
+		set = true;
+	}
+
+	if (channel.name.codePointAt(0) == 128308) {
+		if (set === false || set === undefined) {
+			name = channel.name.slice(2);
+		}
+	} else {
+		if (set === true || set === undefined) {
+			name = String.fromCodePoint(128308) + channel.name;
+		}
+	}
+	if (name === null) {
+		return Promise.resolve();
+	}
+	return channel.setName(name).catch(console.log);
+}
+global.setChannelRecordingIndicator = setChannelRecordingIndicator;
 
 /*
 //retrieve a webhook directly from the discord API 
@@ -2828,7 +2852,7 @@ function getDiscordNickname(name, rank) {
 		return name.replace('AOD_SgtMaj_', getRankAbbr(rank));
 	if (name.startsWith('AOD_'))
 		return name.replace('AOD_', getRankAbbr(rank));
-	return getRankAbbr(rank) + name;
+	return name;
 }
 
 function getForumUsersForGroups(groups, allowPending) {
@@ -3287,16 +3311,16 @@ function doForumSync(message, member, guild, perm, doDaily) {
 									} catch (error) {
 										console.error(`Failed to add ${role.name} to ${guildMember.user.tag}`);
 									}
-									if (nickNameChanges[guildMember.user.id] === undefined && guildMember.displayName !== forumUser.name) {
+									if (nickNameChanges[guildMember.user.id] === undefined && guildMember.displayName !== forumUser.discordNickname) {
 										nickNameChanges[guildMember.user.id] = true;
 										if (!isGuestRole) {
 											renames++;
-											toUpdate.push(`${guildMember.user.tag} (${guildMember.displayName} ==> ${forumUser.name})`);
+											toUpdate.push(`${guildMember.user.tag} (${guildMember.displayName} ==> ${forumUser.discordNickname})`);
 										}
 										try {
-											await guildMember.setNickname(forumUser.name, reason);
+											await guildMember.setNickname(forumUser.discordNickname, reason);
 										} catch (error) {
-											console.error(`Failed to rename ${guildMember.user.tag} to ${forumUser.name}`);
+											console.error(`Failed to rename ${guildMember.user.tag} to ${forumUser.discordNickname}`);
 										}
 									}
 									setDiscordTagForForumUser(forumUser, guildMember);
@@ -4242,6 +4266,9 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 		const guild = oldMemberState.guild;
 		//user changed channels
 		if (oldMemberState.channel) {
+			if (oldMemberState.member.user.bot) {
+				await setChannelRecordingIndicator(oldMemberState.channel, false);
+			}
 			if (joinToCreateChannels.tempChannels[oldMemberState.channelId]) {
 				//user left temp channel created by join-to-create
 				if (oldMemberState.channel.members.size === 0) {
@@ -4274,6 +4301,9 @@ client.on('voiceStateUpdate', async function(oldMemberState, newMemberState) {
 			}
 		}
 		if (newMemberState.channel) {
+			if (newMemberState.member.user.bot) {
+				await setChannelRecordingIndicator(newMemberState.channel, true);
+			}
 			if (joinToCreateChannels.joinToCreateChannels[newMemberState.channelId] === 1) {
 				//user joined a join-to-create channel; create a new channel with the same parent and move the user to it
 				let perm = getPermissionLevelForMember(guild, newMemberState.member);

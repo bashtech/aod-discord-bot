@@ -709,14 +709,7 @@ module.exports = {
 				return interaction.showModal(modal);
 			}
 			case 'toggle_jtc_recording': {
-				let name;
-				if (interaction.channel.name.codePointAt(0) == 128308) {
-					name = interaction.channel.name.slice(2);
-				} else {
-					name = String.fromCodePoint(128308) + interaction.channel.name;
-				}
-				return interaction.channel.setName(name, `Requested by ${global.getNameFromMessage(interaction)}`)
-					.catch(console.log);
+				return global.setChannelRecordingIndicator(interaction.channel);
 			}
 			default:
 				return global.ephemeralReply(interaction, 'Invalid request.');
