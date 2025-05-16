@@ -4512,15 +4512,23 @@ async function checkAddDependentRoles(guild, role, member, message) {
 				if (add) {
 					//all roles are present
 					let roleToAdd = guild.roles.resolve(potentialRoleID);
-					await addRemoveRole(message, guild, true, roleToAdd, member, true);
-					console.log(`Dependent role ${roleToAdd.name} added to ${member.user.tag}`);
+					if (roleToAdd) {
+						await addRemoveRole(message, guild, true, roleToAdd, member, true);
+						console.log(`Dependent role ${roleToAdd.name} added to ${member.user.tag}`);
+					} else {
+						console.log(`Dependent role ${potentialRoleID} not found; failed to add to ${member.user.tag}`);
+					}
 				}
 			} else {
 				if (!add) {
 					//roles are missing
 					let roleToRem = guild.roles.resolve(potentialRoleID);
-					await addRemoveRole(message, guild, false, roleToRem, member, true);
-					console.log(`Dependent role ${roleToRem.name} removed from ${member.user.tag} (check for add)`);
+					if (roleToRem) {
+						await addRemoveRole(message, guild, false, roleToRem, member, true);
+						console.log(`Dependent role ${roleToRem.name} removed from ${member.user.tag} (check for add)`);
+					} else {
+						console.log(`Dependent role ${potentialRoleID} not found, failed to remove from ${member.user.tag}`);
+					}
 				}
 			}
 		}
